@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block body %}
+  <div class="panel-grid two">
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Memory Workspace</h3>
+          <p class="muted">Edit the Markdown documents that shape Nanobot memory, instructions, and project context.</p>
+        </div>
+        <span class="pill">{{ active_document.group }}</span>
+      </div>
+
+      <div class="doc-switcher">
+        {% for group in document_groups %}
+          <section class="doc-group">
+            <strong>{{ group.label }}</strong>
+            {% for document in group.documents %}
+              <a class="doc-chip {% if document.key == active_document.key %}active{% endif %}" href="/memory?doc={{ document.key }}">
+                <span>{{ document.label }}</span>
+                <span class="muted">{{ document.key }}</span>
+              </a>
+            {% endfor %}
+          </section>
+        {% endfor %}
+      </div>
+
+      <div class="card" style="margin-top: 18px;">
+        <header><strong>{{ active_document.label }}</strong></header>
+        <p class="muted">{{ active_document.description }}</p>
+        <div class="mono">{{ active_document.path }}</div>
+        <p class="muted" style="margin-top: 10px;">Last changed: {{ active_document.modified_at }}</p>
+        <p class="muted">Memory size: {{ active_document.size_label }}</p>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Editor</h3>
+          <p class="muted">Use this for fast edits. The preview updates after save.</p>
+        </div>
+      </div>
+
+      <form method="post" action="/memory">
+        <input type="hidden" name="doc" value="{{ active_document.key }}">
+        <label>
+          Markdown content
+          <textarea class="mono tall-textarea" name="content">{{ active_document.content }}</textarea>
+        </label>
+        <div class="actions">
+          <button type="submit">Save Document</button>
+        </div>
+      </form>
+
+      {% if active_document.template_available %}
+        <form method="post" action="/memory/reset" style="margin-top: 12px;">
+          <input type="hidden" name="doc" value="{{ active_document.key }}">
+          <div class="actions">
+            <button class="secondary" type="submit">Reset to Template</button>
+          </div>
+        </form>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="panel-grid two" style="margin-top: 22px;">
+    <section class="panel">
+      <h3>Preview</h3>
+      <div class="markdown-preview">
+        {{ markdown_preview | safe }}
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Markdown Help</h3>
+      <ul class="markdown-help">
+        <li>Use <span class="mono"># Heading</span> for titles and <span class="mono">##</span> for sections.</li>
+        <li>Use <span class="mono">- item</span> for lists and <span class="mono">`inline code`</span> for commands or paths.</li>
+        <li>Use fenced code blocks with <span class="mono">```</span> for prompts, JSON, or shell snippets.</li>
+        <li>Use <span class="mono">**bold**</span> for emphasis where the instruction must stand out.</li>
+      </ul>
+    </section>
+  </div>
+{% endblock %}

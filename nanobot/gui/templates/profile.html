@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block body %}
+  <div class="panel-grid two">
+    <section class="panel">
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Account Settings</h3>
+          <p class="muted">Update your identity, password, and avatar for this admin account.</p>
+        </div>
+        <div class="avatar large">
+          {% if user.avatar_url %}
+            <img src="{{ user.avatar_url }}" alt="{{ user.label }}">
+          {% else %}
+            {{ user.initials }}
+          {% endif %}
+        </div>
+      </div>
+
+      <form method="post" action="/profile" enctype="multipart/form-data">
+        <label>
+          Display name
+          <input type="text" name="display_name" value="{{ profile_form.display_name }}">
+        </label>
+        <label>
+          Username
+          <input type="text" name="username" value="{{ profile_form.username }}" required>
+        </label>
+        <label>
+          Email
+          <input type="email" name="email" value="{{ profile_form.email }}" required>
+        </label>
+        <label>
+          Avatar image
+          <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif">
+        </label>
+        <label>
+          New password
+          <input type="password" name="password" placeholder="Leave empty to keep the current password">
+        </label>
+        <label>
+          Confirm new password
+          <input type="password" name="password_confirm">
+        </label>
+        <div class="actions">
+          <button type="submit">Save Profile</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h3>Profile Entry Points</h3>
+      <div class="card-list">
+        <article class="card">
+          <header><strong>Top-right Profile Chip</strong></header>
+          <p class="muted">The avatar and display name in the top bar link directly back to this profile page.</p>
+        </article>
+        <article class="card">
+          <header><strong>Navigation Item</strong></header>
+          <p class="muted">There is also a dedicated Profile item in the main navigation so the account page remains easy to find.</p>
+        </article>
+      </div>
+    </section>
+  </div>
+{% endblock %}

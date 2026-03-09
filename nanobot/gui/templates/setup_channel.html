@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block body %}
+  <div class="panel-grid two">
+    <section class="panel">
+      <p class="muted">Step 2 of 3. Pick the primary channel you want to enable first.</p>
+      <form method="post" action="/setup/channel">
+        <label>
+          Channel
+          <select
+            name="channel"
+            hx-get="/partials/channel-fields"
+            hx-target="#channel-fields"
+            hx-trigger="change"
+          >
+            {% for key, definition in channel_definitions.items() %}
+              <option value="{{ key }}" {% if key == selected_channel %}selected{% endif %}>{{ definition.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" name="send_progress" {% if send_progress %}checked{% endif %}>
+          <span>Stream progress to the channel</span>
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" name="send_tool_hints" {% if send_tool_hints %}checked{% endif %}>
+          <span>Stream tool hints to the channel</span>
+        </label>
+
+        <div id="channel-fields">
+          {% include "partials/channel_fields.html" %}
+        </div>
+
+        <div class="actions">
+          <button class="secondary" type="submit" name="action" value="save">Save</button>
+          <button type="submit" name="action" value="next">Continue to Agent</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h3>Why This Is Simplified</h3>
+      <p class="muted">The wizard exposes only the highest-impact fields for the selected channel. Advanced channel-specific options can remain in the fuller management experience later.</p>
+    </section>
+  </div>
+{% endblock %}

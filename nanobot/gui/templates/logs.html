@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block body %}
+  <section class="panel">
+    <div class="split-header">
+      <div>
+        <h3 style="margin: 0;">GUI Logs</h3>
+        <p class="muted">Tail of the rotating action log for this dev instance.</p>
+      </div>
+      <a class="button secondary" href="/logs?level={{ log_level }}">Refresh</a>
+    </div>
+    <p class="muted">{{ log_file }}</p>
+
+    <div class="quick-actions" style="margin-bottom: 16px;">
+      <a class="button secondary" href="/logs?level=all">All</a>
+      <a class="button secondary" href="/logs?level=error">Errors</a>
+      <a class="button secondary" href="/logs?level=warning">Warnings</a>
+      <a class="button secondary" href="/logs?level=info">Info</a>
+    </div>
+
+    <div class="card-list">
+      {% for entry in log_entries %}
+        <article class="log-line {{ entry.level }}">
+          <strong>{{ entry.label }}</strong>
+          <div class="mono">{{ entry.line }}</div>
+        </article>
+      {% else %}
+        <article class="card">
+          <p class="muted">No log entries match this filter.</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

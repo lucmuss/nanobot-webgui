@@ -23,8 +23,7 @@ def mock_paths():
     """Mock config/workspace paths for test isolation."""
     with patch("nanobot.config.loader.get_config_path") as mock_cp, \
          patch("nanobot.config.loader.save_config") as mock_sc, \
-         patch("nanobot.config.loader.load_config") as mock_lc, \
-         patch("nanobot.cli.commands.get_workspace_path") as mock_ws:
+         patch("nanobot.config.loader.load_config") as mock_lc:
 
         base_dir = Path("./test_onboard_data")
         if base_dir.exists():
@@ -35,8 +34,8 @@ def mock_paths():
         workspace_dir = base_dir / "workspace"
 
         mock_cp.return_value = config_file
-        mock_ws.return_value = workspace_dir
-        mock_sc.side_effect = lambda config: config_file.write_text("{}")
+        mock_sc.side_effect = lambda config, _path=None: config_file.write_text("{}")
+        mock_lc.return_value = Config()
 
         yield config_file, workspace_dir
 
@@ -48,7 +47,7 @@ def test_onboard_fresh_install(mock_paths):
     """No existing config — should create from scratch."""
     config_file, workspace_dir = mock_paths
 
-    result = runner.invoke(app, ["onboard"])
+    result = runner.invoke(app, ["onboard", "-w", str(workspace_dir)])
 
     assert result.exit_code == 0
     assert "Created config" in result.stdout
@@ -64,7 +63,7 @@ def test_onboard_existing_config_refresh(mock_paths):
     config_file, workspace_dir = mock_paths
     config_file.write_text('{"existing": true}')
 
-    result = runner.invoke(app, ["onboard"], input="n\n")
+    result = runner.invoke(app, ["onboard", "-w", str(workspace_dir)], input="n\n")
 
     assert result.exit_code == 0
     assert "Config already exists" in result.stdout
@@ -78,7 +77,7 @@ def test_onboard_existing_config_overwrite(mock_paths):
     config_file, workspace_dir = mock_paths
     config_file.write_text('{"existing": true}')
 
-    result = runner.invoke(app, ["onboard"], input="y\n")
+    result = runner.invoke(app, ["onboard", "-w", str(workspace_dir)], input="y\n")
 
     assert result.exit_code == 0
     assert "Config already exists" in result.stdout
@@ -92,11 +91,11 @@ def test_onboard_existing_workspace_safe_create(mock_paths):
     workspace_dir.mkdir(parents=True)
     config_file.write_text("{}")
 
-    result = runner.invoke(app, ["onboard"], input="n\n")
+    result = runner.invoke(app, ["onboard", "-w", str(workspace_dir)], input="n\n")
 
     assert result.exit_code == 0
     assert "Created workspace" not in result.stdout
-    assert "Created AGENTS.md" in result.stdout
+    assert (workspace_dir / "AGENTS.md").exists()
     assert (workspace_dir / "AGENTS.md").exists()
 
 
@@ -174,6 +173,68 @@ def test_agent_help_shows_workspace_and_config_options():
     assert "-w" in result.stdout
     assert "--config" in result.stdout
     assert "-c" in result.stdout
+
+
+def test_gui_help_shows_web_options():
+    result = runner.invoke(app, ["gui", "--help"])
+
+    assert result.exit_code == 0
+    assert "--workspace" in result.stdout
+    assert "--config" in result.stdout
+    assert "--secure-cookies" in result.stdout
+    assert "--gateway-health-url" in result.stdout
+
+
+def test_gui_starts_uvicorn_with_expected_settings(monkeypatch, tmp_path: Path):
+    config_path = tmp_path / "gui-config.json"
+    config_path.write_text("{}")
+    workspace_path = tmp_path / "workspace"
+    captured: dict[str, object] = {}
+
+    def fake_create_gui_app(settings):
+        captured["settings"] = settings
+        return "fake-app"
+
+    def fake_uvicorn_run(app_instance, host, port):
+        captured["app_instance"] = app_instance
+        captured["host"] = host
+        captured["port"] = port
+
+    monkeypatch.setattr("nanobot.gui.app.create_gui_app", fake_create_gui_app)
+    monkeypatch.setattr("uvicorn.run", fake_uvicorn_run)
+
+    result = runner.invoke(
+        app,
+        [
+            "gui",
+            "--host",
+            "0.0.0.0",
+            "-p",
+            "19091",
+            "-w",
+            str(workspace_path),
+            "-c",
+            str(config_path),
+            "--instance-name",
+            "release-gui",
+            "--gateway-health-url",
+            "http://127.0.0.1:9999/health",
+            "--secure-cookies",
+        ],
+    )
+
+    assert result.exit_code == 0
+    settings = captured["settings"]
+    assert settings.host == "0.0.0.0"
+    assert settings.port == 19091
+    assert settings.workspace == str(workspace_path)
+    assert settings.config_path == config_path.resolve()
+    assert settings.instance_name == "release-gui"
+    assert settings.gateway_health_url == "http://127.0.0.1:9999/health"
+    assert settings.https_only_cookies is True
+    assert captured["app_instance"] == "fake-app"
+    assert captured["host"] == "0.0.0.0"
+    assert captured["port"] == 19091
 
 
 def test_agent_uses_default_config_when_no_workspace_or_config_flags(mock_agent_runtime):

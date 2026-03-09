@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block body %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/setup/agent">
+    <div class="panel-grid two">
+      <section class="panel">
+        <div class="split-header">
+          <div>
+            <h3 style="margin: 0;">Agent Runtime</h3>
+            <p class="muted">Step 3 of 3. Keep the important defaults visible and move advanced tuning out of the way.</p>
+          </div>
+          <span class="pill">Nanobot core</span>
+        </div>
+
+        <div class="hero-callout">
+          <strong>Required</strong>
+          <p class="muted">These fields define the default runtime Nanobot will actually use.</p>
+        </div>
+
+        <div class="form-columns" style="margin-top: 16px;">
+          <label title="The workspace is the default root for sessions, memory, uploads, and MCP installs.">
+            Workspace
+            <input type="text" name="workspace" value="{{ workspace }}" {% if workspace_locked %}readonly{% endif %} required>
+          </label>
+          <p class="muted">
+            {% if workspace_locked %}
+              This dev instance uses a fixed container workspace.
+            {% else %}
+              The default workspace is where sessions, memory, and MCP installs live.
+            {% endif %}
+          </p>
+
+          <label title="This overrides the default model for the main Nanobot runtime.">
+            Model
+            <input type="text" name="model" value="{{ config.agents.defaults.model }}" required>
+          </label>
+          <label title="This provider name must match the configured provider entry from setup.">
+            Provider
+            <input type="text" name="provider" value="{{ config.agents.defaults.provider }}" required>
+          </label>
+
+          <label title="This instruction becomes the main system behavior for the runtime.">
+            System instruction / main behavior
+            <textarea class="mono tall-textarea" name="instruction_content">{{ instruction_content }}</textarea>
+          </label>
+          <p class="muted">File: <span class="mono">{{ instruction_path }}</span></p>
+          <p class="muted">Last changed: {{ instruction_modified_at }}</p>
+
+          <label title="Choose how verbose Nanobot should normally sound in replies.">
+            Response style
+            <select name="response_style">
+              <option value="adaptive" {% if response_style == 'adaptive' %}selected{% endif %}>Adaptive</option>
+              <option value="brief" {% if response_style == 'brief' %}selected{% endif %}>Brief and concise</option>
+              <option value="detailed" {% if response_style == 'detailed' %}selected{% endif %}>Detailed explanations</option>
+            </select>
+          </label>
+
+          <label class="checkbox">
+            <input type="checkbox" name="tools_enabled" {% if config.tools.enabled %}checked{% endif %}>
+            <span>Enable tool usage in the main runtime</span>
+          </label>
+
+          <label class="checkbox">
+            <input type="checkbox" name="restrict_to_workspace" {% if config.tools.restrict_to_workspace %}checked{% endif %}>
+            <span>Restrict tool execution to the workspace</span>
+          </label>
+        </div>
+
+        <details {% if not safe_mode %}open{% endif %} style="margin-top: 16px;">
+          <summary>Advanced tuning</summary>
+          <div class="form-columns" style="margin-top: 14px;">
+            <div class="details-grid">
+              <label title="Upper bound for the generated answer length. Keep this high enough for code and MCP work.">
+                Max tokens
+                <input type="number" name="max_tokens" value="{{ config.agents.defaults.max_tokens }}" min="1">
+              </label>
+              <label title="Higher values increase randomness. Lower values make replies steadier and more deterministic.">
+                Temperature
+                <input type="number" name="temperature" value="{{ config.agents.defaults.temperature }}" step="0.1" min="0">
+              </label>
+              <label title="Maximum number of tool-call rounds Nanobot may attempt before it stops.">
+                Max tool iterations
+                <input type="number" name="max_tool_iterations" value="{{ config.agents.defaults.max_tool_iterations }}" min="1">
+              </label>
+              <label title="How many recent conversation turns stay in the short-term context window.">
+                Memory window
+                <input type="number" name="memory_window" value="{{ config.agents.defaults.memory_window }}" min="1">
+              </label>
+            </div>
+
+            <label title="Optional extra reasoning depth for models that support it. Leave disabled unless you need it.">
+              Reasoning effort
+              <select name="reasoning_effort">
+                <option value="" {% if not config.agents.defaults.reasoning_effort %}selected{% endif %}>Disabled</option>
+                <option value="low" {% if config.agents.defaults.reasoning_effort == 'low' %}selected{% endif %}>Low</option>
+                <option value="medium" {% if config.agents.defaults.reasoning_effort == 'medium' %}selected{% endif %}>Medium</option>
+                <option value="high" {% if config.agents.defaults.reasoning_effort == 'high' %}selected{% endif %}>High</option>
+              </select>
+            </label>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel">
+        <div class="split-header">
+          <div>
+            <h3 style="margin: 0;">Behavior and MCP Defaults</h3>
+            <p class="muted">Keep the main behavior visible and default MCP selection easy to understand.</p>
+          </div>
+          <a class="button secondary" href="/memory?doc=agents">Open full instructions</a>
+        </div>
+
+        <div class="card">
+          <header><strong>Instruction Files</strong></header>
+          <p class="muted">Persona: <span class="mono">{{ soul_path }}</span></p>
+          <p class="muted">User profile: <span class="mono">{{ user_path }}</span></p>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+          <header><strong>Default MCP Selection</strong></header>
+          <div class="stack-list">
+            {% for server in mcp_servers %}
+              <label class="checkbox">
+                <input type="checkbox" name="enabled_mcp" value="{{ server.name }}" {% if server.enabled %}checked{% endif %}>
+                <span>{{ server.name }} ({{ server.status_label }})</span>
+              </label>
+              {% if server.tool_names %}
+                <p class="muted">Available tools: {{ server.tool_names|join(", ") }}</p>
+              {% endif %}
+            {% else %}
+              <p class="muted">No MCP servers are installed yet. Finish setup, then add servers from the MCP page.</p>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="card" style="margin-top: 16px;">
+          <header><strong>Safe Mode</strong></header>
+          <p class="muted">When Safe Mode is on, advanced tuning stays collapsed and the page keeps focus on the fields that matter first.</p>
+        </div>
+      </section>
+    </div>
+
+    <div class="actions" style="margin-top: 18px;">
+      <button class="secondary" type="submit" name="action" value="save">Save</button>
+      <button type="submit" name="action" value="finish">Finish Setup</button>
+    </div>
+  </form>
+{% endblock %}

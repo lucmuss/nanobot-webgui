@@ -194,20 +194,71 @@ class SessionManager:
 
         for path in self.sessions_dir.glob("*.jsonl"):
             try:
-                # Read just the metadata line
+                preview_messages: list[dict[str, Any]] = []
                 with open(path, encoding="utf-8") as f:
                     first_line = f.readline().strip()
-                    if first_line:
-                        data = json.loads(first_line)
-                        if data.get("_type") == "metadata":
-                            key = data.get("key") or path.stem.replace("_", ":", 1)
-                            sessions.append({
-                                "key": key,
-                                "created_at": data.get("created_at"),
-                                "updated_at": data.get("updated_at"),
-                                "path": str(path)
-                            })
+                    if not first_line:
+                        continue
+                    data = json.loads(first_line)
+                    if data.get("_type") != "metadata":
+                        continue
+
+                    for line in f:
+                        raw = line.strip()
+                        if not raw:
+                            continue
+                        item = json.loads(raw)
+                        if isinstance(item, dict):
+                            preview_messages.append(item)
+
+                    key = data.get("key") or path.stem.replace("_", ":", 1)
+                    last_user = next(
+                        (self._preview_content(msg.get("content", "")) for msg in reversed(preview_messages) if msg.get("role") == "user"),
+                        "",
+                    )
+                    last_assistant = next(
+                        (self._preview_content(msg.get("content", "")) for msg in reversed(preview_messages) if msg.get("role") == "assistant"),
+                        "",
+                    )
+                    sessions.append({
+                        "key": key,
+                        "created_at": data.get("created_at"),
+                        "updated_at": data.get("updated_at"),
+                        "path": str(path),
+                        "message_count": len(preview_messages),
+                        "last_user": last_user,
+                        "last_assistant": last_assistant,
+                        "session_type": self._session_type(key),
+                    })
             except Exception:
                 continue
 
         return sorted(sessions, key=lambda x: x.get("updated_at", ""), reverse=True)
+
+    @staticmethod
+    def _session_type(key: str) -> str:
+        """Return a compact label for the session key."""
+        if key.startswith("web:mcp-test:"):
+            return "MCP test"
+        if key.startswith("web:"):
+            return "Web chat"
+        if key.startswith("cli:"):
+            return "CLI"
+        return "Other"
+
+    @staticmethod
+    def _preview_content(content: Any, limit: int = 180) -> str:
+        """Return a single-line preview string for one message payload."""
+        if isinstance(content, list):
+            text_parts = []
+            for item in content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    text_parts.append(str(item.get("text", "")).strip())
+            preview = " ".join(part for part in text_parts if part)
+        else:
+            preview = str(content or "").strip()
+
+        preview = " ".join(preview.split())
+        if len(preview) > limit:
+            return preview[: limit - 1] + "…"
+        return preview

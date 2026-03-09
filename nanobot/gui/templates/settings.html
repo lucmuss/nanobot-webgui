@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block body %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <div class="panel-grid two">
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Runtime Controls</h3>
+          <p class="muted">Edit the core instance values that are safe and useful to manage from the GUI.</p>
+        </div>
+      </div>
+
+      <form method="post" action="/settings">
+        <label>
+          Workspace path
+          <input type="text" name="workspace" value="{{ settings_form.workspace }}" {% if workspace_locked %}readonly{% endif %}>
+        </label>
+        <p class="muted">
+          {% if workspace_locked %}
+            This stack locks the workspace path at container level.
+          {% else %}
+            Nanobot stores sessions, MCP installs, and memory under this workspace.
+          {% endif %}
+        </p>
+
+        <div class="details-grid">
+          <label>
+            Exec timeout (seconds)
+            <input type="number" name="exec_timeout" min="1" value="{{ settings_form.exec_timeout }}">
+          </label>
+          <label>
+            PATH append
+            <input type="text" name="path_append" value="{{ settings_form.path_append }}">
+          </label>
+        </div>
+
+        <label class="checkbox">
+          <input type="checkbox" name="tools_enabled" {% if settings_form.tools_enabled %}checked{% endif %}>
+          <span>Enable tools in the main runtime</span>
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" name="restrict_to_workspace" {% if settings_form.restrict_to_workspace %}checked{% endif %}>
+          <span>Restrict tool execution to the workspace</span>
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" name="send_progress" {% if settings_form.send_progress %}checked{% endif %}>
+          <span>Send progress updates to channels</span>
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" name="send_tool_hints" {% if settings_form.send_tool_hints %}checked{% endif %}>
+          <span>Send tool hints to channels</span>
+        </label>
+
+        <div class="actions">
+          <button type="submit">Save Settings</button>
+        </div>
+      </form>
+
+      <form method="post" action="/settings/validate" style="margin-top: 12px;">
+        <div class="actions">
+          <button class="secondary" type="submit">Validate Setup</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Setup Validation</h3>
+          <p class="muted">This is the quick health checklist for provider, runtime, paths, and MCP readiness.</p>
+        </div>
+      </div>
+
+      {% if next_validation_issue %}
+        <div class="hero-callout" style="margin-bottom: 16px;">
+          <strong>Recommended next fix: {{ next_validation_issue.label }}</strong>
+          <p class="muted">{{ next_validation_issue.hint }}</p>
+          {% if next_validation_issue.action_url %}
+            <a class="button secondary" href="{{ next_validation_issue.action_url }}">{{ next_validation_issue.action_label or "Open" }}</a>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      <div class="card-list">
+        {% for item in validation_results %}
+          <article class="card">
+            <header>
+              <strong>{{ item.label }}</strong>
+              <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "OK" if item.ok else "Needs attention" }}</span>
+            </header>
+            <div class="mono">{{ item.detail }}</div>
+            <p class="muted" style="margin-top: 10px;">{{ item.hint }}</p>
+            {% if item.action_url %}
+              <a class="button secondary" href="{{ item.action_url }}">{{ item.action_label or "Open" }}</a>
+            {% endif %}
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top: 22px;">
+    <h3>Instance Metadata</h3>
+    <div class="details-grid">
+      <article class="card">
+        <header><strong>Config file</strong></header>
+        <div class="mono">{{ settings_meta.config_path }}</div>
+      </article>
+      <article class="card">
+        <header><strong>Provider</strong></header>
+        <div>{{ settings_meta.provider }}</div>
+      </article>
+      <article class="card">
+        <header><strong>Model</strong></header>
+        <div>{{ settings_meta.model }}</div>
+      </article>
+      <article class="card">
+        <header><strong>Installed MCP servers</strong></header>
+        <div>{{ settings_meta.installed_mcp_servers }}</div>
+      </article>
+      <article class="card">
+        <header><strong>Setup complete</strong></header>
+        <div>{{ "Yes" if settings_meta.setup_complete else "No" }}</div>
+      </article>
+      <article class="card">
+        <header><strong>Related areas</strong></header>
+        <div class="actions">
+          <a class="button secondary" href="/profile">Profile</a>
+          <a class="button secondary" href="/logs">Logs</a>
+        </div>
+      </article>
+    </div>
+  </section>
+{% endblock %}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block body %}
+  <div class="panel-grid two">
+    <section class="panel">
+      <p class="muted">Step 1 of 3. Choose the provider, model, and API details for this instance.</p>
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      <form method="post" action="/setup/provider">
+        <div class="hero-callout">
+          <strong>Required for AI to work</strong>
+          <p class="muted">These are the only fields a new user normally needs to finish provider setup.</p>
+        </div>
+
+        <label title="Choose the API provider Nanobot should call for chat and health checks.">
+          Provider
+          <select name="provider" required>
+            {% for option in provider_options %}
+              <option value="{{ option.value }}" {% if option.value == selected_provider %}selected{% endif %}>
+                {{ option.label }}{% if option.oauth %} (OAuth){% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label title="This is the model identifier Nanobot will use by default.">
+          Model
+          <input type="text" name="model" value="{{ model }}" required>
+        </label>
+        <label title="Paste the provider API key here. Nanobot cannot answer without valid credentials.">
+          API Key
+          <input type="password" name="api_key" value="{{ api_key }}">
+        </label>
+
+        <details {% if not safe_mode %}open{% endif %}>
+          <summary>Advanced (optional)</summary>
+          <div class="form-columns" style="margin-top: 14px;">
+            <label title="Only change this when you use a custom OpenAI-compatible endpoint.">
+              API Base
+              <input type="text" name="api_base" value="{{ api_base }}">
+            </label>
+            <label title="Use extra headers only when your provider requires custom authentication or routing headers.">
+              Extra headers as JSON
+              <textarea name="extra_headers">{{ extra_headers }}</textarea>
+            </label>
+          </div>
+        </details>
+
+        <div class="actions">
+          <button class="secondary" type="submit" name="action" value="save">Save</button>
+          <button type="submit" name="action" value="next">Continue to Channel</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h3>Recommendation</h3>
+      <p class="muted">For the first test run, OpenRouter is usually the fastest path. Use `custom` when you want to point Nanobot at your own OpenAI-compatible endpoint.</p>
+      <div class="card-list">
+        <article class="card">
+          <header><strong>OpenRouter</strong></header>
+          <p class="muted">Quickest setup with one API key and access to many models.</p>
+        </article>
+        <article class="card">
+          <header><strong>Custom</strong></header>
+          <p class="muted">Direct connection to local or self-hosted OpenAI-compatible APIs.</p>
+        </article>
+        <article class="card">
+          <header><strong>Safe Mode</strong></header>
+          <p class="muted">When Safe Mode is on, optional provider fields stay collapsed so beginners only see the essential setup.</p>
+        </article>
+      </div>
+    </section>
+  </div>
+{% endblock %}

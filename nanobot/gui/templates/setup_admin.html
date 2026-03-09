@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block body %}
+  <p class="muted">First launch. Create exactly one admin account for this dev instance.</p>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="post" action="/setup/admin">
+    <label>
+      Username
+      <input type="text" name="username" value="{{ form_data.username if form_data else '' }}" required>
+    </label>
+    <label>
+      Email
+      <input type="email" name="email" value="{{ form_data.email if form_data else '' }}" required>
+    </label>
+    <label>
+      Password
+      <input type="password" name="password" required>
+    </label>
+    <label>
+      Confirm password
+      <input type="password" name="password_confirm" required>
+    </label>
+    <div class="actions">
+      <button type="submit">Create Admin</button>
+    </div>
+  </form>
+{% endblock %}

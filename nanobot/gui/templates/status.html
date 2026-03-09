@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block body %}
+  <div class="panel-grid two">
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Runtime Status</h3>
+          <p class="muted">Live summary of the GUI, gateway, and agent runtime.</p>
+        </div>
+        <span class="pill {% if runtime_status.tone == 'good' %}good{% elif runtime_status.tone == 'bad' %}bad{% else %}muted{% endif %}">
+          {{ runtime_status.label }}
+        </span>
+      </div>
+
+      <div class="details-grid">
+        <article class="card">
+          <header><strong>Gateway</strong></header>
+          <div>{{ gateway_status.label }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Agent health</strong></header>
+          <div>{{ "Healthy" if agent_health.get("ok") else "Not healthy" if agent_health else "Not checked" }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Last restart</strong></header>
+          <div>{{ last_restart_at or "No restart recorded" }}</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Environment</h3>
+      <div class="card-list">
+        <article class="card">
+          <header><strong>Config path</strong></header>
+          <div class="mono">{{ config_path_value }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Workspace</strong></header>
+          <div class="mono">{{ workspace_value }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Provider</strong></header>
+          <div>{{ agent_health.get("provider", "Unknown") if agent_health else "Unknown" }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Model</strong></header>
+          <div>{{ agent_health.get("model", "Unknown") if agent_health else "Unknown" }}</div>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top: 22px;">
+    <h3>Last Agent Check</h3>
+    {% if agent_health %}
+      <div class="details-grid">
+        <article class="card">
+          <header><strong>Checked at</strong></header>
+          <div>{{ agent_health.get("checked_at", "Unknown") }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Latency</strong></header>
+          <div>{{ agent_health.get("latency_ms", "n/a") }} ms</div>
+        </article>
+        <article class="card">
+          <header><strong>Preview</strong></header>
+          <div class="mono">{{ agent_health.get("preview") or agent_health.get("error") or "No preview stored" }}</div>
+        </article>
+      </div>
+    {% else %}
+      <p class="muted">No runtime check has been stored yet.</p>
+    {% endif %}
+  </section>
+{% endblock %}

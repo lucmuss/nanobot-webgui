@@ -1,0 +1,34 @@
+<div class="card">
+  <header>
+    <strong>{{ channel_meta.label }}</strong>
+  </header>
+  <p class="muted">{{ channel_meta.description }}</p>
+
+  {% for field in channel_meta.fields %}
+    {% if field.type == "bool" %}
+      <label class="checkbox">
+        <input type="checkbox" name="{{ field.name }}" {% if channel_values[field.name] %}checked{% endif %}>
+        <span>{{ field.label }}</span>
+      </label>
+    {% elif field.type == "select" %}
+      <label>
+        {{ field.label }}
+        <select name="{{ field.name }}">
+          {% for option in field.options %}
+            <option value="{{ option }}" {% if channel_values[field.name] == option %}selected{% endif %}>{{ option }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    {% elif field.type == "list" %}
+      <label>
+        {{ field.label }}
+        <textarea name="{{ field.name }}" placeholder="{{ field.placeholder or '' }}">{{ channel_values[field.name] }}</textarea>
+      </label>
+    {% else %}
+      <label>
+        {{ field.label }}
+        <input type="{{ field.type }}" name="{{ field.name }}" value="{{ channel_values[field.name] or '' }}" placeholder="{{ field.placeholder or '' }}">
+      </label>
+    {% endif %}
+  {% endfor %}
+</div>

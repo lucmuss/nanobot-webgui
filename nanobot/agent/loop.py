@@ -61,6 +61,7 @@ class AgentLoop:
         web_proxy: str | None = None,
         exec_config: ExecToolConfig | None = None,
         cron_service: CronService | None = None,
+        tools_enabled: bool = True,
         restrict_to_workspace: bool = False,
         session_manager: SessionManager | None = None,
         mcp_servers: dict | None = None,
@@ -81,6 +82,7 @@ class AgentLoop:
         self.web_proxy = web_proxy
         self.exec_config = exec_config or ExecToolConfig()
         self.cron_service = cron_service
+        self.tools_enabled = tools_enabled
         self.restrict_to_workspace = restrict_to_workspace
 
         self.context = ContextBuilder(workspace)
@@ -110,7 +112,9 @@ class AgentLoop:
         self._consolidation_locks: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
         self._active_tasks: dict[str, list[asyncio.Task]] = {}  # session_key -> tasks
         self._processing_lock = asyncio.Lock()
-        self._register_default_tools()
+        self.last_usage: dict[str, int] = {}
+        if self.tools_enabled:
+            self._register_default_tools()
 
     def _register_default_tools(self) -> None:
         """Register the default set of tools."""
@@ -132,7 +136,7 @@ class AgentLoop:
 
     async def _connect_mcp(self) -> None:
         """Connect to configured MCP servers (one-time, lazy)."""
-        if self._mcp_connected or self._mcp_connecting or not self._mcp_servers:
+        if not self.tools_enabled or self._mcp_connected or self._mcp_connecting or not self._mcp_servers:
             return
         self._mcp_connecting = True
         from nanobot.agent.tools.mcp import connect_mcp_servers
@@ -187,18 +191,25 @@ class AgentLoop:
         iteration = 0
         final_content = None
         tools_used: list[str] = []
+        usage_totals = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
         while iteration < self.max_iterations:
             iteration += 1
 
             response = await self.provider.chat(
                 messages=messages,
-                tools=self.tools.get_definitions(),
+                tools=self.tools.get_definitions() if self.tools_enabled and len(self.tools) else None,
                 model=self.model,
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
                 reasoning_effort=self.reasoning_effort,
             )
+            for key in usage_totals:
+                raw_value = (response.usage or {}).get(key, 0)
+                try:
+                    usage_totals[key] += int(raw_value or 0)
+                except (TypeError, ValueError):
+                    continue
 
             if response.has_tool_calls:
                 if on_progress:
@@ -254,6 +265,7 @@ class AgentLoop:
                 "without completing the task. You can try breaking the task into smaller steps."
             )
 
+        self.last_usage = usage_totals if any(usage_totals.values()) else {}
         return final_content, tools_used, messages
 
     async def run(self) -> None:

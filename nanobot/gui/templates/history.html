@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block body %}
+  <section class="panel">
+    <div class="split-header">
+      <div>
+        <h3 style="margin: 0;">Recent Conversations</h3>
+        <p class="muted">A simple list of the latest saved chats and MCP test sessions.</p>
+      </div>
+      <span class="pill">{{ sessions|length }} sessions</span>
+    </div>
+
+    <div class="card-list">
+      {% for session in sessions %}
+        <article class="card">
+          <header>
+            <strong>{{ session.key }}</strong>
+            <span class="pill">{{ session.session_type }}</span>
+          </header>
+          <div class="details-grid">
+            <div>
+              <strong>Updated</strong>
+              <p class="muted">{{ session.updated_at or "Unknown" }}</p>
+            </div>
+            <div>
+              <strong>Messages</strong>
+              <p class="muted">{{ session.message_count }}</p>
+            </div>
+          </div>
+          {% if session.last_user %}
+            <p class="muted" style="margin-top: 12px;">Last user message</p>
+            <div class="mono">{{ session.last_user }}</div>
+          {% endif %}
+          {% if session.last_assistant %}
+            <p class="muted" style="margin-top: 12px;">Last assistant reply</p>
+            <div class="mono">{{ session.last_assistant }}</div>
+          {% endif %}
+          <p class="muted" style="margin-top: 12px;">{{ session.path }}</p>
+          <div class="actions" style="margin-top: 12px;">
+            <a class="button secondary" href="/chat">Open Chat</a>
+          </div>
+        </article>
+      {% else %}
+        <article class="card">
+          <p class="muted">No saved sessions exist yet.</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

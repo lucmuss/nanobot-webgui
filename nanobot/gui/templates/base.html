@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} | {{ instance_name }}</title>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <style>
+      :root {
+        --bg: #f4efe6;
+        --panel: rgba(255, 252, 247, 0.92);
+        --panel-strong: #fffdf8;
+        --ink: #1d1a17;
+        --muted: #6f675f;
+        --line: rgba(57, 42, 27, 0.12);
+        --accent: #c4632c;
+        --accent-strong: #8f3f14;
+        --good: #2c7a5a;
+        --bad: #aa3d2a;
+        --info: #285f90;
+        --shadow: 0 22px 60px rgba(74, 43, 19, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at top left, rgba(196, 99, 44, 0.14), transparent 28%),
+          radial-gradient(circle at top right, rgba(44, 122, 90, 0.10), transparent 24%),
+          linear-gradient(180deg, #fbf6ee 0%, #f0e8dd 100%);
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .app-shell {
+        display: grid;
+        grid-template-columns: 290px minmax(0, 1fr);
+        min-height: 100vh;
+      }
+
+      .sidebar {
+        padding: 28px 22px;
+        border-right: 1px solid var(--line);
+        background: rgba(255, 250, 244, 0.82);
+        backdrop-filter: blur(14px);
+      }
+
+      .brand {
+        margin-bottom: 28px;
+      }
+
+      .brand-hero {
+        display: block;
+        margin-bottom: 18px;
+      }
+
+      .brand-hero img {
+        width: 100%;
+        height: auto;
+        display: block;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.8);
+        box-shadow: 0 14px 30px rgba(74, 43, 19, 0.10);
+      }
+
+      .brand-links {
+        display: grid;
+        gap: 6px;
+        margin-top: 12px;
+      }
+
+      .brand-links a {
+        color: var(--accent-strong);
+      }
+
+      .brand h1 {
+        margin: 0;
+        font-size: 1.45rem;
+      }
+
+      .brand p,
+      .muted {
+        margin: 6px 0 0;
+        color: var(--muted);
+      }
+
+      .nav {
+        display: grid;
+        gap: 8px;
+        margin-top: 24px;
+      }
+
+      .nav a {
+        padding: 12px 14px;
+        border-radius: 14px;
+        color: var(--muted);
+      }
+
+      .nav a.active,
+      .nav a:hover {
+        background: rgba(196, 99, 44, 0.10);
+        color: var(--accent-strong);
+      }
+
+      .content {
+        padding: 28px;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        margin-bottom: 24px;
+      }
+
+      .topbar h2 {
+        margin: 0;
+        font-size: 2rem;
+      }
+
+      .topbar-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: flex-end;
+        align-items: center;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--muted);
+      }
+
+      .pill.good {
+        color: var(--good);
+      }
+
+      .pill.muted {
+        color: var(--muted);
+      }
+
+      .pill.bad {
+        color: var(--bad);
+      }
+
+      .panel {
+        padding: 22px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .panel-grid {
+        display: grid;
+        gap: 18px;
+      }
+
+      .panel-grid.two {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .panel-grid.three {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      form {
+        display: grid;
+        gap: 16px;
+      }
+
+      .inline-form {
+        display: inline-grid;
+      }
+
+      label {
+        display: grid;
+        gap: 8px;
+        font-size: 0.95rem;
+      }
+
+      input,
+      select,
+      textarea {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid rgba(57, 42, 27, 0.18);
+        border-radius: 14px;
+        background: var(--panel-strong);
+        color: var(--ink);
+        font: inherit;
+      }
+
+      textarea {
+        min-height: 140px;
+        resize: vertical;
+      }
+
+      .tall-textarea {
+        min-height: 420px;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .button,
+      button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border: none;
+        border-radius: 14px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .button.secondary,
+      button.secondary {
+        background: rgba(29, 26, 23, 0.08);
+        color: var(--ink);
+      }
+
+      .button.bad,
+      button.bad {
+        background: var(--bad);
+      }
+
+      .flash,
+      .error {
+        margin-bottom: 18px;
+        padding: 12px 14px;
+        border-radius: 14px;
+      }
+
+      .flash.success {
+        background: rgba(44, 122, 90, 0.10);
+        color: var(--good);
+      }
+
+      .flash.error,
+      .error {
+        background: rgba(170, 61, 42, 0.10);
+        color: var(--bad);
+      }
+
+      .flash.info {
+        background: rgba(40, 95, 144, 0.10);
+        color: var(--info);
+      }
+
+      .metrics {
+        display: grid;
+        gap: 16px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .metric {
+        padding: 18px;
+        border-radius: 20px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+      }
+
+      .metric.interactive {
+        transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      .metric.interactive:hover {
+        transform: translateY(-2px);
+        border-color: rgba(196, 99, 44, 0.35);
+        box-shadow: 0 16px 32px rgba(74, 43, 19, 0.08);
+      }
+
+      .metric-link {
+        display: block;
+      }
+
+      .metric strong {
+        display: block;
+        font-size: 1.4rem;
+        margin-top: 10px;
+      }
+
+      .metric small {
+        display: block;
+        margin-top: 8px;
+        color: var(--muted);
+      }
+
+      .card-list {
+        display: grid;
+        gap: 14px;
+      }
+
+      .card {
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.68);
+        padding: 18px;
+      }
+
+      .card header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .mono {
+        font-family: "Cascadia Code", "SFMono-Regular", monospace;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .checkbox {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .checkbox input {
+        width: 18px;
+        height: 18px;
+      }
+
+      .auth-wrap {
+        max-width: 560px;
+        margin: 64px auto;
+      }
+
+      .auth-brand {
+        margin-bottom: 18px;
+      }
+
+      .profile-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 10px 6px 6px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, rgba(196, 99, 44, 0.95), rgba(143, 63, 20, 0.95));
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        overflow: hidden;
+      }
+
+      .avatar.large {
+        width: 84px;
+        height: 84px;
+        font-size: 1.5rem;
+      }
+
+      .avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .split-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+
+      .chat-stack {
+        display: grid;
+        gap: 14px;
+        margin-bottom: 18px;
+      }
+
+      .chat-message {
+        border-radius: 20px;
+        padding: 18px;
+        background: rgba(255, 255, 255, 0.66);
+        border: 1px solid var(--line);
+      }
+
+      .chat-message.user {
+        background: rgba(196, 99, 44, 0.10);
+      }
+
+      .chat-meta {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .select-inline {
+        display: flex;
+        gap: 12px;
+        align-items: end;
+        flex-wrap: wrap;
+      }
+
+      .hero-callout {
+        padding: 18px;
+        border-radius: 18px;
+        background: rgba(196, 99, 44, 0.08);
+        border: 1px solid rgba(196, 99, 44, 0.18);
+      }
+
+      .stack-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .meta-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .meta-list div {
+        padding-top: 10px;
+        border-top: 1px solid var(--line);
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0 0;
+      }
+
+      .status-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .quick-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+
+      .progress-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .progress-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.68);
+      }
+
+      .progress-item .state {
+        font-weight: 600;
+      }
+
+      .progress-item.done .state {
+        color: var(--good);
+      }
+
+      .progress-item.pending .state {
+        color: var(--bad);
+      }
+
+      .activity-feed {
+        display: grid;
+        gap: 12px;
+      }
+
+      details {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.64);
+        padding: 14px 16px;
+      }
+
+      details summary {
+        cursor: pointer;
+        font-weight: 600;
+      }
+
+      .log-line {
+        display: grid;
+        gap: 6px;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .log-line.error {
+        border-color: rgba(170, 61, 42, 0.24);
+        background: rgba(170, 61, 42, 0.08);
+      }
+
+      .log-line.warning {
+        border-color: rgba(196, 99, 44, 0.24);
+        background: rgba(196, 99, 44, 0.08);
+      }
+
+      .error-card {
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(170, 61, 42, 0.18);
+        background: rgba(170, 61, 42, 0.08);
+      }
+
+      .details-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .doc-switcher {
+        display: grid;
+        gap: 14px;
+      }
+
+      .doc-group {
+        display: grid;
+        gap: 8px;
+      }
+
+      .doc-chip {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        padding: 12px 14px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.66);
+      }
+
+      .doc-chip.active {
+        border-color: rgba(196, 99, 44, 0.35);
+        background: rgba(196, 99, 44, 0.10);
+      }
+
+      .markdown-preview {
+        padding: 18px;
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .markdown-preview h2,
+      .markdown-preview h3,
+      .markdown-preview h4 {
+        margin-top: 0;
+      }
+
+      .markdown-preview pre {
+        padding: 14px;
+        border-radius: 14px;
+        background: rgba(29, 26, 23, 0.06);
+        overflow-x: auto;
+      }
+
+      .markdown-preview code {
+        font-family: "Cascadia Code", "SFMono-Regular", monospace;
+      }
+
+      .markdown-help {
+        padding-left: 18px;
+        color: var(--muted);
+      }
+
+      .form-columns {
+        display: grid;
+        gap: 18px;
+      }
+
+      @media (max-width: 980px) {
+        .app-shell {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          border-right: none;
+          border-bottom: 1px solid var(--line);
+        }
+
+        .panel-grid.two,
+        .panel-grid.three {
+          grid-template-columns: 1fr;
+        }
+
+        .topbar {
+          flex-direction: column;
+        }
+
+        .topbar-actions {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  {% set body_content %}
+    {% block body %}{% endblock %}
+  {% endset %}
+  <body>
+    {% if hide_shell %}
+      <main class="auth-wrap">
+        {% if branding_banner_url %}
+          <a class="brand-hero auth-brand" href="{{ project_repo_url }}" target="_blank" rel="noreferrer">
+            <img src="{{ branding_banner_url }}" alt="nanobot webgui banner">
+          </a>
+        {% endif %}
+        <section class="panel">
+          {% if flash %}
+            <div class="flash {{ flash.level }}">{{ flash.message }}</div>
+          {% endif %}
+          <div class="brand-links" style="margin-bottom: 18px;">
+            <a href="{{ project_repo_url }}" target="_blank" rel="noreferrer">Project: nanobot-webgui</a>
+            <a href="{{ upstream_repo_url }}" target="_blank" rel="noreferrer">Upstream: HKUDS/nanobot</a>
+          </div>
+          {{ body_content | safe }}
+        </section>
+      </main>
+    {% else %}
+      <div class="app-shell">
+        <aside class="sidebar">
+          <div class="brand">
+            {% if branding_banner_url %}
+              <a class="brand-hero" href="{{ project_repo_url }}" target="_blank" rel="noreferrer">
+                <img src="{{ branding_banner_url }}" alt="nanobot webgui banner">
+              </a>
+            {% endif %}
+            <p class="muted">Nanobot Dev GUI</p>
+            <h1>{{ instance_name }}</h1>
+            <p class="muted">Config</p>
+            <div class="mono">{{ config_path }}</div>
+            <p class="muted" style="margin-top: 10px;">{{ "Setup complete" if setup_complete else "Setup in progress" }}</p>
+            <div class="brand-links">
+              <a href="{{ project_repo_url }}" target="_blank" rel="noreferrer">Project repository</a>
+              <a href="{{ upstream_repo_url }}" target="_blank" rel="noreferrer">Based on HKUDS/nanobot</a>
+            </div>
+          </div>
+
+          <nav class="nav">
+            <a href="/dashboard" class="{% if nav_active == 'dashboard' %}active{% endif %}">Dashboard</a>
+            <a href="/setup/provider" class="{% if nav_active == 'provider' %}active{% endif %}">Provider</a>
+            <a href="/setup/channel" class="{% if nav_active == 'channel' %}active{% endif %}">Channel</a>
+            <a href="/setup/agent" class="{% if nav_active == 'agent' %}active{% endif %}">Agent</a>
+            <a href="/mcp" class="{% if nav_active == 'mcp' %}active{% endif %}">MCP</a>
+            <a href="/chat" class="{% if nav_active == 'chat' %}active{% endif %}">Chat</a>
+            <a href="/memory" class="{% if nav_active == 'memory' %}active{% endif %}">Memory</a>
+            <a href="/settings" class="{% if nav_active == 'settings' %}active{% endif %}">Settings</a>
+            <a href="/profile" class="{% if nav_active == 'profile' %}active{% endif %}">Profile</a>
+            <a href="/logs" class="{% if nav_active == 'logs' %}active{% endif %}">Logs</a>
+          </nav>
+        </aside>
+
+        <main class="content">
+          <div class="topbar">
+            <div>
+              <p class="muted">Workspace</p>
+              <h2>{{ title }}</h2>
+              <p class="muted">{{ workspace_path }}</p>
+            </div>
+            <div class="topbar-actions">
+              <span class="pill">GUI {{ gui_host }}:{{ gui_port }}</span>
+              <a class="button secondary" href="/chat">Chat</a>
+              <a class="button secondary" href="/settings">Validate Setup</a>
+              <form class="inline-form" method="post" action="/actions/test-agent">
+                <input type="hidden" name="next" value="{{ request_path }}">
+                <button class="secondary" type="submit">Run Agent Health Check</button>
+              </form>
+              <form class="inline-form" method="post" action="/actions/toggle-safe-mode">
+                <input type="hidden" name="next" value="{{ request_path }}">
+                <button class="secondary" type="submit">{{ "Turn Safe Mode Off" if safe_mode else "Turn Safe Mode On" }}</button>
+              </form>
+              <form class="inline-form" method="post" action="/actions/restart">
+                <button class="secondary" type="submit">Restart Runtime</button>
+              </form>
+              {% if user %}
+                <a class="profile-chip" href="/profile">
+                  <span class="avatar">
+                    {% if user.avatar_url %}
+                      <img src="{{ user.avatar_url }}" alt="{{ user.label }}">
+                    {% else %}
+                      {{ user.initials }}
+                    {% endif %}
+                  </span>
+                  <span>{{ user.label }}</span>
+                </a>
+                <form class="inline-form" method="post" action="/logout">
+                  <button class="secondary" type="submit">Logout</button>
+                </form>
+              {% endif %}
+            </div>
+          </div>
+
+          {% if flash %}
+            <div class="flash {{ flash.level }}">{{ flash.message }}</div>
+          {% endif %}
+          {{ body_content | safe }}
+        </main>
+      </div>
+    {% endif %}
+  </body>
+</html>

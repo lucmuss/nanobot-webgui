@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block body %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <div class="panel-grid two">
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">MCP Search</h3>
+          <p class="muted">Inspect a GitHub repository, install it, test it, then enable it for the main chat runtime.</p>
+        </div>
+        {% if agent_health %}
+          <span class="pill {% if agent_health.ok %}good{% else %}bad{% endif %}">
+            Agent {{ "Healthy" if agent_health.ok else "Failed" }}
+          </span>
+        {% else %}
+          <span class="pill muted">Agent not tested yet</span>
+        {% endif %}
+      </div>
+
+      <form method="post" action="/mcp/analyze">
+        <label>
+          GitHub repository URL
+          <input type="text" name="source" value="{{ query }}" placeholder="https://github.com/Garoth/dalle-mcp">
+        </label>
+        <div class="actions">
+          <button type="submit">Inspect Repository</button>
+          <button class="secondary" type="submit" formaction="/mcp/install">Install MCP Server</button>
+        </div>
+      </form>
+
+      {% if agent_health %}
+        <div class="meta-list">
+          <div>
+            <strong>Provider</strong>
+            <div class="muted">{{ agent_health.provider }} / {{ agent_health.model }}</div>
+          </div>
+          <div>
+            <strong>Latency</strong>
+            <div class="muted">{{ agent_health.latency_ms }} ms{% if agent_health.checked_at %} at {{ agent_health.checked_at }}{% endif %}</div>
+          </div>
+          {% if agent_health.error %}
+            <div>
+              <strong>Last error</strong>
+              <div class="mono">{{ agent_health.error }}</div>
+            </div>
+          {% endif %}
+        </div>
+      {% endif %}
+
+      {% if preview %}
+        <article class="card" style="margin-top: 18px;">
+          <header>
+            <strong>MCP Install Preview: {{ preview.title }}</strong>
+            <span class="pill">Server {{ preview.server_name }}</span>
+          </header>
+          <p class="muted">{{ preview.summary }}</p>
+          <div class="mono">{{ preview.repo_url }}</div>
+
+          <div class="meta-list">
+            <div>
+              <strong>Detected MCP Server</strong>
+              <div>{{ preview.server_name }}</div>
+            </div>
+            <div>
+              <strong>Transport</strong>
+              <div>{{ preview.transport or "auto" }}</div>
+            </div>
+            <div>
+              <strong>Start command</strong>
+              <div class="mono">{{ preview.run_command }}{% if preview.run_args %} {{ preview.run_args|join(' ') }}{% endif %}</div>
+            </div>
+            <div>
+              <strong>Install steps</strong>
+              <div class="stack-list">
+                {% for step in preview.install_steps %}
+                  <div class="mono">{{ step.display }}</div>
+                {% endfor %}
+              </div>
+            </div>
+            <div>
+              <strong>Required env</strong>
+              <div>{{ preview.required_env|join(", ") if preview.required_env else "None detected" }}</div>
+            </div>
+            {% if preview.optional_env %}
+              <div>
+                <strong>Optional env</strong>
+                <div>{{ preview.optional_env|join(", ") }}</div>
+              </div>
+            {% endif %}
+          </div>
+
+          <form method="post" action="/mcp/install" style="margin-top: 16px;">
+            <input type="hidden" name="source" value="{{ query }}">
+            <div class="actions">
+              <button type="submit">Install MCP Server</button>
+            </div>
+          </form>
+
+          {% if preview.evidence %}
+            <div class="badge-row">
+              {% for item in preview.evidence %}
+                <span class="pill">{{ item }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </article>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h3>Register MCP Manually</h3>
+      <form method="post" action="/mcp/add">
+        <label>
+          Name
+          <input type="text" name="name" value="{{ manual_form.name if manual_form else '' }}" required>
+        </label>
+        <label>
+          Transport
+          <select name="transport">
+            <option value="" {% if not manual_form or not manual_form.transport %}selected{% endif %}>auto</option>
+            <option value="stdio" {% if manual_form and manual_form.transport == 'stdio' %}selected{% endif %}>stdio</option>
+            <option value="sse" {% if manual_form and manual_form.transport == 'sse' %}selected{% endif %}>sse</option>
+            <option value="streamableHttp" {% if manual_form and manual_form.transport == 'streamableHttp' %}selected{% endif %}>streamableHttp</option>
+          </select>
+        </label>
+        <label>
+          Command
+          <input type="text" name="command" value="{{ manual_form.command if manual_form else '' }}">
+        </label>
+        <label>
+          Args (comma-separated)
+          <input type="text" name="args" value="{{ manual_form.args if manual_form else '' }}">
+        </label>
+        <label>
+          URL
+          <input type="text" name="url" value="{{ manual_form.url if manual_form else '' }}">
+        </label>
+        <label>
+          Env JSON
+          <textarea name="env_json">{{ manual_form.env_json if manual_form else '{}' }}</textarea>
+        </label>
+        <label>
+          Headers JSON
+          <textarea name="headers_json">{{ manual_form.headers_json if manual_form else '{}' }}</textarea>
+        </label>
+        <label>
+          Tool Timeout
+          <input type="number" name="tool_timeout" min="1" value="{{ manual_form.tool_timeout if manual_form else 30 }}">
+        </label>
+        <div class="actions">
+          <button type="submit">Register Server</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top: 22px;">
+    <div class="split-header">
+      <div>
+        <h3 style="margin: 0;">Installed MCP Servers</h3>
+        <p class="muted">Registry view with edit, test, enable, disable, and remove actions.</p>
+      </div>
+    </div>
+    <div class="card-list">
+      {% for server in installed_servers %}
+        <article class="card">
+          <header>
+            <strong>{{ server.name }}</strong>
+            <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
+              {{ server.effective_status }}
+            </span>
+          </header>
+
+          {% if server.summary %}
+            <p class="muted">{{ server.summary }}</p>
+          {% endif %}
+          {% if server.repo_url %}
+            <div class="mono">{{ server.repo_url }}</div>
+          {% endif %}
+
+          <div class="badge-row">
+            <span class="pill">transport {{ server.type }}</span>
+            <span class="pill {% if server.enabled %}good{% else %}muted{% endif %}">{{ "enabled" if server.enabled else "disabled" }}</span>
+            <span class="pill">{{ server.status_label }}</span>
+            {% if server.tool_names %}
+              <span class="pill good">{{ server.tool_names|length }} tool(s)</span>
+            {% endif %}
+            {% if server.missing_env %}
+              <span class="pill bad">missing {{ server.missing_env|join(", ") }}</span>
+            {% endif %}
+          </div>
+
+          {% if server.tool_names %}
+            <p class="muted" style="margin-top: 10px;">Available tools: {{ server.tool_names|join(", ") }}</p>
+          {% endif %}
+
+          <div class="meta-list">
+            {% if server.command %}
+              <div>
+                <strong>Command</strong>
+                <div class="mono">{{ server.command }}{% if server.args %} {{ server.args|join(' ') }}{% endif %}</div>
+              </div>
+            {% elif server.url %}
+              <div>
+                <strong>Endpoint</strong>
+                <div class="mono">{{ server.url }}</div>
+              </div>
+            {% endif %}
+
+            {% if server.last_checked_at %}
+              <div>
+                <strong>Last test</strong>
+                <div class="muted">{{ server.last_checked_at }}</div>
+              </div>
+            {% endif %}
+
+            {% if server.last_error %}
+              <div>
+                <strong>Last error</strong>
+                <div class="mono">{{ server.last_error }}</div>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="actions" style="margin-top: 16px;">
+            <a class="button secondary" href="/mcp/{{ server.name }}">{{ "Fix Configuration" if server.missing_env else "Edit Settings" }}</a>
+            <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}">
+              <input type="hidden" name="next" value="/mcp">
+              <button class="secondary" type="submit">Run MCP Test</button>
+            </form>
+            <form class="inline-form" method="post" action="/mcp/toggle/{{ server.name }}">
+              <input type="hidden" name="next" value="/mcp">
+              <button class="secondary" type="submit">{{ "Disable for Chat" if server.enabled else "Enable for Chat" }}</button>
+            </form>
+            <form class="inline-form" method="post" action="/mcp/remove/{{ server.name }}">
+              <button class="bad" type="submit">Remove</button>
+            </form>
+          </div>
+        </article>
+      {% else %}
+        <article class="card">
+          <p class="muted">No MCP servers registered yet.</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

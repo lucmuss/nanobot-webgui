@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block body %}
+  <div class="panel-grid two">
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Usage Snapshot</h3>
+          <p class="muted">Token usage collected from health checks, main chat turns, and MCP test chats.</p>
+        </div>
+      </div>
+
+      <div class="details-grid">
+        <article class="card">
+          <header><strong>24h total tokens</strong></header>
+          <div>{{ usage_summary.totals_24h.total_tokens }}</div>
+        </article>
+        <article class="card">
+          <header><strong>24h prompt tokens</strong></header>
+          <div>{{ usage_summary.totals_24h.prompt_tokens }}</div>
+        </article>
+        <article class="card">
+          <header><strong>24h completion tokens</strong></header>
+          <div>{{ usage_summary.totals_24h.completion_tokens }}</div>
+        </article>
+        <article class="card">
+          <header><strong>All-time total tokens</strong></header>
+          <div>{{ usage_summary.totals_all_time.total_tokens }}</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Recent Models</h3>
+      <div class="card-list">
+        <article class="card">
+          <header><strong>Latest model list</strong></header>
+          {% if usage_summary.recent_models %}
+            <div>{{ usage_summary.recent_models|join(", ") }}</div>
+          {% else %}
+            <p class="muted">No recent model usage has been recorded yet.</p>
+          {% endif %}
+        </article>
+        <article class="card">
+          <header><strong>Rough cost</strong></header>
+          {% if usage_summary.totals_24h.estimated_cost_known %}
+            <div>${{ '%.4f'|format(usage_summary.totals_24h.estimated_cost_usd) }} in the last 24h</div>
+          {% else %}
+            <p class="muted">Rough cost is only shown when a verified local price profile exists for the active model.</p>
+          {% endif %}
+        </article>
+        <article class="card">
+          <header><strong>Last usage event</strong></header>
+          {% if usage_summary.last_event %}
+            <div>{{ usage_summary.last_event.source }} via {{ usage_summary.last_event.provider }} / {{ usage_summary.last_event.model }}</div>
+            <p class="muted">{{ usage_summary.last_event.timestamp }}</p>
+          {% else %}
+            <p class="muted">No usage events have been stored yet.</p>
+          {% endif %}
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top: 22px;">
+    <h3>Recent Usage Events</h3>
+    <div class="card-list">
+      {% for event in usage_events %}
+        <article class="card">
+          <header>
+            <strong>{{ event.source }}</strong>
+            <span class="pill">{{ event.provider }} / {{ event.model }}</span>
+          </header>
+          <div class="details-grid">
+            <div>
+              <strong>Total</strong>
+              <p class="muted">{{ event.total_tokens }}</p>
+            </div>
+            <div>
+              <strong>Prompt</strong>
+              <p class="muted">{{ event.prompt_tokens }}</p>
+            </div>
+            <div>
+              <strong>Completion</strong>
+              <p class="muted">{{ event.completion_tokens }}</p>
+            </div>
+            <div>
+              <strong>When</strong>
+              <p class="muted">{{ event.timestamp }}</p>
+            </div>
+          </div>
+          {% if event.note %}
+            <p class="muted" style="margin-top: 10px;">{{ event.note }}</p>
+          {% endif %}
+          {% if event.estimated_cost_usd is not none %}
+            <p class="muted">Estimated cost: ${{ '%.4f'|format(event.estimated_cost_usd) }}</p>
+          {% endif %}
+        </article>
+      {% else %}
+        <article class="card">
+          <p class="muted">No usage events exist yet.</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

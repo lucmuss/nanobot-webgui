@@ -1,7 +1,7 @@
 [project]
 name = "nanobot-ai"
 version = "0.1.4.post4"
-description = "A lightweight personal AI assistant framework"
+description = "Nanobot with a production-focused web GUI for setup, MCP management, chat, and memory"
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
@@ -18,6 +18,11 @@ classifiers = [
 
 dependencies = [
     "typer>=0.20.0,<1.0.0",
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn>=0.34.0,<1.0.0",
+    "jinja2>=3.1.0,<4.0.0",
+    "python-multipart>=0.0.20,<1.0.0",
+    "itsdangerous>=2.2.0,<3.0.0",
     "litellm>=1.81.5,<2.0.0",
     "pydantic>=2.12.0,<3.0.0",
     "pydantic-settings>=2.12.0,<3.0.0",
@@ -45,6 +50,11 @@ dependencies = [
     "chardet>=3.0.2,<6.0.0",
     "openai>=2.8.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/lucmuss/nanobot-webgui"
+Repository = "https://github.com/lucmuss/nanobot-webgui"
+Upstream = "https://github.com/HKUDS/nanobot"
 
 [project.optional-dependencies]
 matrix = [
@@ -78,6 +88,8 @@ packages = ["nanobot"]
 [tool.hatch.build]
 include = [
     "nanobot/**/*.py",
+    "nanobot/gui/assets/**/*",
+    "nanobot/gui/templates/**/*.html",
     "nanobot/templates/**/*.md",
     "nanobot/skills/**/*.md",
     "nanobot/skills/**/*.sh",
@@ -88,6 +100,7 @@ include = [
     "nanobot/",
     "bridge/",
     "README.md",
+    "WEBGUI.md",
     "LICENSE",
 ]
 

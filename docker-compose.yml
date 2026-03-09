@@ -21,6 +21,24 @@ services:
         reservations:
           cpus: '0.25'
           memory: 256M
+
+  nanobot-gui:
+    container_name: nanobot-gui
+    <<: *common-config
+    command: ["gui", "--host", "0.0.0.0", "--port", "18791"]
+    restart: unless-stopped
+    depends_on:
+      - nanobot-gateway
+    ports:
+      - 18791:18791
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
   
   nanobot-cli:
     <<: *common-config

@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block body %}
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <div class="panel-grid two">
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">MCP Detail</h3>
+          <p class="muted">You are testing MCP: <strong>{{ server.name }}</strong></p>
+        </div>
+        <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
+          {{ server.effective_status }}
+        </span>
+      </div>
+
+      {% if server.summary %}
+        <p class="muted">{{ server.summary }}</p>
+      {% endif %}
+
+      <div class="details-grid">
+        <article class="card">
+          <header><strong>Source</strong></header>
+          <div class="mono">{{ server.repo_url or "Not recorded" }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Transport</strong></header>
+          <div>{{ server.transport }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Start command</strong></header>
+          <div class="mono">{{ server.start_command or "Not recorded" }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Active status</strong></header>
+          <div>{{ "Enabled" if server.enabled else "Disabled" }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Test status</strong></header>
+          <div>{{ server.status_label }}</div>
+          {% if server.last_checked_at %}<p class="muted">{{ server.last_checked_at }}</p>{% endif %}
+        </article>
+        <article class="card">
+          <header><strong>Detected tools</strong></header>
+          {% if server.tool_names %}
+            <div>{{ server.tool_names|join(", ") }}</div>
+          {% else %}
+            <div>No tools discovered yet</div>
+          {% endif %}
+        </article>
+        <article class="card">
+          <header><strong>Required env variables</strong></header>
+          <div>{{ server.required_env|join(", ") if server.required_env else "None detected" }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Missing env variables</strong></header>
+          <div>{{ server.missing_env|join(", ") if server.missing_env else "None" }}</div>
+        </article>
+      </div>
+
+      <div class="actions" style="margin-top: 16px;">
+        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}">
+          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+          <button class="secondary" type="submit">Run MCP Test</button>
+        </form>
+        <form class="inline-form" method="post" action="/mcp/toggle/{{ server.name }}">
+          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+          <button class="secondary" type="submit">{{ "Disable for Chat" if server.enabled else "Enable for Chat" }}</button>
+        </form>
+        <form class="inline-form" method="post" action="/mcp/remove/{{ server.name }}">
+          <button class="bad" type="submit">Remove</button>
+        </form>
+      </div>
+
+      {% if mcp_last_error %}
+        <div class="error-card" style="margin-top: 18px;">
+          <strong>{{ mcp_last_error.title }}</strong>
+          <div class="mono" style="margin-top: 10px;">{{ mcp_last_error.raw }}</div>
+          <p class="muted">{{ mcp_last_error.explanation }}</p>
+          <p class="muted">{{ mcp_last_error.next_action }}</p>
+          <a class="button secondary" href="{{ mcp_last_error.action_url }}">{{ mcp_last_error.action_label }}</a>
+        </div>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h3>Edit MCP Settings</h3>
+      <form method="post" action="/mcp/{{ server.name }}">
+        {% if env_fields %}
+          <div class="hero-callout">
+            <strong>Fix Configuration</strong>
+            <p class="muted">Use the simple fields below first. The raw JSON section stays available for advanced cases.</p>
+          </div>
+          <div class="details-grid" style="margin-top: 16px;">
+            {% for field in env_fields %}
+              <label>
+                {{ field.name }}{% if field.required %} (required){% endif %}
+                <input type="password" name="env__{{ field.name }}" value="{{ field.value }}">
+              </label>
+            {% endfor %}
+          </div>
+        {% endif %}
+
+        <label>
+          Transport
+          <select name="transport">
+            <option value="" {% if not server_form.transport %}selected{% endif %}>auto</option>
+            <option value="stdio" {% if server_form.transport == 'stdio' %}selected{% endif %}>stdio</option>
+            <option value="sse" {% if server_form.transport == 'sse' %}selected{% endif %}>sse</option>
+            <option value="streamableHttp" {% if server_form.transport == 'streamableHttp' %}selected{% endif %}>streamableHttp</option>
+          </select>
+        </label>
+        <label>
+          Command
+          <input type="text" name="command" value="{{ server_form.command }}">
+        </label>
+        <label>
+          Args (comma-separated)
+          <input type="text" name="args" value="{{ server_form.args }}">
+        </label>
+        <label>
+          URL
+          <input type="text" name="url" value="{{ server_form.url }}">
+        </label>
+        <label>
+          Env JSON
+          <textarea class="mono" name="env_json">{{ server_form.env_json }}</textarea>
+        </label>
+        <details {% if not safe_mode %}open{% endif %}>
+          <summary>Advanced MCP settings</summary>
+          <div class="form-columns" style="margin-top: 14px;">
+            <label>
+              Headers JSON
+              <textarea class="mono" name="headers_json">{{ server_form.headers_json }}</textarea>
+            </label>
+            <label>
+              Tool Timeout
+              <input type="number" name="tool_timeout" min="1" value="{{ server_form.tool_timeout }}">
+            </label>
+          </div>
+        </details>
+        <div class="actions">
+          <button type="submit">Save MCP Settings</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div class="panel-grid two" style="margin-top: 22px;">
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">MCP Test Chat</h3>
+          <p class="muted">Practical validation with only this MCP loaded into the runtime.</p>
+        </div>
+        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}/clear">
+          <button class="secondary" type="submit">Clear Test Chat</button>
+        </form>
+      </div>
+
+      <div class="chat-stack">
+        {% for message in mcp_test_history %}
+          <article class="chat-message {{ message.role }}">
+            <div class="chat-meta">
+              <strong>{{ "You" if message.role == "user" else "Nanobot" }}</strong>
+              <span>{{ message.timestamp }}</span>
+            </div>
+            <div class="mono">{{ message.content }}</div>
+          </article>
+        {% else %}
+          <article class="chat-message">
+            <div class="chat-meta">
+              <strong>No MCP test messages yet</strong>
+            </div>
+            <div class="muted">Use this chat to validate that the selected MCP behaves correctly in a real conversation.</div>
+          </article>
+        {% endfor %}
+      </div>
+
+      <form method="post" action="/mcp/test/{{ server.name }}/chat">
+        <label>
+          Test prompt
+          <textarea name="message" placeholder="Ask Nanobot to use this MCP server and describe the result."></textarea>
+        </label>
+        <div class="actions">
+          <button type="submit">Send Test Prompt</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h3>MCP Logs</h3>
+      <div class="card">
+        <header><strong>Install directory</strong></header>
+        <div class="mono">{{ server.install_dir or "Not tracked" }}</div>
+      </div>
+      <div class="card" style="margin-top: 14px;">
+        <header><strong>Recent MCP log output</strong></header>
+        <div class="mono">{{ server.log_tail or "No MCP-specific logs have been recorded yet." }}</div>
+      </div>
+    </section>
+  </div>
+{% endblock %}
