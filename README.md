@@ -54,6 +54,43 @@ pip install -e .
 uv tool install .
 ```
 
+## How This Can Be Used
+
+`nanobot-webgui` supports two practical deployment styles:
+
+### 1. Standalone Nanobot + GUI
+
+Use this when you want a fresh installation with the GUI included from the start.
+
+- run `nanobot onboard`
+- start `nanobot gui`
+- complete the browser setup
+
+This is the easiest setup for new users.
+
+### 2. GUI on Top of an Existing Nanobot Install
+
+Use this when you already have Nanobot running and want to manage it through the WebGUI.
+
+Start the GUI with the existing config and workspace:
+
+```bash
+nanobot gui --config /path/to/config.json --workspace /path/to/workspace
+```
+
+Important:
+
+- the GUI reads and writes the selected `config.json`
+- the GUI also creates its own files next to that config, such as:
+  - `gui.sqlite3`
+  - `gui-state.json`
+  - `gui-session.secret`
+  - `media/`
+  - `logs/`
+- the GUI syncs Nanobot workspace templates if they are missing
+
+If you attach the GUI to an existing production install, make a backup first.
+
 ## Quick Start
 
 ### 1. Initialize config and workspace
@@ -79,6 +116,22 @@ The first launch flow is:
 4. Configure the default agent runtime
 5. Land on the dashboard and continue with MCP installation
 
+## Very Short Answer to the Common Question
+
+If users ask:
+
+- "Is this standalone?"
+- "Can it read an already installed Nanobot?"
+
+The answer is:
+
+Yes, both are supported.
+
+- it can be used as a standalone `Nanobot + GUI` installation
+- it can also point to an existing Nanobot config and workspace
+
+What it does not do is magically discover an arbitrary running Nanobot instance by itself. You point it at the files you want it to manage.
+
 ## Common CLI Commands
 
 ### Start GUI
@@ -89,6 +142,17 @@ nanobot gui --host 0.0.0.0 --port 18791
 ### Start GUI behind HTTPS with secure session cookies
 ```bash
 nanobot gui --host 0.0.0.0 --port 18791 --secure-cookies
+```
+
+### Start GUI with release checks and a controlled update action
+```bash
+nanobot gui \
+  --host 0.0.0.0 \
+  --port 18791 \
+  --update-check \
+  --update-repo lucmuss/nanobot-webgui \
+  --update-mode command \
+  --update-command "/usr/local/bin/nanobot-webgui-update.sh"
 ```
 
 ### Start the headless gateway
@@ -135,8 +199,44 @@ For a real deployment:
 3. Mount a persistent `~/.nanobot` volume.
 4. Back up `config.json`, `gui.sqlite3`, and the workspace.
 5. Restrict public exposure with network policy, VPN, or auth at the proxy layer.
+6. If you want one-click GUI updates, configure `--update-mode command` with a deployment-specific host script.
 
 Detailed deployment guidance is in [WEBGUI.md](./WEBGUI.md).
+
+## One-Click Update Flow
+
+The GUI can show an update banner when a newer GitHub release is available.
+
+What users see:
+
+- `New version available`
+- `View release notes`
+- `Update now`
+
+Important:
+
+- Docker Compose does not auto-update containers by itself
+- the GUI does not blindly update itself inside the container
+- `Update now` only calls an explicit command that you configure for your deployment
+
+Example:
+
+```bash
+nanobot gui \
+  --host 0.0.0.0 \
+  --port 18791 \
+  --update-check \
+  --update-repo lucmuss/nanobot-webgui \
+  --update-mode command \
+  --update-command "/usr/local/bin/nanobot-webgui-update.sh"
+```
+
+Typical host-side update command:
+
+```bash
+git pull
+docker compose up -d --build
+```
 
 ## MCP Workflow
 
@@ -151,6 +251,59 @@ The intended browser flow is:
 7. `Enable for Chat`
 
 The UI keeps installed MCPs in a registry view, including tool list, status, last test state, and error guidance.
+
+## MCP Repair Worker
+
+For MCP servers that fail because runtimes are missing, the GUI now supports a bounded repair flow:
+
+- detect missing runtimes like `node`, `npx`, `uv`, `python`, or `docker`
+- suggest a supported repair recipe
+- run the configured repair worker command
+- retest the MCP after the repair finishes
+
+Example GUI startup:
+
+```bash
+nanobot gui \
+  --host 0.0.0.0 \
+  --port 18791 \
+  --repair-mode command \
+  --repair-command "docker compose run --rm nanobot-repair-worker nanobot repair-worker"
+```
+
+There is also a built-in worker entrypoint:
+
+```bash
+nanobot repair-worker --recipe install_node
+```
+
+The Settings page contains a dangerous opt-in named `Enable Unrestricted Agent + Shell for MCP repair fallback`.
+Leave it off unless you intentionally want the AI repair planner to be allowed to emit and execute unrestricted shell commands through your configured repair worker.
+
+## MCP Repair Modes
+
+There are now two repair levels:
+
+### Safe default
+
+The GUI suggests bounded repair recipes like:
+
+- `install_node`
+- `install_uv`
+- `install_python_build_tools`
+- `install_docker_cli`
+
+These are only executed through an explicit repair worker command configured by the operator.
+
+### Dangerous opt-in
+
+The Settings page has:
+
+- `Enable Unrestricted Agent + Shell for MCP repair fallback`
+
+If enabled, the AI repair planner is allowed to return an unrestricted shell repair plan.
+
+This is intentionally dangerous and should only be used in trusted self-hosted environments where you understand the security boundary.
 
 ## What the GUI Shows
 
@@ -194,6 +347,30 @@ python3 -m compileall nanobot/gui
 pytest tests/test_commands.py tests/test_config_paths.py tests/test_gui_config_service.py
 docker compose up -d --build nanobot-gateway nanobot-gui
 curl http://127.0.0.1:18791/health
+```
+
+Browser E2E coverage for the WebGUI is documented in [GUI_TESTING.md](./GUI_TESTING.md).
+
+If your host does not have the required Python/Node/browser stack, use:
+
+```bash
+./scripts/e2e/run_playwright_in_docker.sh
+```
+
+To rerun the real official MCP smoke-test set with one command:
+
+```bash
+./scripts/e2e/run_real_mcp_smoke.sh
+```
+
+The wrapper prefers a local Python environment and falls back to the existing dev Docker image when needed.
+
+Useful variants:
+
+```bash
+./scripts/e2e/run_real_mcp_smoke.sh --list-cases
+./scripts/e2e/run_real_mcp_smoke.sh --case chrome-devtools --case playwright
+FIRECRAWL_API_KEY=... GITHUB_MCP_PAT=... ./scripts/e2e/run_real_mcp_smoke.sh
 ```
 
 ## Upstream Credits

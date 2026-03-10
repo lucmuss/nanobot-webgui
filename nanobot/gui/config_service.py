@@ -144,6 +144,17 @@ class GUIConfigService:
         state["safe_mode"] = bool(value)
         self.save_state(state)
 
+    def is_unrestricted_agent_shell_enabled(self) -> bool:
+        """Return whether dangerous unrestricted MCP repair mode is enabled."""
+        state = self.load_state()
+        return bool(state.get("unrestricted_agent_shell_enabled", False))
+
+    def set_unrestricted_agent_shell_enabled(self, value: bool) -> None:
+        """Persist the dangerous unrestricted MCP repair mode toggle."""
+        state = self.load_state()
+        state["unrestricted_agent_shell_enabled"] = bool(value)
+        self.save_state(state)
+
     def get_agent_health(self) -> dict[str, Any]:
         """Return the last stored GUI agent health result."""
         state = self.load_state()
@@ -247,6 +258,37 @@ class GUIConfigService:
         state = self.load_state()
         state["last_restart_at"] = value
         self.save_state(state)
+
+    def get_update_status(self) -> dict[str, Any]:
+        """Return the cached GUI update-check metadata."""
+        state = self.load_state()
+        value = state.get("update_status")
+        return value if isinstance(value, dict) else {}
+
+    def set_update_status(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Persist the cached GUI update-check metadata."""
+        state = self.load_state()
+        clean = {
+            "enabled": bool(payload.get("enabled", False)),
+            "current_version": str(payload.get("current_version", "")),
+            "latest_version": str(payload.get("latest_version", "")),
+            "tag_name": str(payload.get("tag_name", "")),
+            "available": bool(payload.get("available", False)),
+            "checked_at": str(payload.get("checked_at", "")),
+            "release_url": str(payload.get("release_url", "")),
+            "release_notes_url": str(payload.get("release_notes_url", "")),
+            "release_name": str(payload.get("release_name", "")),
+            "published_at": str(payload.get("published_at", "")),
+            "source": str(payload.get("source", "")),
+            "repo": str(payload.get("repo", "")),
+            "error": str(payload.get("error", "")),
+            "updating": bool(payload.get("updating", False)),
+            "last_update_request_at": str(payload.get("last_update_request_at", "")),
+            "last_update_error": str(payload.get("last_update_error", "")),
+        }
+        state["update_status"] = clean
+        self.save_state(state)
+        return clean
 
     def get_active_memory_doc(self) -> str:
         """Return the most recently opened memory document key."""
@@ -536,6 +578,7 @@ class GUIConfigService:
         normalized = dict(state)
         normalized.setdefault("setup_complete", False)
         normalized.setdefault("safe_mode", True)
+        normalized.setdefault("unrestricted_agent_shell_enabled", False)
         if not isinstance(normalized.get("agent_health"), dict):
             normalized["agent_health"] = {}
         if not isinstance(normalized.get("mcp_registry"), dict):
@@ -552,6 +595,8 @@ class GUIConfigService:
             normalized["last_restart_at"] = ""
         if not isinstance(normalized.get("active_memory_doc"), str):
             normalized["active_memory_doc"] = "memory"
+        if not isinstance(normalized.get("update_status"), dict):
+            normalized["update_status"] = {}
         return normalized
 
     @staticmethod

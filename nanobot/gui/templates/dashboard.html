@@ -3,15 +3,15 @@
   <section class="metrics">
     {% for metric in metrics %}
       {% if metric.href %}
-        <a class="metric-link" href="{{ metric.href }}">
-          <article class="metric interactive">
+        <a class="metric-link" href="{{ metric.href }}" data-testid="dashboard-metric-link-{{ metric.label|lower|replace(' ', '-') }}">
+          <article class="metric interactive" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
             <span class="muted">{{ metric.label }}</span>
             <strong>{{ metric.value }}</strong>
             {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
           </article>
         </a>
       {% else %}
-        <article class="metric">
+        <article class="metric" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
           <span class="muted">{{ metric.label }}</span>
           <strong>{{ metric.value }}</strong>
           {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
@@ -30,7 +30,7 @@
         <span class="pill">{{ setup_progress | selectattr('done') | list | length }}/{{ setup_progress|length }} complete</span>
       </div>
 
-      <div class="progress-list">
+      <div class="progress-list" data-testid="dashboard-setup-progress">
         {% for item in setup_progress %}
           <article class="progress-item {% if item.done %}done{% else %}pending{% endif %}">
             <div>
@@ -42,10 +42,10 @@
         {% endfor %}
       </div>
 
-      <div class="hero-callout" style="margin-top: 16px;">
+      <div class="hero-callout" style="margin-top: 16px;" data-testid="dashboard-next-step">
         <strong>Next step: {{ next_step.label }}</strong>
         <p class="muted">{{ next_step.description }}</p>
-        <a class="button secondary" href="{{ next_step.href }}">{{ next_step.action_label }}</a>
+        <a class="button secondary" href="{{ next_step.href }}" data-testid="dashboard-next-step-action">{{ next_step.action_label }}</a>
       </div>
     </section>
 
@@ -56,13 +56,13 @@
           <p class="muted">Readable setup validation with direct recovery actions.</p>
         </div>
         <form class="inline-form" method="post" action="/settings/validate">
-          <button class="secondary" type="submit">Validate Setup</button>
+          <button class="secondary" type="submit" data-testid="dashboard-validate-setup">Validate Setup</button>
         </form>
       </div>
 
       <div class="card-list">
         {% for item in validation_results[:5] %}
-          <article class="card">
+          <article class="card" data-testid="dashboard-validation-card-{{ item.label|lower|replace(' ', '-') }}">
             <header>
               <strong>{{ item.label }}</strong>
               <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "OK" if item.ok else "Fix needed" }}</span>
@@ -70,7 +70,7 @@
             <div class="mono">{{ item.detail }}</div>
             <p class="muted">{{ item.hint }}</p>
             {% if item.action_url %}
-              <a class="button secondary" href="{{ item.action_url }}">{{ item.action_label or "Open" }}</a>
+              <a class="button secondary" href="{{ item.action_url }}" data-testid="dashboard-validation-action-{{ item.label|lower|replace(' ', '-') }}">{{ item.action_label or "Open" }}</a>
             {% endif %}
           </article>
         {% endfor %}
@@ -112,7 +112,7 @@
       </div>
       <div class="quick-actions">
         {% for action in quick_actions %}
-          <a class="button secondary" href="{{ action.href }}">{{ action.label }}</a>
+          <a class="button secondary" href="{{ action.href }}" data-testid="dashboard-quick-action-{{ action.label|lower|replace(' ', '-')|replace('/', '-') }}">{{ action.label }}</a>
         {% endfor %}
       </div>
 
@@ -201,14 +201,14 @@
         </div>
         <a class="button secondary" href="/mcp">Open MCP Page</a>
       </div>
-      <form method="post" action="/mcp/analyze">
+      <form method="post" action="/mcp/analyze" data-testid="dashboard-mcp-discovery-form">
         <label>
           GitHub repository URL
-          <input type="text" name="source" placeholder="https://github.com/Garoth/dalle-mcp">
+          <input type="text" name="source" placeholder="https://github.com/Garoth/dalle-mcp" data-testid="dashboard-mcp-source">
         </label>
         <div class="actions">
-          <button type="submit">Inspect Repository</button>
-          <button class="secondary" type="submit" formaction="/mcp/install">Install MCP Server</button>
+          <button type="submit" data-testid="dashboard-mcp-inspect">Inspect Repository</button>
+          <button class="secondary" type="submit" formaction="/mcp/install" data-testid="dashboard-mcp-install">Install MCP Server</button>
         </div>
       </form>
     </section>
@@ -217,7 +217,7 @@
       <h3>MCP Registry</h3>
       <div class="card-list">
         {% for server in installed_servers %}
-          <article class="card">
+          <article class="card" data-testid="dashboard-mcp-card-{{ server.name }}">
             <header>
               <strong>{{ server.name }}</strong>
               <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
@@ -234,7 +234,7 @@
               <span class="pill">{{ server.tool_names|length }} tool(s)</span>
             </div>
             <div class="actions" style="margin-top: 12px;">
-              <a class="button secondary" href="/mcp/{{ server.name }}">Open MCP Details</a>
+              <a class="button secondary" href="/mcp/{{ server.name }}" data-testid="dashboard-mcp-open-{{ server.name }}">Open MCP Details</a>
             </div>
           </article>
         {% else %}

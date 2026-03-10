@@ -1,0 +1,8 @@
+{
+  "name": "@playwright/mcp",
+  "version": "0.0.68",
+  "mcpName": "io.github.microsoft/playwright-mcp",
+  "bin": {
+    "playwright-mcp": "cli.js"
+  }
+}

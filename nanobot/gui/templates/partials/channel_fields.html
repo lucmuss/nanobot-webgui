@@ -1,4 +1,4 @@
-<div class="card">
+<div class="card" data-testid="channel-fields-card">
   <header>
     <strong>{{ channel_meta.label }}</strong>
   </header>
@@ -7,13 +7,13 @@
   {% for field in channel_meta.fields %}
     {% if field.type == "bool" %}
       <label class="checkbox">
-        <input type="checkbox" name="{{ field.name }}" {% if channel_values[field.name] %}checked{% endif %}>
+        <input type="checkbox" name="{{ field.name }}" {% if channel_values[field.name] %}checked{% endif %} data-testid="channel-field-{{ field.name }}">
         <span>{{ field.label }}</span>
       </label>
     {% elif field.type == "select" %}
       <label>
         {{ field.label }}
-        <select name="{{ field.name }}">
+        <select name="{{ field.name }}" data-testid="channel-field-{{ field.name }}">
           {% for option in field.options %}
             <option value="{{ option }}" {% if channel_values[field.name] == option %}selected{% endif %}>{{ option }}</option>
           {% endfor %}
@@ -22,12 +22,12 @@
     {% elif field.type == "list" %}
       <label>
         {{ field.label }}
-        <textarea name="{{ field.name }}" placeholder="{{ field.placeholder or '' }}">{{ channel_values[field.name] }}</textarea>
+        <textarea name="{{ field.name }}" placeholder="{{ field.placeholder or '' }}" data-testid="channel-field-{{ field.name }}">{{ channel_values[field.name] }}</textarea>
       </label>
     {% else %}
       <label>
         {{ field.label }}
-        <input type="{{ field.type }}" name="{{ field.name }}" value="{{ channel_values[field.name] or '' }}" placeholder="{{ field.placeholder or '' }}">
+        <input type="{{ field.type }}" name="{{ field.name }}" value="{{ channel_values[field.name] or '' }}" placeholder="{{ field.placeholder or '' }}" data-testid="channel-field-{{ field.name }}">
       </label>
     {% endif %}
   {% endfor %}

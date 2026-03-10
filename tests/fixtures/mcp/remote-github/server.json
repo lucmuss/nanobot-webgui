@@ -1,0 +1,19 @@
+{
+  "name": "io.github.github/github-mcp-server",
+  "title": "GitHub",
+  "packages": [
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/github/github-mcp-server:latest",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.githubcopilot.com/mcp/"
+    }
+  ]
+}

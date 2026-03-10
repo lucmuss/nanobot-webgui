@@ -1,0 +1,23 @@
+{
+  "server_name": "failing",
+  "summary": "Fixture MCP that always fails its runtime probe.",
+  "install_mode": "fixture",
+  "transport": "stdio",
+  "run_command": "fixture-failing-mcp",
+  "run_args": [
+    "--explode"
+  ],
+  "install_steps": [
+    "Register fixture failing MCP"
+  ],
+  "required_env": [],
+  "optional_env": [],
+  "tool_names": [
+    "broken_tool"
+  ],
+  "probe_error": "Fixture MCP startup failed: simulated crash",
+  "healthcheck": "Fixture failing MCP probe",
+  "evidence": [
+    "fixture:failing-mcp"
+  ]
+}

@@ -7,21 +7,21 @@
           <h3 style="margin: 0;">Runtime Status</h3>
           <p class="muted">Live summary of the GUI, gateway, and agent runtime.</p>
         </div>
-        <span class="pill {% if runtime_status.tone == 'good' %}good{% elif runtime_status.tone == 'bad' %}bad{% else %}muted{% endif %}">
+        <span class="pill {% if runtime_status.tone == 'good' %}good{% elif runtime_status.tone == 'bad' %}bad{% else %}muted{% endif %}" data-testid="status-runtime-pill">
           {{ runtime_status.label }}
         </span>
       </div>
 
       <div class="details-grid">
-        <article class="card">
+        <article class="card" data-testid="status-gateway-card">
           <header><strong>Gateway</strong></header>
           <div>{{ gateway_status.label }}</div>
         </article>
-        <article class="card">
+        <article class="card" data-testid="status-agent-health-card">
           <header><strong>Agent health</strong></header>
           <div>{{ "Healthy" if agent_health.get("ok") else "Not healthy" if agent_health else "Not checked" }}</div>
         </article>
-        <article class="card">
+        <article class="card" data-testid="status-last-restart-card">
           <header><strong>Last restart</strong></header>
           <div>{{ last_restart_at or "No restart recorded" }}</div>
         </article>

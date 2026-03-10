@@ -273,6 +273,36 @@
         color: var(--info);
       }
 
+      .update-banner {
+        margin-bottom: 18px;
+        padding: 16px 18px;
+        border-radius: 18px;
+        border: 1px solid rgba(196, 99, 44, 0.22);
+        background: rgba(196, 99, 44, 0.10);
+      }
+
+      .update-banner.info {
+        border-color: rgba(40, 95, 144, 0.22);
+        background: rgba(40, 95, 144, 0.10);
+      }
+
+      .update-banner.error {
+        border-color: rgba(170, 61, 42, 0.22);
+        background: rgba(170, 61, 42, 0.10);
+      }
+
+      .update-banner h3 {
+        margin: 0 0 6px;
+      }
+
+      .update-banner p {
+        margin: 0;
+      }
+
+      .update-banner .actions {
+        margin-top: 12px;
+      }
+
       .metrics {
         display: grid;
         gap: 16px;
@@ -651,7 +681,7 @@
         {% endif %}
         <section class="panel">
           {% if flash %}
-            <div class="flash {{ flash.level }}">{{ flash.message }}</div>
+            <div class="flash {{ flash.level }}" data-testid="flash-message">{{ flash.message }}</div>
           {% endif %}
           <div class="brand-links" style="margin-bottom: 18px;">
             <a href="{{ project_repo_url }}" target="_blank" rel="noreferrer">Project: nanobot-webgui</a>
@@ -681,16 +711,16 @@
           </div>
 
           <nav class="nav">
-            <a href="/dashboard" class="{% if nav_active == 'dashboard' %}active{% endif %}">Dashboard</a>
-            <a href="/setup/provider" class="{% if nav_active == 'provider' %}active{% endif %}">Provider</a>
-            <a href="/setup/channel" class="{% if nav_active == 'channel' %}active{% endif %}">Channel</a>
-            <a href="/setup/agent" class="{% if nav_active == 'agent' %}active{% endif %}">Agent</a>
-            <a href="/mcp" class="{% if nav_active == 'mcp' %}active{% endif %}">MCP</a>
-            <a href="/chat" class="{% if nav_active == 'chat' %}active{% endif %}">Chat</a>
-            <a href="/memory" class="{% if nav_active == 'memory' %}active{% endif %}">Memory</a>
-            <a href="/settings" class="{% if nav_active == 'settings' %}active{% endif %}">Settings</a>
-            <a href="/profile" class="{% if nav_active == 'profile' %}active{% endif %}">Profile</a>
-            <a href="/logs" class="{% if nav_active == 'logs' %}active{% endif %}">Logs</a>
+            <a href="/dashboard" class="{% if nav_active == 'dashboard' %}active{% endif %}" data-testid="nav-dashboard">Dashboard</a>
+            <a href="/setup/provider" class="{% if nav_active == 'provider' %}active{% endif %}" data-testid="nav-provider">Provider</a>
+            <a href="/setup/channel" class="{% if nav_active == 'channel' %}active{% endif %}" data-testid="nav-channel">Channel</a>
+            <a href="/setup/agent" class="{% if nav_active == 'agent' %}active{% endif %}" data-testid="nav-agent">Agent</a>
+            <a href="/mcp" class="{% if nav_active == 'mcp' %}active{% endif %}" data-testid="nav-mcp">MCP</a>
+            <a href="/chat" class="{% if nav_active == 'chat' %}active{% endif %}" data-testid="nav-chat">Chat</a>
+            <a href="/memory" class="{% if nav_active == 'memory' %}active{% endif %}" data-testid="nav-memory">Memory</a>
+            <a href="/settings" class="{% if nav_active == 'settings' %}active{% endif %}" data-testid="nav-settings">Settings</a>
+            <a href="/profile" class="{% if nav_active == 'profile' %}active{% endif %}" data-testid="nav-profile">Profile</a>
+            <a href="/logs" class="{% if nav_active == 'logs' %}active{% endif %}" data-testid="nav-logs">Logs</a>
           </nav>
         </aside>
 
@@ -703,21 +733,30 @@
             </div>
             <div class="topbar-actions">
               <span class="pill">GUI {{ gui_host }}:{{ gui_port }}</span>
-              <a class="button secondary" href="/chat">Chat</a>
-              <a class="button secondary" href="/settings">Validate Setup</a>
-              <form class="inline-form" method="post" action="/actions/test-agent">
+              <a class="button secondary" href="/chat" data-testid="topbar-chat-link">Chat</a>
+              <a class="button secondary" href="/settings" data-testid="topbar-validate-link">Validate Setup</a>
+              <form class="inline-form" method="post" action="/actions/test-agent" data-testid="topbar-test-agent-form">
                 <input type="hidden" name="next" value="{{ request_path }}">
-                <button class="secondary" type="submit">Run Agent Health Check</button>
+                <button class="secondary" type="submit" data-testid="topbar-test-agent">Run Agent Health Check</button>
               </form>
-              <form class="inline-form" method="post" action="/actions/toggle-safe-mode">
+              <form class="inline-form" method="post" action="/actions/toggle-safe-mode" data-testid="topbar-safe-mode-form">
                 <input type="hidden" name="next" value="{{ request_path }}">
-                <button class="secondary" type="submit">{{ "Turn Safe Mode Off" if safe_mode else "Turn Safe Mode On" }}</button>
+                <button class="secondary" type="submit" data-testid="topbar-safe-mode">{{ "Turn Safe Mode Off" if safe_mode else "Turn Safe Mode On" }}</button>
               </form>
-              <form class="inline-form" method="post" action="/actions/restart">
-                <button class="secondary" type="submit">Restart Runtime</button>
+              <form class="inline-form" method="post" action="/actions/restart" data-testid="topbar-restart-form">
+                <input type="hidden" name="next" value="{{ request_path }}">
+                <button
+                  class="secondary"
+                  type="submit"
+                  data-testid="topbar-restart"
+                  title="{{ restart_action.description }}"
+                  {% if not restart_action.enabled %}disabled aria-disabled="true"{% endif %}
+                >
+                  {{ restart_action.label }}
+                </button>
               </form>
               {% if user %}
-                <a class="profile-chip" href="/profile">
+                <a class="profile-chip" href="/profile" data-testid="topbar-profile-chip">
                   <span class="avatar">
                     {% if user.avatar_url %}
                       <img src="{{ user.avatar_url }}" alt="{{ user.label }}">
@@ -727,15 +766,66 @@
                   </span>
                   <span>{{ user.label }}</span>
                 </a>
-                <form class="inline-form" method="post" action="/logout">
-                  <button class="secondary" type="submit">Logout</button>
+                <form class="inline-form" method="post" action="/logout" data-testid="topbar-logout-form">
+                  <button class="secondary" type="submit" data-testid="topbar-logout">Logout</button>
                 </form>
               {% endif %}
             </div>
           </div>
 
+          {% if update_status.available %}
+            <section class="update-banner" data-testid="update-banner">
+              <h3>New version available: {{ update_status.tag_name or ("v" ~ update_status.latest_version) }}</h3>
+              <p>
+                You are running {{ current_version }}.
+                {% if update_status.release_name %}
+                  Latest release: {{ update_status.release_name }}.
+                {% endif %}
+                {% if update_status.repo %}
+                  Source: {{ update_status.repo }}.
+                {% endif %}
+              </p>
+              {% if update_status.last_update_error %}
+                <p style="margin-top: 8px; color: var(--bad);">Last update attempt failed: {{ update_status.last_update_error }}</p>
+              {% endif %}
+              <div class="actions">
+                {% if update_status.release_notes_url %}
+                  <a
+                    class="button secondary"
+                    href="{{ update_status.release_notes_url }}"
+                    target="_blank"
+                    rel="noreferrer"
+                    data-testid="update-view-release-notes"
+                  >
+                    View release notes
+                  </a>
+                {% endif %}
+                <form class="inline-form" method="post" action="/actions/update" data-testid="update-now-form">
+                  <button
+                    type="submit"
+                    data-testid="update-now-button"
+                    title="{{ update_action.description }}"
+                    {% if not update_action.enabled %}disabled aria-disabled="true"{% endif %}
+                  >
+                    {{ update_action.label }}
+                  </button>
+                </form>
+              </div>
+            </section>
+          {% elif update_status.updating %}
+            <section class="update-banner info" data-testid="update-banner-updating">
+              <h3>Updating...</h3>
+              <p>The configured update command was triggered. This page will recover automatically once the GUI is back.</p>
+            </section>
+          {% elif update_status.last_update_error %}
+            <section class="update-banner error" data-testid="update-banner-error">
+              <h3>Update action failed</h3>
+              <p>{{ update_status.last_update_error }}</p>
+            </section>
+          {% endif %}
+
           {% if flash %}
-            <div class="flash {{ flash.level }}">{{ flash.message }}</div>
+            <div class="flash {{ flash.level }}" data-testid="flash-message">{{ flash.message }}</div>
           {% endif %}
           {{ body_content | safe }}
         </main>

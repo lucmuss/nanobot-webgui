@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -231,6 +233,46 @@ class GUIAgentService:
         )
         return result
 
+    async def plan_mcp_install(self, repository_bundle: dict[str, Any]) -> dict[str, Any]:
+        """Ask the configured model for a bounded MCP install plan in JSON form."""
+        config = self.config_service.load()
+        provider = _make_provider(config)
+        prompt = _build_mcp_install_planner_prompt(repository_bundle)
+        response = await provider.chat(
+            messages=[
+                {"role": "system", "content": _MCP_INSTALL_PLANNER_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            model=config.agents.defaults.model,
+            max_tokens=1600,
+            temperature=0.1,
+            reasoning_effort=config.agents.defaults.reasoning_effort,
+        )
+        payload = _extract_json_object((response.content or "").strip())
+        if not isinstance(payload, dict):
+            raise ValueError("The AI install planner did not return a JSON object.")
+        return payload
+
+    async def plan_mcp_repair(self, repair_bundle: dict[str, Any]) -> dict[str, Any]:
+        """Ask the configured model for a bounded MCP repair plan in JSON form."""
+        config = self.config_service.load()
+        provider = _make_provider(config)
+        prompt = _build_mcp_repair_planner_prompt(repair_bundle)
+        response = await provider.chat(
+            messages=[
+                {"role": "system", "content": _MCP_REPAIR_PLANNER_SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
+            model=config.agents.defaults.model,
+            max_tokens=1000,
+            temperature=0.1,
+            reasoning_effort=config.agents.defaults.reasoning_effort,
+        )
+        payload = _extract_json_object((response.content or "").strip())
+        if not isinstance(payload, dict):
+            raise ValueError("The AI repair planner did not return a JSON object.")
+        return payload
+
     async def _get_agent(self) -> AgentLoop:
         """Return a cached agent runtime, rebuilding it when config changes."""
         signature = self._config_signature()
@@ -423,3 +465,132 @@ def _display_content(content: Any) -> str:
 def _utc_now() -> str:
     """Return a compact UTC timestamp string."""
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+_MCP_INSTALL_PLANNER_SYSTEM_PROMPT = """You are a nanobot MCP install planner.
+
+Return exactly one JSON object and no prose.
+
+Your job:
+- inspect the provided repository bundle
+- infer a safe MCP install plan
+- never invent package names, file paths, or env variables that are not supported by the evidence
+
+Allowed values:
+- install_mode: source, npm, workspace_package, remote, oci
+- repo_type: npm, python, docker, remote, monorepo, server_json, unknown
+- transport: stdio, sse, streamableHttp
+- runtime names: node, npm, npx, python, uv, pip, docker, uvx
+- run_command: npx, node, python, python3, uv, uvx, docker, or empty string for remote-only
+
+Allowed install commands only:
+- ["npm", "ci"]
+- ["npm", "install"]
+- ["npm", "run", "build"]
+- ["uv", "pip", "install", "-e", "."]
+- ["uv", "sync"]
+- ["pip", "install", "-e", "."]
+- ["python", "-m", "pip", "install", "-e", "."]
+- ["python3", "-m", "pip", "install", "-e", "."]
+
+JSON schema:
+{
+  "repo_type": "...",
+  "install_mode": "...",
+  "transport": "...",
+  "runtime": ["..."],
+  "run_command": "...",
+  "run_args": ["..."],
+  "run_url": "",
+  "install_steps": [
+    {"display": "npm ci", "command": ["npm", "ci"], "timeout": 900}
+  ],
+  "required_env": ["OPENAI_API_KEY"],
+  "optional_env": [],
+  "server_name": "example-mcp",
+  "summary": "short summary",
+  "evidence": ["package.json name=..."],
+  "confidence": 0.0
+}
+
+If uncertain:
+- keep confidence low
+- prefer empty arrays over guesses
+- do not emit commands outside the allowlist
+"""
+
+
+_MCP_REPAIR_PLANNER_SYSTEM_PROMPT = """You are a nanobot MCP repair planner.
+
+Return exactly one JSON object and no prose.
+
+Your job:
+- inspect the provided MCP runtime evidence
+- decide which bounded repair recipe is the safest next step
+- only recommend unrestricted_agent_shell when the input explicitly says unrestricted mode is enabled
+
+Allowed recommended_recipe values:
+- ""
+- install_node
+- install_uv
+- install_python_build_tools
+- install_docker_cli
+- unrestricted_agent_shell
+
+JSON schema:
+{
+  "missing_runtime": "node",
+  "recommended_recipe": "install_node",
+  "required_env": ["OPENAI_API_KEY"],
+  "next_step": "Apply the repair, then retest the MCP.",
+  "confidence": 0.0,
+  "shell_command": ""
+}
+
+Rules:
+- keep shell_command empty unless recommended_recipe is unrestricted_agent_shell
+- do not emit prose outside the JSON object
+- do not suggest any recipe that is not in the allowlist
+"""
+
+
+def _build_mcp_install_planner_prompt(repository_bundle: dict[str, Any]) -> str:
+    """Render one bounded repository bundle for the AI install planner."""
+    return (
+        "Plan a safe MCP installation from this repository bundle.\n"
+        "Only use the bundled evidence and return JSON only.\n\n"
+        + json.dumps(repository_bundle, indent=2, ensure_ascii=False)
+    )
+
+
+def _build_mcp_repair_planner_prompt(repair_bundle: dict[str, Any]) -> str:
+    """Render one bounded MCP repair bundle for the AI repair planner."""
+    return (
+        "Plan the safest next MCP repair step from this runtime evidence.\n"
+        "Only use the bundled evidence and return JSON only.\n\n"
+        + json.dumps(repair_bundle, indent=2, ensure_ascii=False)
+    )
+
+
+def _extract_json_object(raw: str) -> dict[str, Any]:
+    """Extract one JSON object from plain text or a fenced markdown block."""
+    text = raw.strip()
+    if not text:
+        raise ValueError("The AI install planner returned an empty response.")
+
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, flags=re.DOTALL)
+    if fenced:
+        text = fenced.group(1).strip()
+    elif not text.startswith("{"):
+        match = re.search(r"(\{.*\})", text, flags=re.DOTALL)
+        if match:
+            text = match.group(1).strip()
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("The AI install planner returned invalid JSON.") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError("The AI install planner must return a JSON object.")
+    return payload

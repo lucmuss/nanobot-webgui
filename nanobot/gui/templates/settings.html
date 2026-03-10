@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
 
   <div class="panel-grid two">
     <section class="panel">
@@ -11,10 +11,10 @@
         </div>
       </div>
 
-      <form method="post" action="/settings">
+      <form method="post" action="/settings" data-testid="settings-form">
         <label>
           Workspace path
-          <input type="text" name="workspace" value="{{ settings_form.workspace }}" {% if workspace_locked %}readonly{% endif %}>
+          <input type="text" name="workspace" value="{{ settings_form.workspace }}" {% if workspace_locked %}readonly{% endif %} data-testid="settings-workspace">
         </label>
         <p class="muted">
           {% if workspace_locked %}
@@ -27,42 +27,51 @@
         <div class="details-grid">
           <label>
             Exec timeout (seconds)
-            <input type="number" name="exec_timeout" min="1" value="{{ settings_form.exec_timeout }}">
+            <input type="number" name="exec_timeout" min="1" value="{{ settings_form.exec_timeout }}" data-testid="settings-exec-timeout">
           </label>
           <label>
             PATH append
-            <input type="text" name="path_append" value="{{ settings_form.path_append }}">
+            <input type="text" name="path_append" value="{{ settings_form.path_append }}" data-testid="settings-path-append">
           </label>
         </div>
 
         <label class="checkbox">
-          <input type="checkbox" name="tools_enabled" {% if settings_form.tools_enabled %}checked{% endif %}>
+          <input type="checkbox" name="tools_enabled" {% if settings_form.tools_enabled %}checked{% endif %} data-testid="settings-tools-enabled">
           <span>Enable tools in the main runtime</span>
         </label>
 
         <label class="checkbox">
-          <input type="checkbox" name="restrict_to_workspace" {% if settings_form.restrict_to_workspace %}checked{% endif %}>
+          <input type="checkbox" name="restrict_to_workspace" {% if settings_form.restrict_to_workspace %}checked{% endif %} data-testid="settings-restrict-workspace">
           <span>Restrict tool execution to the workspace</span>
         </label>
 
         <label class="checkbox">
-          <input type="checkbox" name="send_progress" {% if settings_form.send_progress %}checked{% endif %}>
+          <input type="checkbox" name="send_progress" {% if settings_form.send_progress %}checked{% endif %} data-testid="settings-send-progress">
           <span>Send progress updates to channels</span>
         </label>
 
         <label class="checkbox">
-          <input type="checkbox" name="send_tool_hints" {% if settings_form.send_tool_hints %}checked{% endif %}>
+          <input type="checkbox" name="send_tool_hints" {% if settings_form.send_tool_hints %}checked{% endif %} data-testid="settings-send-tool-hints">
           <span>Send tool hints to channels</span>
         </label>
 
+        <div class="hero-callout" style="background: rgba(170, 61, 42, 0.08); border-color: rgba(170, 61, 42, 0.16);">
+          <strong>Danger Zone</strong>
+          <p class="muted">Unrestricted Agent + Shell allows MCP repair fallback plans to propose and execute arbitrary shell commands through the configured repair worker. Leave this off unless you fully trust the repositories and your deployment boundary.</p>
+          <label class="checkbox" style="margin-top: 12px;">
+            <input type="checkbox" name="dangerous_repair_mode" {% if settings_form.dangerous_repair_mode %}checked{% endif %} data-testid="settings-dangerous-repair-mode">
+            <span>Enable Unrestricted Agent + Shell for MCP repair fallback</span>
+          </label>
+        </div>
+
         <div class="actions">
-          <button type="submit">Save Settings</button>
+          <button type="submit" data-testid="settings-save">Save Settings</button>
         </div>
       </form>
 
-      <form method="post" action="/settings/validate" style="margin-top: 12px;">
+      <form method="post" action="/settings/validate" style="margin-top: 12px;" data-testid="settings-validate-form">
         <div class="actions">
-          <button class="secondary" type="submit">Validate Setup</button>
+          <button class="secondary" type="submit" data-testid="settings-validate">Validate Setup</button>
         </div>
       </form>
     </section>
@@ -80,14 +89,14 @@
           <strong>Recommended next fix: {{ next_validation_issue.label }}</strong>
           <p class="muted">{{ next_validation_issue.hint }}</p>
           {% if next_validation_issue.action_url %}
-            <a class="button secondary" href="{{ next_validation_issue.action_url }}">{{ next_validation_issue.action_label or "Open" }}</a>
+            <a class="button secondary" href="{{ next_validation_issue.action_url }}" data-testid="validation-next-fix-action">{{ next_validation_issue.action_label or "Open" }}</a>
           {% endif %}
         </div>
       {% endif %}
 
       <div class="card-list">
         {% for item in validation_results %}
-          <article class="card">
+          <article class="card" data-testid="validation-card-{{ item.label|lower|replace(' ', '-') }}">
             <header>
               <strong>{{ item.label }}</strong>
               <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "OK" if item.ok else "Needs attention" }}</span>
@@ -95,7 +104,7 @@
             <div class="mono">{{ item.detail }}</div>
             <p class="muted" style="margin-top: 10px;">{{ item.hint }}</p>
             {% if item.action_url %}
-              <a class="button secondary" href="{{ item.action_url }}">{{ item.action_label or "Open" }}</a>
+              <a class="button secondary" href="{{ item.action_url }}" data-testid="validation-action-{{ item.label|lower|replace(' ', '-') }}">{{ item.action_label or "Open" }}</a>
             {% endif %}
           </article>
         {% endfor %}
@@ -121,6 +130,11 @@
       <article class="card">
         <header><strong>Installed MCP servers</strong></header>
         <div>{{ settings_meta.installed_mcp_servers }}</div>
+      </article>
+      <article class="card">
+        <header><strong>Repair worker</strong></header>
+        <div>{{ "Configured" if settings_meta.repair_command_configured else "Disabled" }}</div>
+        <p class="muted">Mode: {{ settings_meta.repair_mode or "disabled" }}</p>
       </article>
       <article class="card">
         <header><strong>Setup complete</strong></header>

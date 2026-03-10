@@ -6,15 +6,15 @@
         <h3 style="margin: 0;">GUI Logs</h3>
         <p class="muted">Tail of the rotating action log for this dev instance.</p>
       </div>
-      <a class="button secondary" href="/logs?level={{ log_level }}">Refresh</a>
+      <a class="button secondary" href="/logs?level={{ log_level }}" data-testid="logs-refresh">Refresh</a>
     </div>
     <p class="muted">{{ log_file }}</p>
 
-    <div class="quick-actions" style="margin-bottom: 16px;">
-      <a class="button secondary" href="/logs?level=all">All</a>
-      <a class="button secondary" href="/logs?level=error">Errors</a>
-      <a class="button secondary" href="/logs?level=warning">Warnings</a>
-      <a class="button secondary" href="/logs?level=info">Info</a>
+    <div class="quick-actions" style="margin-bottom: 16px;" data-testid="logs-filters">
+      <a class="button secondary" href="/logs?level=all" data-testid="logs-filter-all">All</a>
+      <a class="button secondary" href="/logs?level=error" data-testid="logs-filter-error">Errors</a>
+      <a class="button secondary" href="/logs?level=warning" data-testid="logs-filter-warning">Warnings</a>
+      <a class="button secondary" href="/logs?level=info" data-testid="logs-filter-info">Info</a>
     </div>
 
     <div class="card-list">

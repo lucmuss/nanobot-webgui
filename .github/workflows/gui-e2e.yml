@@ -1,0 +1,143 @@
+name: GUI E2E
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Select the functional E2E suite to run
+        required: true
+        default: full
+        type: choice
+        options:
+          - critical
+          - full
+
+concurrency:
+  group: gui-e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gui-e2e-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Compile GUI modules
+        run: python -m compileall nanobot/gui nanobot/cli tests
+
+      - name: Run GUI backend integration tests
+        run: python -m pytest tests/test_gui_backend_integration.py tests/test_gui_mcp_service.py -q
+
+      - name: Run critical GUI E2E tests on Chromium
+        env:
+          NANOBOT_GUI_E2E_BROWSERS: chromium
+        run: npm run test:e2e:critical
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts-critical-chromium
+          path: |
+            playwright-report
+            test-results
+
+  gui-e2e-cross-browser:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        browser:
+          - chromium
+          - firefox
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Select E2E suite
+        id: suite
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.suite }}" == "critical" ]]; then
+            echo "name=critical" >> "$GITHUB_OUTPUT"
+            echo "command=npm run test:e2e:critical" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=full" >> "$GITHUB_OUTPUT"
+            echo "command=npm run test:e2e:full" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Compile GUI modules
+        run: python -m compileall nanobot/gui nanobot/cli tests
+
+      - name: Run GUI backend integration tests
+        run: python -m pytest tests/test_gui_backend_integration.py tests/test_gui_mcp_service.py -q
+
+      - name: Run GUI E2E tests
+        env:
+          NANOBOT_GUI_E2E_BROWSERS: ${{ matrix.browser }}
+        run: ${{ steps.suite.outputs.command }}
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts-${{ steps.suite.outputs.name }}-${{ matrix.browser }}
+          path: |
+            playwright-report
+            test-results

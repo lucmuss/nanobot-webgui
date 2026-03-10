@@ -1,0 +1,20 @@
+{
+  "name": "firecrawl-mcp-server",
+  "title": "Firecrawl MCP Server",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "firecrawl-mcp",
+      "version": "1.0.0",
+      "environmentVariables": [
+        {
+          "name": "FIRECRAWL_API_KEY",
+          "isRequired": false
+        }
+      ],
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

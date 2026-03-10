@@ -1,0 +1,7 @@
+{
+  "name": "playwright-mcp-internal",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}

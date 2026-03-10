@@ -2,7 +2,7 @@
 {% block body %}
   <div class="panel-grid two">
     <section class="panel">
-      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
       <div class="split-header">
         <div>
           <h3 style="margin: 0;">Account Settings</h3>
@@ -17,33 +17,33 @@
         </div>
       </div>
 
-      <form method="post" action="/profile" enctype="multipart/form-data">
+      <form method="post" action="/profile" enctype="multipart/form-data" data-testid="profile-form">
         <label>
           Display name
-          <input type="text" name="display_name" value="{{ profile_form.display_name }}">
+          <input type="text" name="display_name" value="{{ profile_form.display_name }}" data-testid="profile-display-name">
         </label>
         <label>
           Username
-          <input type="text" name="username" value="{{ profile_form.username }}" required>
+          <input type="text" name="username" value="{{ profile_form.username }}" required data-testid="profile-username">
         </label>
         <label>
           Email
-          <input type="email" name="email" value="{{ profile_form.email }}" required>
+          <input type="email" name="email" value="{{ profile_form.email }}" required data-testid="profile-email">
         </label>
         <label>
           Avatar image
-          <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif">
+          <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif" data-testid="profile-avatar">
         </label>
         <label>
           New password
-          <input type="password" name="password" placeholder="Leave empty to keep the current password">
+          <input type="password" name="password" placeholder="Leave empty to keep the current password" data-testid="profile-password">
         </label>
         <label>
           Confirm new password
-          <input type="password" name="password_confirm">
+          <input type="password" name="password_confirm" data-testid="profile-password-confirm">
         </label>
         <div class="actions">
-          <button type="submit">Save Profile</button>
+          <button type="submit" data-testid="profile-save">Save Profile</button>
         </div>
       </form>
     </section>

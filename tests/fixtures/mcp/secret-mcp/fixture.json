@@ -1,0 +1,27 @@
+{
+  "server_name": "secret",
+  "summary": "Fixture MCP for missing-secret and retest flows.",
+  "install_mode": "fixture",
+  "transport": "stdio",
+  "run_command": "fixture-secret-mcp",
+  "run_args": [
+    "serve"
+  ],
+  "install_steps": [
+    "Register fixture secret MCP"
+  ],
+  "required_env": [
+    "FAKE_API_KEY"
+  ],
+  "optional_env": [
+    "FAKE_REGION"
+  ],
+  "tool_names": [
+    "fetch_secret",
+    "echo_message"
+  ],
+  "healthcheck": "Fixture secret MCP handshake",
+  "evidence": [
+    "fixture:secret-mcp"
+  ]
+}

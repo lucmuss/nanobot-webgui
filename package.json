@@ -1,0 +1,19 @@
+{
+  "name": "nanobot-webgui-e2e",
+  "private": true,
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:critical": "playwright test tests/e2e/auth-and-guards.spec.js tests/e2e/chat-runtime.spec.js tests/e2e/mcp-failures.spec.js tests/e2e/profile-account.spec.js tests/e2e/settings-validator.spec.js",
+    "test:e2e:full": "playwright test",
+    "test:e2e:a11y": "playwright test tests/e2e/a11y-smoke.spec.js",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:install": "playwright install chromium firefox",
+    "test:live-canary": "python3 scripts/e2e/run_live_mcp_canary.py",
+    "test:mcp-smoke": "./scripts/e2e/run_real_mcp_smoke.sh"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.0",
+    "@playwright/test": "^1.58.2"
+  }
+}

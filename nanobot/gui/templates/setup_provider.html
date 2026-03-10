@@ -3,8 +3,8 @@
   <div class="panel-grid two">
     <section class="panel">
       <p class="muted">Step 1 of 3. Choose the provider, model, and API details for this instance.</p>
-      {% if error %}<div class="error">{{ error }}</div>{% endif %}
-      <form method="post" action="/setup/provider">
+      {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
+      <form method="post" action="/setup/provider" data-testid="provider-form">
         <div class="hero-callout">
           <strong>Required for AI to work</strong>
           <p class="muted">These are the only fields a new user normally needs to finish provider setup.</p>
@@ -12,7 +12,7 @@
 
         <label title="Choose the API provider Nanobot should call for chat and health checks.">
           Provider
-          <select name="provider" required>
+          <select name="provider" required data-testid="provider-select">
             {% for option in provider_options %}
               <option value="{{ option.value }}" {% if option.value == selected_provider %}selected{% endif %}>
                 {{ option.label }}{% if option.oauth %} (OAuth){% endif %}
@@ -22,30 +22,30 @@
         </label>
         <label title="This is the model identifier Nanobot will use by default.">
           Model
-          <input type="text" name="model" value="{{ model }}" required>
+          <input type="text" name="model" value="{{ model }}" required data-testid="provider-model">
         </label>
         <label title="Paste the provider API key here. Nanobot cannot answer without valid credentials.">
           API Key
-          <input type="password" name="api_key" value="{{ api_key }}">
+          <input type="password" name="api_key" value="{{ api_key }}" data-testid="provider-api-key">
         </label>
 
-        <details {% if not safe_mode %}open{% endif %}>
+        <details {% if not safe_mode %}open{% endif %} data-testid="provider-advanced">
           <summary>Advanced (optional)</summary>
           <div class="form-columns" style="margin-top: 14px;">
             <label title="Only change this when you use a custom OpenAI-compatible endpoint.">
               API Base
-              <input type="text" name="api_base" value="{{ api_base }}">
+              <input type="text" name="api_base" value="{{ api_base }}" data-testid="provider-api-base">
             </label>
             <label title="Use extra headers only when your provider requires custom authentication or routing headers.">
               Extra headers as JSON
-              <textarea name="extra_headers">{{ extra_headers }}</textarea>
+              <textarea name="extra_headers" data-testid="provider-extra-headers">{{ extra_headers }}</textarea>
             </label>
           </div>
         </details>
 
         <div class="actions">
-          <button class="secondary" type="submit" name="action" value="save">Save</button>
-          <button type="submit" name="action" value="next">Continue to Channel</button>
+          <button class="secondary" type="submit" name="action" value="save" data-testid="provider-save">Save</button>
+          <button type="submit" name="action" value="next" data-testid="provider-continue">Continue to Channel</button>
         </div>
       </form>
     </section>

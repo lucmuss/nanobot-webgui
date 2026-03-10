@@ -1,18 +1,18 @@
 {% extends "base.html" %}
 {% block body %}
   <p class="muted">Sign in with your username or email address.</p>
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
-  <form method="post" action="/login">
+  {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
+  <form method="post" action="/login" data-testid="login-form">
     <label>
       Username or email
-      <input type="text" name="identifier" value="{{ form_data.identifier if form_data else '' }}" required>
+      <input type="text" name="identifier" value="{{ form_data.identifier if form_data else '' }}" required data-testid="login-identifier">
     </label>
     <label>
       Password
-      <input type="password" name="password" required>
+      <input type="password" name="password" required data-testid="login-password">
     </label>
     <div class="actions">
-      <button type="submit">Sign In</button>
+      <button type="submit" data-testid="login-submit">Sign In</button>
     </div>
   </form>
 {% endblock %}

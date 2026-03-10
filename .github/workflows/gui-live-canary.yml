@@ -1,0 +1,52 @@
+name: GUI Live Canary
+
+on:
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: gui-live-canary-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-mcp-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run live MCP canary
+        env:
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          GITHUB_MCP_PAT: ${{ secrets.GITHUB_MCP_PAT }}
+        run: |
+          python3 scripts/e2e/run_live_mcp_canary.py \
+            --output test-results/live-mcp-canary.json \
+            --firecrawl-api-key "${FIRECRAWL_API_KEY}" \
+            --github-pat "${GITHUB_MCP_PAT}"
+
+      - name: Upload live canary artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-mcp-canary
+          path: test-results/live-mcp-canary.json

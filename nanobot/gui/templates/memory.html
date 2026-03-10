@@ -15,7 +15,7 @@
           <section class="doc-group">
             <strong>{{ group.label }}</strong>
             {% for document in group.documents %}
-              <a class="doc-chip {% if document.key == active_document.key %}active{% endif %}" href="/memory?doc={{ document.key }}">
+              <a class="doc-chip {% if document.key == active_document.key %}active{% endif %}" href="/memory?doc={{ document.key }}" data-testid="memory-doc-chip-{{ document.key }}">
                 <span>{{ document.label }}</span>
                 <span class="muted">{{ document.key }}</span>
               </a>
@@ -41,22 +41,22 @@
         </div>
       </div>
 
-      <form method="post" action="/memory">
+      <form method="post" action="/memory" data-testid="memory-form">
         <input type="hidden" name="doc" value="{{ active_document.key }}">
         <label>
           Markdown content
-          <textarea class="mono tall-textarea" name="content">{{ active_document.content }}</textarea>
+          <textarea class="mono tall-textarea" name="content" data-testid="memory-content">{{ active_document.content }}</textarea>
         </label>
         <div class="actions">
-          <button type="submit">Save Document</button>
+          <button type="submit" data-testid="memory-save">Save Document</button>
         </div>
       </form>
 
       {% if active_document.template_available %}
-        <form method="post" action="/memory/reset" style="margin-top: 12px;">
+        <form method="post" action="/memory/reset" style="margin-top: 12px;" data-testid="memory-reset-form">
           <input type="hidden" name="doc" value="{{ active_document.key }}">
           <div class="actions">
-            <button class="secondary" type="submit">Reset to Template</button>
+            <button class="secondary" type="submit" data-testid="memory-reset">Reset to Template</button>
           </div>
         </form>
       {% endif %}
@@ -64,7 +64,7 @@
   </div>
 
   <div class="panel-grid two" style="margin-top: 22px;">
-    <section class="panel">
+    <section class="panel" data-testid="memory-preview-panel">
       <h3>Preview</h3>
       <div class="markdown-preview">
         {{ markdown_preview | safe }}

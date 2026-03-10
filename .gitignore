@@ -20,4 +20,9 @@ __pycache__/
 poetry.lock
 .pytest_cache/
 botpy.log
-
+node_modules/
+.playwright-browsers/
+playwright-report/
+test-results/
+tmp/e2e/
+live-canary-runtime/

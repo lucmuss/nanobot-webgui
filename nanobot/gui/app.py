@@ -7,7 +7,9 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import time
 import uuid
 from dataclasses import dataclass
@@ -23,12 +25,14 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
+from nanobot import __version__
 from nanobot.config.schema import MCPServerConfig
 from nanobot.gui.agent_service import GUIAgentService
 from nanobot.gui.auth import AdminUser, AuthService
 from nanobot.gui.config_service import GUIConfigService
 from nanobot.gui.error_utils import explain_error
-from nanobot.gui.mcp_service import GUIMCPService
+from nanobot.gui.mcp_service import GUIMCPService, _append_log
+from nanobot.gui.repair_worker import REPAIR_RECIPE_DETAILS, supported_repair_recipes
 from nanobot.providers.registry import PROVIDERS
 from nanobot.utils.helpers import safe_filename
 
@@ -144,6 +148,15 @@ class GUISettings:
     instance_name: str = "nanobot-dev"
     gateway_health_url: str | None = None
     https_only_cookies: bool = False
+    restart_mode: str = "disabled"
+    restart_command: str | None = None
+    update_check_enabled: bool = True
+    update_repo: str = "lucmuss/nanobot-webgui"
+    update_check_interval_hours: int = 24
+    update_mode: str = "disabled"
+    update_command: str | None = None
+    repair_mode: str = "disabled"
+    repair_command: str | None = None
 
 
 def create_gui_app(settings: GUISettings) -> FastAPI:
@@ -161,8 +174,10 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
     gui_logger = _setup_logger(config_service.runtime_dir / "logs" / "gui.log")
     agent_service = GUIAgentService(config_service, gui_logger)
     mcp_service = GUIMCPService(config_service, gui_logger)
+    mcp_service.ai_plan_builder = agent_service.plan_mcp_install
+    mcp_service.ai_repair_planner = agent_service.plan_mcp_repair
 
-    app = FastAPI(title="nanobot GUI", version="0.2.0")
+    app = FastAPI(title="nanobot GUI", version=__version__)
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,
@@ -330,6 +345,13 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         card = _build_mcp_server_card(server_name, server, config_service)
         record = config_service.get_mcp_record(server_name)
         last_error = record.get("friendly_error") if record.get("last_error") else {}
+        unrestricted_enabled = config_service.is_unrestricted_agent_shell_enabled()
+        repair_preview = {
+            "supported": bool(card.get("repair_available_recipes"))
+            or (unrestricted_enabled and bool(card.get("last_error"))),
+            "recommended_recipe": str(card.get("repair_recipe", "")).strip()
+            or (card.get("repair_available_recipes") or ["unrestricted_agent_shell" if unrestricted_enabled and card.get("last_error") else ""])[0],
+        }
         return _render(
             request,
             "mcp_detail.html",
@@ -358,6 +380,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 ],
                 "mcp_test_history": mcp_test_history or [],
                 "mcp_last_error": last_error,
+                "repair_action": _get_repair_action(settings, repair_preview),
+                "repair_recipe_details": REPAIR_RECIPE_DETAILS,
                 "error": error,
             },
             status_code=status_code,
@@ -382,6 +406,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         return JSONResponse(
             {
                 "ok": True,
+                "version": __version__,
                 "instance": settings.instance_name,
                 "configPath": str(settings.config_path),
                 "workspace": str(config.workspace_path),
@@ -499,6 +524,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         request.session["admin_id"] = admin.id
         gui_logger.info("login_success username=%s", admin.username)
+        _ensure_update_status(settings, config_service, gui_logger, user_present=True)
         if config_service.is_setup_complete():
             return RedirectResponse("/dashboard", status_code=303)
         return RedirectResponse("/setup/provider", status_code=303)
@@ -517,30 +543,76 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         if user is None:
             return RedirectResponse("/login", status_code=303)
 
+        form = await request.form()
+        next_url = str(form.get("next", request.url.path)).strip() or "/status"
+        restart_action = _get_restart_action(settings)
+        if not restart_action["enabled"]:
+            _set_flash(request, restart_action["description"], level="error")
+            return RedirectResponse(next_url, status_code=303)
+
         config_service.set_last_restart_at(_utc_now())
-        gui_logger.warning("instance_restart_requested by=%s", user.username)
-        background_tasks.add_task(_restart_process, gui_logger)
-        return HTMLResponse(
-            """
-            <!DOCTYPE html>
-            <html lang="en">
-              <head>
-                <meta charset="utf-8">
-                <meta http-equiv="refresh" content="5;url=/">
-                <title>Restarting nanobot</title>
-                <style>
-                  body { font-family: Segoe UI, sans-serif; padding: 48px; background: #f4efe6; color: #1d1a17; }
-                  .card { max-width: 560px; margin: 0 auto; padding: 24px; border-radius: 18px; background: #fffdf8; border: 1px solid rgba(57,42,27,0.12); }
-                </style>
-              </head>
-              <body>
-                <div class="card">
-                  <h1>Restart requested</h1>
-                  <p>The nanobot dev instance is restarting now. This page will try to reconnect automatically.</p>
-                </div>
-              </body>
-            </html>
-            """,
+        gui_logger.warning(
+            "instance_restart_requested by=%s mode=%s",
+            user.username,
+            restart_action["mode"],
+        )
+        if restart_action["mode"] == "command":
+            background_tasks.add_task(
+                _run_restart_command,
+                str(restart_action["command"]),
+                gui_logger,
+            )
+            title = "Restart requested"
+            message = "The configured restart action is running now. This page will keep checking for the GUI to come back."
+        else:
+            background_tasks.add_task(_restart_process, gui_logger)
+            title = "Restarting GUI"
+            message = "The nanobot GUI process is restarting now. This page will keep checking for the GUI to come back."
+        return _render_reconnect_page(title=title, message=message, redirect_url="/", status_code=202)
+
+    @app.post("/actions/update", response_class=HTMLResponse)
+    async def update_instance(request: Request, background_tasks: BackgroundTasks):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        update_status = _ensure_update_status(settings, config_service, gui_logger)
+        update_action = _get_update_action(settings, update_status)
+        if not update_action["enabled"]:
+            _set_flash(request, update_action["description"], level="error")
+            return RedirectResponse("/dashboard", status_code=303)
+        if not update_status.get("available"):
+            _set_flash(request, "No newer GUI version is available right now.", level="info")
+            return RedirectResponse("/dashboard", status_code=303)
+
+        requested_at = _utc_now()
+        config_service.set_update_status(
+            {
+                **update_status,
+                "enabled": True,
+                "updating": True,
+                "last_update_request_at": requested_at,
+                "last_update_error": "",
+            }
+        )
+        gui_logger.warning(
+            "instance_update_requested by=%s repo=%s target=%s mode=%s",
+            user.username,
+            update_status.get("repo", ""),
+            update_status.get("tag_name") or update_status.get("latest_version", ""),
+            update_action["mode"],
+        )
+        background_tasks.add_task(
+            _run_update_command,
+            str(update_action["command"]),
+            gui_logger,
+            config_service,
+            str(update_status.get("latest_version", "")),
+        )
+        return _render_reconnect_page(
+            title="Updating GUI",
+            message="The configured update action is running now. This page will keep checking for the GUI to come back.",
+            redirect_url="/",
             status_code=202,
         )
 
@@ -639,8 +711,26 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             )
 
         avatar_path = None
-        if isinstance(avatar_value, UploadFile) and avatar_value.filename:
-            avatar_path = _store_avatar(avatar_value, config_service.avatars_dir)
+        if getattr(avatar_value, "filename", "") and getattr(avatar_value, "file", None):
+            try:
+                avatar_path = _store_avatar(avatar_value, config_service.avatars_dir)
+            except ValueError as exc:
+                return _render(
+                    request,
+                    "profile.html",
+                    {
+                        "title": "Profile",
+                        "nav_active": "profile",
+                        "user": user,
+                        "error": str(exc),
+                        "profile_form": {
+                            "username": username,
+                            "email": email,
+                            "display_name": display_name,
+                        },
+                    },
+                    status_code=400,
+                )
 
         try:
             updated_user = auth_service.update_admin(
@@ -724,6 +814,30 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         if provider_name not in {spec.name for spec in PROVIDERS}:
             _set_flash(request, "Choose a valid provider.", level="error")
             return RedirectResponse("/setup/provider", status_code=303)
+
+        if not model:
+            provider_options = [
+                {"value": spec.name, "label": spec.label, "oauth": spec.is_oauth}
+                for spec in PROVIDERS
+            ]
+            return _render(
+                request,
+                "setup_provider.html",
+                {
+                    "title": "Provider",
+                    "nav_active": "provider",
+                    "user": user,
+                    "provider_options": provider_options,
+                    "selected_provider": provider_name,
+                    "model": model,
+                    "api_key": api_key,
+                    "api_base": api_base,
+                    "extra_headers": extra_headers_raw,
+                    "error": "Model is required.",
+                    "safe_mode": config_service.is_safe_mode(),
+                },
+                status_code=400,
+            )
 
         try:
             extra_headers = _parse_json_object(extra_headers_raw, field_name="Extra headers")
@@ -1053,7 +1167,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "setup_progress": setup_progress,
                 "next_step": next_step,
                 "validation_results": validation_results,
-                "activity_feed": _build_activity_feed(config_service),
+                "activity_feed": _build_activity_feed(config_service, settings),
                 "quick_actions": [
                     {"label": "Open Chat", "href": "/chat"},
                     {"label": "Add MCP", "href": "/mcp"},
@@ -1099,7 +1213,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             )
 
         try:
-            preview = await mcp_service.analyze_repository(query)
+            preview = await mcp_service.analyze_repository(query, allow_ai_fallback=True)
         except ValueError as exc:
             store_error(str(exc), context="mcp")
             return render_mcp_page(
@@ -1150,7 +1264,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             )
 
         try:
-            record = await mcp_service.install_repository(query)
+            record = await mcp_service.install_repository(query, allow_ai_fallback=True)
         except ValueError as exc:
             config = config_service.load()
             store_error(str(exc), context="mcp")
@@ -1186,7 +1300,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         )
         if record["status"] == "active":
             clear_error()
-            _set_flash(request, f"MCP server '{record['server_name']}' installed and active.")
+            _set_flash(
+                request,
+                f"MCP server '{record['server_name']}' installed and verified. Enable it for chat when you are ready.",
+            )
+            return RedirectResponse("/mcp", status_code=303)
         elif record["status"] == "needs_configuration":
             friendly = store_error(record["last_error"], context="mcp", server_name=record["server_name"])
             record["friendly_error"] = friendly
@@ -1196,6 +1314,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 f"MCP server '{record['server_name']}' installed, but it still needs configuration: {record['last_error']}",
                 level="error",
             )
+            return RedirectResponse(f"/mcp/{record['server_name']}", status_code=303)
         else:
             friendly = store_error(record["last_error"], context="mcp", server_name=record["server_name"])
             record["friendly_error"] = friendly
@@ -1205,7 +1324,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 f"MCP server '{record['server_name']}' installed, but the runtime probe failed: {record['last_error']}",
                 level="error",
             )
-        return RedirectResponse("/mcp", status_code=303)
+            return RedirectResponse(f"/mcp/{record['server_name']}", status_code=303)
 
     @app.post("/mcp/add", response_class=HTMLResponse)
     async def mcp_add(request: Request):
@@ -1461,6 +1580,62 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         agent_service.invalidate()
         _set_flash(request, f"MCP server '{server_name}' saved. Run the test before enabling it.")
         return RedirectResponse(f"/mcp/{server_name}", status_code=303)
+
+    @app.post("/mcp/repair/{server_name}")
+    async def mcp_repair(request: Request, server_name: str, background_tasks: BackgroundTasks):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        form = await request.form()
+        next_url = str(form.get("next", f"/mcp/{server_name}")).strip() or f"/mcp/{server_name}"
+        allow_unrestricted = config_service.is_unrestricted_agent_shell_enabled()
+        repair_plan = await mcp_service.build_repair_plan(server_name, allow_unrestricted=allow_unrestricted)
+        repair_action = _get_repair_action(settings, repair_plan)
+        if not repair_plan.get("supported"):
+            _set_flash(request, repair_plan.get("next_step") or "No supported repair recipe is available for this MCP right now.", level="error")
+            return RedirectResponse(next_url, status_code=303)
+        if not repair_action["enabled"]:
+            _set_flash(request, repair_action["description"], level="error")
+            return RedirectResponse(next_url, status_code=303)
+
+        record = config_service.get_mcp_record(server_name)
+        config_service.set_mcp_record(
+            server_name,
+            {
+                **record,
+                "repair_status": "queued",
+                "repair_status_label": "Repair queued",
+                "repair_recipe": repair_plan.get("recommended_recipe", ""),
+                "repair_requested_at": _utc_now(),
+                "repair_available_recipes": repair_plan.get("available_recipes", []),
+                "repair_log_tail": _append_log(
+                    str(record.get("repair_log_tail", "")).strip(),
+                    f"Queued repair recipe: {repair_plan.get('recommended_recipe', '') or 'none'}",
+                ),
+            },
+        )
+        gui_logger.warning(
+            "mcp_repair_requested by=%s server=%s recipe=%s unrestricted=%s",
+            user.username,
+            server_name,
+            repair_plan.get("recommended_recipe", ""),
+            allow_unrestricted,
+        )
+        background_tasks.add_task(
+            _run_mcp_repair_command,
+            str(repair_action["command"]),
+            gui_logger,
+            config_service,
+            mcp_service,
+            server_name,
+            repair_plan,
+        )
+        _set_flash(
+            request,
+            f"Repair worker started for '{server_name}'. Run the MCP test again after it finishes.",
+        )
+        return RedirectResponse(next_url, status_code=303)
 
     @app.post("/mcp/test/{server_name}/chat")
     async def mcp_test_chat_send(request: Request, server_name: str):
@@ -1752,6 +1927,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "send_tool_hints": config.channels.send_tool_hints,
                     "exec_timeout": config.tools.exec.timeout,
                     "path_append": config.tools.exec.path_append,
+                    "dangerous_repair_mode": config_service.is_unrestricted_agent_shell_enabled(),
                 },
                 "settings_meta": {
                     "config_path": str(settings.config_path),
@@ -1759,6 +1935,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "model": config.agents.defaults.model,
                     "installed_mcp_servers": len(config.tools.mcp_servers),
                     "setup_complete": config_service.is_setup_complete(),
+                    "repair_mode": settings.repair_mode,
+                    "repair_command_configured": bool(str(settings.repair_command or "").strip()),
                 },
                 "validation_results": validation,
                 "next_validation_issue": _next_validation_issue(validation),
@@ -1783,6 +1961,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             config.channels.send_tool_hints = bool(form.get("send_tool_hints"))
             config.tools.exec.timeout = _form_int(form.get("exec_timeout"), config.tools.exec.timeout)
             config.tools.exec.path_append = str(form.get("path_append", config.tools.exec.path_append)).strip()
+            dangerous_repair_mode = bool(form.get("dangerous_repair_mode"))
         except ValueError as exc:
             validation = await _validate_setup(
                 config=config,
@@ -1806,6 +1985,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                         "send_tool_hints": bool(form.get("send_tool_hints")),
                         "exec_timeout": str(form.get("exec_timeout", config.tools.exec.timeout)),
                         "path_append": str(form.get("path_append", config.tools.exec.path_append)),
+                        "dangerous_repair_mode": bool(form.get("dangerous_repair_mode")),
                     },
                     "settings_meta": {
                         "config_path": str(settings.config_path),
@@ -1813,6 +1993,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                         "model": config.agents.defaults.model,
                         "installed_mcp_servers": len(config.tools.mcp_servers),
                         "setup_complete": config_service.is_setup_complete(),
+                        "repair_mode": settings.repair_mode,
+                        "repair_command_configured": bool(str(settings.repair_command or "").strip()),
                     },
                     "validation_results": validation,
                     "next_validation_issue": _next_validation_issue(validation),
@@ -1822,6 +2004,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             )
 
         config_service.save(config)
+        config_service.set_unrestricted_agent_shell_enabled(dangerous_repair_mode)
         agent_service.invalidate()
         clear_error()
         _set_flash(request, "Settings saved.")
@@ -1984,8 +2167,11 @@ def _render(
     """Render a Jinja template with the shared shell context."""
     settings: GUISettings = request.app.state.settings
     config_service: GUIConfigService = request.app.state.config_service
+    gui_logger: logging.Logger = request.app.state.gui_logger
+    update_status = _ensure_update_status(settings, config_service, gui_logger, user_present=bool(context.get("user")))
     shell_context = {
         "instance_name": settings.instance_name,
+        "current_version": __version__,
         "gui_host": settings.host,
         "gui_port": settings.port,
         "config_path": str(config_service.config_path),
@@ -1997,6 +2183,9 @@ def _render(
         "project_repo_url": "https://github.com/lucmuss/nanobot-webgui",
         "upstream_repo_url": "https://github.com/HKUDS/nanobot",
         "flash": context.get("flash") or _pop_flash(request),
+        "restart_action": _get_restart_action(settings),
+        "update_status": update_status,
+        "update_action": _get_update_action(settings, update_status),
     }
     return _TEMPLATES.TemplateResponse(
         request=request,
@@ -2122,8 +2311,16 @@ def _pop_flash(request: Request) -> dict[str, str] | None:
 def _store_avatar(upload: UploadFile, avatars_dir: Path) -> str:
     """Store an uploaded avatar and return the relative media path."""
     suffix = Path(upload.filename or "").suffix.lower()
+    content_type = (upload.content_type or "").strip().lower()
+    allowed_suffixes = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+    if suffix not in allowed_suffixes and content_type not in {
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+    }:
+        raise ValueError("Avatar must be a PNG, JPEG, WEBP, or GIF image.")
     if suffix not in {".png", ".jpg", ".jpeg", ".webp", ".gif"}:
-        content_type = upload.content_type or ""
         suffix = {
             "image/png": ".png",
             "image/jpeg": ".jpg",
@@ -2155,7 +2352,7 @@ def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_ser
 
     return {
         "name": server_name,
-        "summary": str(record.get("summary", "")).strip(),
+        "summary": _display_summary_text(record.get("summary", "")),
         "repo_url": str(record.get("repo_url", "")).strip(),
         "transport": str(record.get("transport", "")).strip() or server.type or "auto",
         "status": test_status,
@@ -2175,6 +2372,22 @@ def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_ser
         "install_steps": [str(item) for item in record.get("install_steps", [])],
         "install_dir": str(record.get("install_dir", "")).strip(),
         "log_tail": str(record.get("log_tail", "")).strip(),
+        "repo_type": str(record.get("repo_type", "")).strip(),
+        "analysis_mode": str(record.get("analysis_mode", "deterministic")).strip() or "deterministic",
+        "analysis_confidence": float(record.get("analysis_confidence", 0.0) or 0.0),
+        "required_runtimes": [str(item) for item in record.get("required_runtimes", [])],
+        "runtime_status": list(record.get("runtime_status", [])) if isinstance(record.get("runtime_status"), list) else [],
+        "missing_runtimes": [str(item) for item in record.get("missing_runtimes", [])],
+        "next_action": str(record.get("next_action", "")).strip(),
+        "repair_status": str(record.get("repair_status", "")).strip(),
+        "repair_status_label": str(record.get("repair_status_label", "")).strip(),
+        "repair_recipe": str(record.get("repair_recipe", "")).strip(),
+        "repair_requested_at": str(record.get("repair_requested_at", "")).strip(),
+        "repair_finished_at": str(record.get("repair_finished_at", "")).strip(),
+        "repair_log_tail": str(record.get("repair_log_tail", "")).strip(),
+        "repair_available_recipes": [str(item) for item in record.get("repair_available_recipes", [])]
+        or supported_repair_recipes([str(item) for item in record.get("missing_runtimes", [])]),
+        "dangerous_repair_enabled": config_service.is_unrestricted_agent_shell_enabled(),
         "start_command": _join_command(server.command, list(server.args)),
         "type": server.type or "auto",
         "command": server.command,
@@ -2190,6 +2403,18 @@ def _build_mcp_server_cards(config, config_service: GUIConfigService) -> list[di
         cards.append(_build_mcp_server_card(name, server, config_service))
     cards.sort(key=lambda item: item["name"])
     return cards
+
+
+def _display_summary_text(value: Any) -> str:
+    """Strip raw HTML and markdown image syntax from stored MCP summaries."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"!\[[^\]]*]\([^)]*\)", " ", text)
+    text = re.sub(r"<img\b[^>]*>", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"</?[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
 
 
 def _provider_has_credentials(config, provider_name: str | None) -> bool:
@@ -2530,7 +2755,7 @@ def _determine_next_step(progress: list[dict[str, Any]]) -> dict[str, str]:
     }
 
 
-def _build_activity_feed(config_service: GUIConfigService) -> list[dict[str, str]]:
+def _build_activity_feed(config_service: GUIConfigService, settings: GUISettings) -> list[dict[str, str]]:
     """Build a small dashboard activity feed from stored GUI state."""
     items: list[dict[str, str]] = []
 
@@ -2556,11 +2781,18 @@ def _build_activity_feed(config_service: GUIConfigService) -> list[dict[str, str
 
     last_restart_at = config_service.get_last_restart_at()
     if last_restart_at:
+        restart_action = _get_restart_action(settings)
+        title = "Runtime restart requested" if restart_action["mode"] == "command" else "GUI restart requested"
+        detail = (
+            "The GUI ran the configured restart action for this deployment."
+            if restart_action["mode"] == "command"
+            else "The GUI process was asked to restart through its supervisor policy."
+        )
         items.append(
             {
-                "title": "Runtime restart requested",
+                "title": title,
                 "at": last_restart_at,
-                "detail": "The GUI asked Docker to restart the runtime container.",
+                "detail": detail,
             }
         )
 
@@ -2705,11 +2937,524 @@ async def _probe_gateway(health_url: str | None) -> dict[str, str]:
         return {"label": "Offline", "tone": "bad"}
 
 
+def _normalize_update_repo(repo: str | None) -> str:
+    """Normalize a GitHub repo slug or URL down to owner/repo."""
+    value = str(repo or "").strip()
+    if not value:
+        return ""
+    value = re.sub(r"^https?://github\.com/", "", value, flags=re.IGNORECASE).strip("/")
+    if value.endswith(".git"):
+        value = value[:-4]
+    parts = [part for part in value.split("/") if part]
+    if len(parts) >= 2:
+        return "/".join(parts[:2])
+    return value
+
+
+def _version_sort_key(value: str) -> tuple[Any, ...]:
+    """Return a comparable sort key for common Nanobot version tags."""
+    normalized = str(value or "").strip().lower().lstrip("v")
+    if not normalized:
+        return (0,)
+    try:
+        from packaging.version import Version
+
+        return (1, Version(normalized))
+    except Exception:
+        pass
+
+    base, _, suffix = normalized.partition(".post")
+    numbers = tuple(int(piece) for piece in re.findall(r"\d+", base))
+    suffix_numbers = re.findall(r"\d+", suffix)
+    post = int(suffix_numbers[0]) if suffix_numbers else -1
+    return (0, numbers, post, normalized)
+
+
+def _is_newer_version(candidate: str, current: str) -> bool:
+    """Return True when the fetched version is newer than the running GUI version."""
+    return _version_sort_key(candidate) > _version_sort_key(current)
+
+
+def _parse_iso_timestamp(value: str | None) -> datetime | None:
+    """Parse one persisted ISO timestamp safely."""
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _is_update_check_stale(update_status: dict[str, Any], *, hours: int) -> bool:
+    """Return True when the cached update metadata should be refreshed."""
+    checked_at = _parse_iso_timestamp(str(update_status.get("checked_at", "")))
+    if checked_at is None:
+        return True
+    return datetime.now(timezone.utc) - checked_at >= timedelta(hours=max(hours, 1))
+
+
+def _fetch_latest_release_info(repo: str) -> dict[str, str]:
+    """Fetch the latest GitHub release, falling back to the newest tag when needed."""
+    normalized_repo = _normalize_update_repo(repo)
+    if not normalized_repo or "/" not in normalized_repo:
+        raise ValueError("A valid GitHub owner/repo is required for update checks.")
+
+    token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN") or ""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "nanobot-webgui-update-check",
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    base_url = f"https://api.github.com/repos/{normalized_repo}"
+    with httpx.Client(timeout=4.5, headers=headers, follow_redirects=True) as client:
+        release_response = client.get(f"{base_url}/releases/latest")
+        if release_response.status_code == 404:
+            tags_response = client.get(f"{base_url}/tags", params={"per_page": 1})
+            tags_response.raise_for_status()
+            tags = tags_response.json()
+            if not isinstance(tags, list) or not tags:
+                raise ValueError("No GitHub releases or tags were found for this repository.")
+            tag_name = str(tags[0].get("name", "")).strip()
+            if not tag_name:
+                raise ValueError("The newest GitHub tag is missing a name.")
+            return {
+                "tag_name": tag_name,
+                "latest_version": tag_name.lstrip("v"),
+                "release_url": f"https://github.com/{normalized_repo}/releases/tag/{tag_name}",
+                "release_notes_url": f"https://github.com/{normalized_repo}/releases/tag/{tag_name}",
+                "release_name": tag_name,
+                "published_at": "",
+                "source": "github_tag",
+            }
+
+        release_response.raise_for_status()
+        payload = release_response.json()
+        tag_name = str(payload.get("tag_name", "")).strip()
+        if not tag_name:
+            raise ValueError("The latest GitHub release is missing a tag name.")
+        release_url = str(payload.get("html_url", "")).strip()
+        return {
+            "tag_name": tag_name,
+            "latest_version": tag_name.lstrip("v"),
+            "release_url": release_url,
+            "release_notes_url": release_url,
+            "release_name": str(payload.get("name", "")).strip() or tag_name,
+            "published_at": str(payload.get("published_at", "")).strip(),
+            "source": "github_release",
+        }
+
+
+def _ensure_update_status(
+    settings: GUISettings,
+    config_service: GUIConfigService,
+    logger: logging.Logger,
+    *,
+    force: bool = False,
+    user_present: bool = False,
+) -> dict[str, Any]:
+    """Return cached update metadata and refresh it at most once per configured interval."""
+    repo = _normalize_update_repo(settings.update_repo)
+    cached = config_service.get_update_status()
+    base_status = {
+        "enabled": bool(settings.update_check_enabled and repo),
+        "current_version": __version__,
+        "latest_version": str(cached.get("latest_version", "")),
+        "tag_name": str(cached.get("tag_name", "")),
+        "available": bool(cached.get("available", False)),
+        "checked_at": str(cached.get("checked_at", "")),
+        "release_url": str(cached.get("release_url", "")),
+        "release_notes_url": str(cached.get("release_notes_url", "")),
+        "release_name": str(cached.get("release_name", "")),
+        "published_at": str(cached.get("published_at", "")),
+        "source": str(cached.get("source", "")),
+        "repo": repo,
+        "error": str(cached.get("error", "")),
+        "updating": bool(cached.get("updating", False)),
+        "last_update_request_at": str(cached.get("last_update_request_at", "")),
+        "last_update_error": str(cached.get("last_update_error", "")),
+    }
+
+    if not base_status["enabled"]:
+        if cached != base_status:
+            return config_service.set_update_status(base_status)
+        return base_status
+
+    if base_status["latest_version"]:
+        base_status["available"] = _is_newer_version(base_status["latest_version"], __version__)
+        if not base_status["available"]:
+            base_status["updating"] = False
+
+    should_refresh = force or base_status["repo"] != str(cached.get("repo", ""))
+    should_refresh = should_refresh or base_status["current_version"] != str(cached.get("current_version", ""))
+    should_refresh = should_refresh or _is_update_check_stale(base_status, hours=settings.update_check_interval_hours)
+
+    if not user_present and not force and not should_refresh:
+        if cached != base_status:
+            return config_service.set_update_status(base_status)
+        return base_status
+
+    if not should_refresh:
+        if cached != base_status:
+            return config_service.set_update_status(base_status)
+        return base_status
+
+    try:
+        fetched = _fetch_latest_release_info(repo)
+        refreshed = {
+            **base_status,
+            **fetched,
+            "enabled": True,
+            "available": _is_newer_version(str(fetched.get("latest_version", "")), __version__),
+            "checked_at": _utc_now(),
+            "repo": repo,
+            "error": "",
+            "updating": bool(base_status["updating"])
+            and _is_newer_version(str(fetched.get("latest_version", "")), __version__),
+            "last_update_error": str(base_status.get("last_update_error", "")),
+        }
+        return config_service.set_update_status(refreshed)
+    except Exception as exc:
+        logger.warning("update_check_failed repo=%s error=%s", repo, exc)
+        return config_service.set_update_status(
+            {
+                **base_status,
+                "checked_at": _utc_now(),
+                "error": str(exc),
+            }
+        )
+
+
+def _get_update_action(settings: GUISettings, update_status: dict[str, Any]) -> dict[str, Any]:
+    """Describe the update action supported by this deployment."""
+    mode = str(settings.update_mode or "").strip().lower()
+    command = str(settings.update_command or "").strip()
+
+    if not mode:
+        mode = "command" if command else "disabled"
+
+    if not update_status.get("enabled"):
+        return {
+            "enabled": False,
+            "mode": "disabled",
+            "label": "Updates disabled",
+            "description": "GitHub update checks are disabled for this deployment.",
+            "command": "",
+        }
+    if not update_status.get("available"):
+        return {
+            "enabled": False,
+            "mode": "disabled",
+            "label": "Up to date",
+            "description": "No newer GUI version is available right now.",
+            "command": "",
+        }
+    if mode == "command" and command:
+        return {
+            "enabled": True,
+            "mode": "command",
+            "label": "Update now",
+            "description": "Run the configured deployment update command now.",
+            "command": command,
+        }
+    return {
+        "enabled": False,
+        "mode": "disabled",
+        "label": "Update unavailable",
+        "description": "A new version is available, but no update command is configured for this deployment.",
+        "command": "",
+    }
+
+
+def _get_repair_action(settings: GUISettings, repair_plan: dict[str, Any]) -> dict[str, Any]:
+    """Describe the MCP repair action supported by this deployment."""
+    mode = str(settings.repair_mode or "").strip().lower()
+    command = str(settings.repair_command or "").strip()
+    recipe = str(repair_plan.get("recommended_recipe", "")).strip()
+
+    if not mode:
+        mode = "command" if command else "disabled"
+
+    if not repair_plan.get("supported"):
+        return {
+            "enabled": False,
+            "mode": "disabled",
+            "label": "Repair unavailable",
+            "description": "No supported repair recipe is available for this MCP right now.",
+            "command": "",
+        }
+    if mode == "command" and command:
+        return {
+            "enabled": True,
+            "mode": "command",
+            "label": "Apply unrestricted repair" if recipe == "unrestricted_agent_shell" else "Apply supported repair",
+            "description": "Run the configured MCP repair worker for this deployment.",
+            "command": command,
+        }
+    return {
+        "enabled": False,
+        "mode": "disabled",
+        "label": "Repair unavailable",
+        "description": "Repair worker command is not configured for this deployment.",
+        "command": "",
+    }
+
+
+def _get_restart_action(settings: GUISettings) -> dict[str, Any]:
+    """Describe the restart action supported by this deployment."""
+    mode = str(settings.restart_mode or "").strip().lower()
+    command = str(settings.restart_command or "").strip()
+
+    if not mode:
+        mode = "command" if command else "disabled"
+
+    if mode == "command" and command:
+        return {
+            "enabled": True,
+            "mode": "command",
+            "label": "Restart Runtime",
+            "description": "Run the configured restart action for this deployment.",
+            "command": command,
+        }
+    if mode == "self":
+        return {
+            "enabled": True,
+            "mode": "self",
+            "label": "Restart GUI",
+            "description": "Restart this GUI process. Requires Docker restart policy or another supervisor.",
+            "command": "",
+        }
+    return {
+        "enabled": False,
+        "mode": "disabled",
+        "label": "Restart unavailable",
+        "description": "Restart is not configured for this deployment.",
+        "command": "",
+    }
+
+
 def _restart_process(logger: logging.Logger) -> None:
     """Restart the GUI process by exiting and relying on Docker restart policy."""
     time.sleep(0.8)
     logger.warning("instance_restart_executing")
     os._exit(0)
+
+
+def _run_restart_command(command: str, logger: logging.Logger) -> None:
+    """Run the configured external restart command."""
+    time.sleep(0.8)
+    logger.warning("instance_restart_command_executing command=%s", command)
+    try:
+        result = subprocess.run(
+            shlex.split(command),
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except Exception:
+        logger.exception("instance_restart_command_failed command=%s", command)
+        return
+
+    if result.stdout.strip():
+        logger.info("instance_restart_command_stdout %s", result.stdout.strip())
+    if result.stderr.strip():
+        logger.warning("instance_restart_command_stderr %s", result.stderr.strip())
+    if result.returncode != 0:
+        logger.error("instance_restart_command_exit code=%s command=%s", result.returncode, command)
+
+
+def _run_update_command(
+    command: str,
+    logger: logging.Logger,
+    config_service: GUIConfigService,
+    target_version: str,
+) -> None:
+    """Run the configured external update command."""
+    time.sleep(0.8)
+    logger.warning("instance_update_command_executing command=%s target=%s", command, target_version)
+    try:
+        result = subprocess.run(
+            shlex.split(command),
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+    except Exception:
+        logger.exception("instance_update_command_failed command=%s", command)
+        current = config_service.get_update_status()
+        config_service.set_update_status(
+            {
+                **current,
+                "updating": False,
+                "last_update_error": "Failed to execute the configured update command.",
+            }
+        )
+        return
+
+    if result.stdout.strip():
+        logger.info("instance_update_command_stdout %s", result.stdout.strip())
+    if result.stderr.strip():
+        logger.warning("instance_update_command_stderr %s", result.stderr.strip())
+
+    current = config_service.get_update_status()
+    if result.returncode != 0:
+        logger.error("instance_update_command_exit code=%s command=%s", result.returncode, command)
+        error_hint = result.stderr.strip() or result.stdout.strip() or f"Update command exited with {result.returncode}."
+        config_service.set_update_status(
+            {
+                **current,
+                "updating": False,
+                "last_update_error": error_hint[:500],
+            }
+        )
+        return
+
+    config_service.set_update_status(
+        {
+            **current,
+            "updating": False,
+            "last_update_error": "",
+        }
+    )
+
+
+def _run_mcp_repair_command(
+    command: str,
+    logger: logging.Logger,
+    config_service: GUIConfigService,
+    mcp_service: GUIMCPService,
+    server_name: str,
+    repair_plan: dict[str, Any],
+) -> None:
+    """Run the configured external MCP repair command and persist the result."""
+    recipe = str(repair_plan.get("recommended_recipe", "")).strip()
+    time.sleep(0.4)
+    logger.warning("mcp_repair_command_executing server=%s recipe=%s command=%s", server_name, recipe, command)
+
+    record = config_service.get_mcp_record(server_name)
+    config_service.set_mcp_record(
+        server_name,
+        {
+            **record,
+            "repair_status": "running",
+            "repair_status_label": "Repair running",
+        },
+    )
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "NANOBOT_REPAIR_PLAN_JSON": json.dumps(repair_plan),
+            "NANOBOT_REPAIR_RECIPE": recipe,
+            "NANOBOT_REPAIR_ALLOW_UNRESTRICTED": "1"
+            if recipe == "unrestricted_agent_shell"
+            else "0",
+            "NANOBOT_REPAIR_SHELL_COMMAND": str(repair_plan.get("shell_command", "")),
+            "NANOBOT_REPAIR_SERVER": server_name,
+            "NANOBOT_CONFIG_PATH": str(config_service.config_path),
+            "NANOBOT_WORKSPACE": str(config_service.default_workspace),
+        }
+    )
+
+    try:
+        result = subprocess.run(
+            shlex.split(command),
+            capture_output=True,
+            text=True,
+            timeout=1800,
+            check=False,
+            env=env,
+        )
+    except Exception:
+        logger.exception("mcp_repair_command_failed server=%s recipe=%s", server_name, recipe)
+        current = config_service.get_mcp_record(server_name)
+        config_service.set_mcp_record(
+            server_name,
+            {
+                **current,
+                "repair_status": "error",
+                "repair_status_label": "Repair failed",
+                "repair_finished_at": _utc_now(),
+                "repair_recipe": recipe,
+                "repair_log_tail": _append_log(
+                    str(current.get("repair_log_tail", "")).strip(),
+                    "Repair worker failed to execute.",
+                ),
+            },
+        )
+        return
+
+    combined_log = "\n\n".join(
+        chunk for chunk in [result.stdout.strip(), result.stderr.strip()] if chunk
+    ) or "(no repair worker output)"
+    refreshed = mcp_service.refresh_runtime_requirements(server_name) if result.returncode == 0 else config_service.get_mcp_record(server_name)
+    config_service.set_mcp_record(
+        server_name,
+        {
+            **refreshed,
+            "repair_status": "ok" if result.returncode == 0 else "error",
+            "repair_status_label": "Repair applied" if result.returncode == 0 else "Repair failed",
+            "repair_finished_at": _utc_now(),
+            "repair_recipe": recipe,
+            "repair_available_recipes": repair_plan.get("available_recipes", []),
+            "repair_log_tail": _append_log(
+                str(refreshed.get("repair_log_tail", "")).strip(),
+                combined_log[:5000],
+            ),
+        },
+    )
+    if result.returncode != 0:
+        logger.error("mcp_repair_command_exit code=%s server=%s recipe=%s", result.returncode, server_name, recipe)
+
+
+def _render_reconnect_page(*, title: str, message: str, redirect_url: str, status_code: int = 202) -> HTMLResponse:
+    """Render a small reconnect page for restart and update flows."""
+    safe_title = html.escape(title)
+    safe_message = html.escape(message)
+    safe_redirect = json.dumps(str(redirect_url or "/"))
+    return HTMLResponse(
+        f"""
+        <!DOCTYPE html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>{safe_title}</title>
+            <style>
+              body {{ font-family: Segoe UI, sans-serif; padding: 48px; background: #f4efe6; color: #1d1a17; }}
+              .card {{ max-width: 560px; margin: 0 auto; padding: 24px; border-radius: 18px; background: #fffdf8; border: 1px solid rgba(57,42,27,0.12); }}
+              .muted {{ color: #6f675f; }}
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h1>{safe_title}</h1>
+              <p>{safe_message}</p>
+              <p class="muted" id="reconnect-status">Waiting for the GUI to respond again...</p>
+            </div>
+            <script>
+              const redirectUrl = {safe_redirect};
+              async function reconnectWhenReady() {{
+                try {{
+                  const response = await fetch('/health', {{ cache: 'no-store' }});
+                  if (response.ok) {{
+                    window.location.href = redirectUrl;
+                    return;
+                  }}
+                }} catch (_error) {{}}
+                window.setTimeout(reconnectWhenReady, 3000);
+              }}
+              window.setTimeout(reconnectWhenReady, 1500);
+            </script>
+          </body>
+        </html>
+        """,
+        status_code=status_code,
+    )
 
 
 def _setup_logger(log_file: Path) -> logging.Logger:

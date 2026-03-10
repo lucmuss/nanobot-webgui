@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block body %}
-  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+{% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
 
   <div class="panel-grid two">
     <section class="panel">
@@ -18,7 +18,7 @@
         <p class="muted">{{ server.summary }}</p>
       {% endif %}
 
-      <div class="details-grid">
+      <div class="details-grid" data-testid="mcp-detail-cards">
         <article class="card">
           <header><strong>Source</strong></header>
           <div class="mono">{{ server.repo_url or "Not recorded" }}</div>
@@ -26,6 +26,15 @@
         <article class="card">
           <header><strong>Transport</strong></header>
           <div>{{ server.transport }}</div>
+        </article>
+        <article class="card">
+          <header><strong>Install pipeline</strong></header>
+          <div>{{ "AI fallback plan" if server.analysis_mode == "ai_fallback" else "Deterministic install pipeline" }}</div>
+          <p class="muted">{{ "%.0f"|format((server.analysis_confidence or 0) * 100) }}% confidence</p>
+        </article>
+        <article class="card">
+          <header><strong>Repo type</strong></header>
+          <div>{{ server.repo_type or "unknown" }}</div>
         </article>
         <article class="card">
           <header><strong>Start command</strong></header>
@@ -56,24 +65,55 @@
           <header><strong>Missing env variables</strong></header>
           <div>{{ server.missing_env|join(", ") if server.missing_env else "None" }}</div>
         </article>
+        <article class="card">
+          <header><strong>Required runtimes</strong></header>
+          {% if server.required_runtimes %}
+            <div class="badge-row">
+              {% for runtime in server.required_runtimes %}
+                {% set runtime_check = (server.runtime_status | selectattr("name", "equalto", runtime) | list | first) %}
+                <span class="pill {% if runtime_check and runtime_check.available %}good{% else %}bad{% endif %}">
+                  {{ runtime }}{% if runtime_check and not runtime_check.available %} missing{% endif %}
+                </span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div>None</div>
+          {% endif %}
+        </article>
+        <article class="card">
+          <header><strong>Next step</strong></header>
+          <div class="muted">{{ server.next_action or "Run the MCP test and enable it for chat only after it passes." }}</div>
+        </article>
       </div>
 
       <div class="actions" style="margin-top: 16px;">
-        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}">
+        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}" data-testid="mcp-detail-test-form">
           <input type="hidden" name="next" value="/mcp/{{ server.name }}">
-          <button class="secondary" type="submit">Run MCP Test</button>
+          <button class="secondary" type="submit" data-testid="mcp-detail-test">Run MCP Test</button>
         </form>
-        <form class="inline-form" method="post" action="/mcp/toggle/{{ server.name }}">
+        <form class="inline-form" method="post" action="/mcp/repair/{{ server.name }}" data-testid="mcp-detail-repair-form">
           <input type="hidden" name="next" value="/mcp/{{ server.name }}">
-          <button class="secondary" type="submit">{{ "Disable for Chat" if server.enabled else "Enable for Chat" }}</button>
+          <button
+            class="secondary"
+            type="submit"
+            data-testid="mcp-detail-repair"
+            title="{{ repair_action.description }}"
+            {% if not repair_action.enabled %}disabled aria-disabled="true"{% endif %}
+          >
+            {{ repair_action.label }}
+          </button>
         </form>
-        <form class="inline-form" method="post" action="/mcp/remove/{{ server.name }}">
-          <button class="bad" type="submit">Remove</button>
+        <form class="inline-form" method="post" action="/mcp/toggle/{{ server.name }}" data-testid="mcp-detail-toggle-form">
+          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+          <button class="secondary" type="submit" data-testid="mcp-detail-toggle">{{ "Disable for Chat" if server.enabled else "Enable for Chat" }}</button>
+        </form>
+        <form class="inline-form" method="post" action="/mcp/remove/{{ server.name }}" data-testid="mcp-detail-remove-form">
+          <button class="bad" type="submit" data-testid="mcp-detail-remove">Remove</button>
         </form>
       </div>
 
       {% if mcp_last_error %}
-        <div class="error-card" style="margin-top: 18px;">
+        <div class="error-card" style="margin-top: 18px;" data-testid="mcp-error-card">
           <strong>{{ mcp_last_error.title }}</strong>
           <div class="mono" style="margin-top: 10px;">{{ mcp_last_error.raw }}</div>
           <p class="muted">{{ mcp_last_error.explanation }}</p>
@@ -81,11 +121,38 @@
           <a class="button secondary" href="{{ mcp_last_error.action_url }}">{{ mcp_last_error.action_label }}</a>
         </div>
       {% endif %}
+
+      <div class="card" style="margin-top: 18px;" data-testid="mcp-repair-card">
+        <header><strong>Repair</strong></header>
+        {% if server.missing_runtimes %}
+          <p class="muted">Missing runtime: {{ server.missing_runtimes|join(", ") }}</p>
+          {% if server.repair_available_recipes %}
+            <div class="badge-row">
+              {% for recipe in server.repair_available_recipes %}
+                <span class="pill {% if recipe == 'unrestricted_agent_shell' %}bad{% else %}muted{% endif %}">
+                  {{ repair_recipe_details.get(recipe, {}).get("label", recipe) }}
+                </span>
+              {% endfor %}
+            </div>
+          {% endif %}
+          <p class="muted" style="margin-top: 10px;">{{ server.next_action }}</p>
+        {% elif server.dangerous_repair_enabled and server.last_error %}
+          <p class="muted">Dangerous repair fallback can ask the agent for an unrestricted shell repair plan based on the current MCP error.</p>
+        {% else %}
+          <p class="muted">No runtime repair is currently suggested for this MCP.</p>
+        {% endif %}
+        {% if server.dangerous_repair_enabled %}
+          <p class="muted" style="margin-top: 10px; color: var(--bad);">Unrestricted Agent + Shell is enabled for MCP repair fallback.</p>
+        {% endif %}
+        {% if server.repair_status_label %}
+          <p class="muted" style="margin-top: 10px;">Last repair status: {{ server.repair_status_label }}{% if server.repair_requested_at %} at {{ server.repair_requested_at }}{% endif %}</p>
+        {% endif %}
+      </div>
     </section>
 
     <section class="panel">
       <h3>Edit MCP Settings</h3>
-      <form method="post" action="/mcp/{{ server.name }}">
+      <form method="post" action="/mcp/{{ server.name }}" data-testid="mcp-detail-form">
         {% if env_fields %}
           <div class="hero-callout">
             <strong>Fix Configuration</strong>
@@ -95,7 +162,7 @@
             {% for field in env_fields %}
               <label>
                 {{ field.name }}{% if field.required %} (required){% endif %}
-                <input type="password" name="env__{{ field.name }}" value="{{ field.value }}">
+                <input type="password" name="env__{{ field.name }}" value="{{ field.value }}" data-testid="mcp-env-{{ field.name }}">
               </label>
             {% endfor %}
           </div>
@@ -103,7 +170,7 @@
 
         <label>
           Transport
-          <select name="transport">
+          <select name="transport" data-testid="mcp-detail-transport">
             <option value="" {% if not server_form.transport %}selected{% endif %}>auto</option>
             <option value="stdio" {% if server_form.transport == 'stdio' %}selected{% endif %}>stdio</option>
             <option value="sse" {% if server_form.transport == 'sse' %}selected{% endif %}>sse</option>
@@ -112,35 +179,35 @@
         </label>
         <label>
           Command
-          <input type="text" name="command" value="{{ server_form.command }}">
+          <input type="text" name="command" value="{{ server_form.command }}" data-testid="mcp-detail-command">
         </label>
         <label>
           Args (comma-separated)
-          <input type="text" name="args" value="{{ server_form.args }}">
+          <input type="text" name="args" value="{{ server_form.args }}" data-testid="mcp-detail-args">
         </label>
         <label>
           URL
-          <input type="text" name="url" value="{{ server_form.url }}">
+          <input type="text" name="url" value="{{ server_form.url }}" data-testid="mcp-detail-url">
         </label>
         <label>
           Env JSON
-          <textarea class="mono" name="env_json">{{ server_form.env_json }}</textarea>
+          <textarea class="mono" name="env_json" data-testid="mcp-detail-env-json">{{ server_form.env_json }}</textarea>
         </label>
-        <details {% if not safe_mode %}open{% endif %}>
+        <details {% if not safe_mode %}open{% endif %} data-testid="mcp-detail-advanced">
           <summary>Advanced MCP settings</summary>
           <div class="form-columns" style="margin-top: 14px;">
             <label>
               Headers JSON
-              <textarea class="mono" name="headers_json">{{ server_form.headers_json }}</textarea>
+              <textarea class="mono" name="headers_json" data-testid="mcp-detail-headers-json">{{ server_form.headers_json }}</textarea>
             </label>
             <label>
               Tool Timeout
-              <input type="number" name="tool_timeout" min="1" value="{{ server_form.tool_timeout }}">
+              <input type="number" name="tool_timeout" min="1" value="{{ server_form.tool_timeout }}" data-testid="mcp-detail-tool-timeout">
             </label>
           </div>
         </details>
         <div class="actions">
-          <button type="submit">Save MCP Settings</button>
+          <button type="submit" data-testid="mcp-detail-save">Save MCP Settings</button>
         </div>
       </form>
     </section>
@@ -153,12 +220,12 @@
           <h3 style="margin: 0;">MCP Test Chat</h3>
           <p class="muted">Practical validation with only this MCP loaded into the runtime.</p>
         </div>
-        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}/clear">
-          <button class="secondary" type="submit">Clear Test Chat</button>
+        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}/clear" data-testid="mcp-test-chat-clear-form">
+          <button class="secondary" type="submit" data-testid="mcp-test-chat-clear">Clear Test Chat</button>
         </form>
       </div>
 
-      <div class="chat-stack">
+      <div class="chat-stack" data-testid="mcp-test-chat-history">
         {% for message in mcp_test_history %}
           <article class="chat-message {{ message.role }}">
             <div class="chat-meta">
@@ -177,13 +244,13 @@
         {% endfor %}
       </div>
 
-      <form method="post" action="/mcp/test/{{ server.name }}/chat">
+      <form method="post" action="/mcp/test/{{ server.name }}/chat" data-testid="mcp-test-chat-form">
         <label>
           Test prompt
-          <textarea name="message" placeholder="Ask Nanobot to use this MCP server and describe the result."></textarea>
+          <textarea name="message" placeholder="Ask Nanobot to use this MCP server and describe the result." data-testid="mcp-test-chat-message"></textarea>
         </label>
         <div class="actions">
-          <button type="submit">Send Test Prompt</button>
+          <button type="submit" data-testid="mcp-test-chat-send">Send Test Prompt</button>
         </div>
       </form>
     </section>
@@ -197,6 +264,10 @@
       <div class="card" style="margin-top: 14px;">
         <header><strong>Recent MCP log output</strong></header>
         <div class="mono">{{ server.log_tail or "No MCP-specific logs have been recorded yet." }}</div>
+      </div>
+      <div class="card" style="margin-top: 14px;">
+        <header><strong>Recent repair output</strong></header>
+        <div class="mono">{{ server.repair_log_tail or "No repair worker output has been recorded yet." }}</div>
       </div>
     </section>
   </div>

@@ -3,7 +3,7 @@
   <div class="panel-grid two">
     <section class="panel">
       <p class="muted">Step 2 of 3. Pick the primary channel you want to enable first.</p>
-      <form method="post" action="/setup/channel">
+      <form method="post" action="/setup/channel" data-testid="channel-form">
         <label>
           Channel
           <select
@@ -11,6 +11,7 @@
             hx-get="/partials/channel-fields"
             hx-target="#channel-fields"
             hx-trigger="change"
+            data-testid="channel-select"
           >
             {% for key, definition in channel_definitions.items() %}
               <option value="{{ key }}" {% if key == selected_channel %}selected{% endif %}>{{ definition.label }}</option>
@@ -19,22 +20,22 @@
         </label>
 
         <label class="checkbox">
-          <input type="checkbox" name="send_progress" {% if send_progress %}checked{% endif %}>
+          <input type="checkbox" name="send_progress" {% if send_progress %}checked{% endif %} data-testid="channel-send-progress">
           <span>Stream progress to the channel</span>
         </label>
 
         <label class="checkbox">
-          <input type="checkbox" name="send_tool_hints" {% if send_tool_hints %}checked{% endif %}>
+          <input type="checkbox" name="send_tool_hints" {% if send_tool_hints %}checked{% endif %} data-testid="channel-send-tool-hints">
           <span>Stream tool hints to the channel</span>
         </label>
 
-        <div id="channel-fields">
+        <div id="channel-fields" data-testid="channel-fields">
           {% include "partials/channel_fields.html" %}
         </div>
 
         <div class="actions">
-          <button class="secondary" type="submit" name="action" value="save">Save</button>
-          <button type="submit" name="action" value="next">Continue to Agent</button>
+          <button class="secondary" type="submit" name="action" value="save" data-testid="channel-save">Save</button>
+          <button type="submit" name="action" value="next" data-testid="channel-continue">Continue to Agent</button>
         </div>
       </form>
     </section>

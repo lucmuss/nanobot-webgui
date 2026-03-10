@@ -1,0 +1,23 @@
+{
+  "server_name": "echo",
+  "summary": "Fixture MCP for install, enable, and chat visibility tests.",
+  "install_mode": "fixture",
+  "transport": "stdio",
+  "run_command": "fixture-echo-mcp",
+  "run_args": [
+    "serve"
+  ],
+  "install_steps": [
+    "Register fixture echo MCP"
+  ],
+  "required_env": [],
+  "optional_env": [],
+  "tool_names": [
+    "echo_message",
+    "list_items"
+  ],
+  "healthcheck": "Fixture echo MCP handshake",
+  "evidence": [
+    "fixture:echo-mcp"
+  ]
+}

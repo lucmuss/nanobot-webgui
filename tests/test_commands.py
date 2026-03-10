@@ -183,6 +183,14 @@ def test_gui_help_shows_web_options():
     assert "--config" in result.stdout
     assert "--secure-cookies" in result.stdout
     assert "--gateway-health-url" in result.stdout
+    assert "--restart-mode" in result.stdout
+    assert "--restart-command" in result.stdout
+    assert "--update-check" in result.stdout
+    assert "--update-repo" in result.stdout
+    assert "--update-mode" in result.stdout
+    assert "--update-command" in result.stdout
+    assert "--repair-mode" in result.stdout
+    assert "--repair-command" in result.stdout
 
 
 def test_gui_starts_uvicorn_with_expected_settings(monkeypatch, tmp_path: Path):
@@ -219,6 +227,20 @@ def test_gui_starts_uvicorn_with_expected_settings(monkeypatch, tmp_path: Path):
             "release-gui",
             "--gateway-health-url",
             "http://127.0.0.1:9999/health",
+            "--restart-mode",
+            "command",
+            "--restart-command",
+            "docker restart nanobot-gateway",
+            "--update-repo",
+            "lucmuss/nanobot-webgui",
+            "--update-mode",
+            "command",
+            "--update-command",
+            "/usr/local/bin/nanobot-webgui-update.sh",
+            "--repair-mode",
+            "command",
+            "--repair-command",
+            "docker compose run --rm nanobot-repair-worker nanobot repair-worker",
             "--secure-cookies",
         ],
     )
@@ -232,9 +254,47 @@ def test_gui_starts_uvicorn_with_expected_settings(monkeypatch, tmp_path: Path):
     assert settings.instance_name == "release-gui"
     assert settings.gateway_health_url == "http://127.0.0.1:9999/health"
     assert settings.https_only_cookies is True
+    assert settings.restart_mode == "command"
+    assert settings.restart_command == "docker restart nanobot-gateway"
+    assert settings.update_check_enabled is True
+    assert settings.update_repo == "lucmuss/nanobot-webgui"
+    assert settings.update_mode == "command"
+    assert settings.update_command == "/usr/local/bin/nanobot-webgui-update.sh"
+    assert settings.repair_mode == "command"
+    assert settings.repair_command == "docker compose run --rm nanobot-repair-worker nanobot repair-worker"
     assert captured["app_instance"] == "fake-app"
     assert captured["host"] == "0.0.0.0"
     assert captured["port"] == 19091
+
+
+def test_gui_rejects_update_mode_command_without_command():
+    result = runner.invoke(app, ["gui", "--update-mode", "command"])
+
+    assert result.exit_code == 1
+    assert "--update-command is required" in result.stdout
+
+
+def test_gui_rejects_repair_mode_command_without_command():
+    result = runner.invoke(app, ["gui", "--repair-mode", "command"])
+
+    assert result.exit_code == 1
+    assert "--repair-command is required" in result.stdout
+
+
+def test_repair_worker_executes_bounded_recipe(monkeypatch):
+    def fake_run(recipe, *, allow_unrestricted=False, shell_command="", timeout=1200):
+        assert recipe == "install_node"
+        assert allow_unrestricted is False
+        assert shell_command == ""
+        return {"ok": True, "log": "installed node", "error": ""}
+
+    monkeypatch.setattr("nanobot.cli.commands.run_repair_recipe", fake_run)
+
+    result = runner.invoke(app, ["repair-worker", "--recipe", "install_node"])
+
+    assert result.exit_code == 0
+    assert "installed node" in result.stdout
+    assert "Repair recipe completed" in result.stdout
 
 
 def test_agent_uses_default_config_when_no_workspace_or_config_flags(mock_agent_runtime):
