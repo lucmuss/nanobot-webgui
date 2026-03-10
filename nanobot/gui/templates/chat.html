@@ -62,67 +62,57 @@
     </section>
 
     <section class="panel">
-      <h3>Runtime Overview</h3>
-      <div class="card-list">
-        <article class="card" data-testid="chat-runtime-status-card">
-          <header><strong>Runtime Status</strong></header>
-          <span class="pill {% if runtime_status.tone == 'good' %}good{% elif runtime_status.tone == 'bad' %}bad{% else %}muted{% endif %}">
-            {{ runtime_status.label }}
-          </span>
-        </article>
-        <article class="card" data-testid="chat-model-card">
-          <header><strong>Model</strong></header>
-          <div class="mono">{{ provider_name }} / {{ model_name }}</div>
-        </article>
-        <article class="card" data-testid="chat-agent-health-card">
-          <header><strong>Agent Health</strong></header>
-          {% if agent_health %}
-            <div>{{ "Healthy" if agent_health.ok else "Failed" }}</div>
-            {% if agent_health.error %}
-              <div class="mono">{{ agent_health.error }}</div>
+      <div class="section-intro">
+        <p class="eyebrow">Runtime Context</p>
+        <h3>Runtime Overview</h3>
+      </div>
+      <div class="system-info">
+        <div class="meta-grid">
+          <div class="meta-pair" data-testid="chat-runtime-status-card">
+            <strong>Runtime status</strong>
+            <span class="pill {% if runtime_status.tone == 'good' %}good{% elif runtime_status.tone == 'bad' %}bad{% else %}muted{% endif %}">{{ runtime_status.label }}</span>
+          </div>
+          <div class="meta-pair" data-testid="chat-model-card">
+            <strong>Model</strong>
+            <span class="mono">{{ provider_name }} / {{ model_name }}</span>
+          </div>
+          <div class="meta-pair" data-testid="chat-agent-health-card">
+            <strong>Agent health</strong>
+            {% if agent_health %}
+              <span>{{ "Healthy" if agent_health.ok else "Failed" }}{% if agent_health.latency_ms and agent_health.ok %} · {{ agent_health.latency_ms }} ms{% endif %}</span>
             {% else %}
-              <p class="muted">{{ agent_health.latency_ms }} ms at {{ agent_health.checked_at }}</p>
+              <span>No health check yet</span>
             {% endif %}
-          {% else %}
-            <p class="muted">No health check has been run yet.</p>
-          {% endif %}
-        </article>
-        <article class="card" data-testid="chat-active-mcp-servers-card">
-          <header><strong>Active MCP Servers</strong></header>
-          {% if active_mcp_servers %}
-            <div>{{ active_mcp_servers|map(attribute='name')|join(", ") }}</div>
-          {% else %}
-            <p class="muted">No MCP server is enabled for the main chat runtime.</p>
-          {% endif %}
-        </article>
-        <article class="card" data-testid="chat-active-mcp-tools-card">
-          <header><strong>Active MCP Tools</strong></header>
-          {% if active_tool_names %}
-            <div>{{ active_tool_names|join(", ") }}</div>
-          {% else %}
-            <p class="muted">No MCP tools are currently active in the main chat runtime.</p>
-          {% endif %}
-        </article>
-        <article class="card" data-testid="chat-recent-tool-activity-card">
-          <header><strong>Recent Tool Activity</strong></header>
-          {% if recent_tool_activity %}
+          </div>
+          <div class="meta-pair" data-testid="chat-active-mcp-servers-card">
+            <strong>Active MCP servers</strong>
+            <span>{{ active_mcp_servers|map(attribute='name')|join(", ") if active_mcp_servers else "None" }}</span>
+          </div>
+          <div class="meta-pair" data-testid="chat-active-mcp-tools-card">
+            <strong>Active tools</strong>
+            <span>{{ active_tool_names|join(", ") if active_tool_names else "None" }}</span>
+          </div>
+          <div class="meta-pair" data-testid="chat-usage-card">
+            <strong>Usage 24h</strong>
+            <span>{{ usage_snapshot.totals_24h.total_tokens }} total tokens</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card compact-card" style="margin-top: 14px;" data-testid="chat-recent-tool-activity-card">
+        <header><strong>Recent Tool Activity</strong></header>
+        {% if recent_tool_activity %}
+          <div class="compact-list">
             {% for item in recent_tool_activity %}
-              <div style="margin-bottom: 10px;">
+              <div>
                 <strong>Tool used: {{ item.name }}</strong>
                 <p class="muted">{{ item.timestamp }}</p>
               </div>
             {% endfor %}
-          {% else %}
-            <p class="muted">No tool call has been recorded in the current web chat session yet.</p>
-          {% endif %}
-        </article>
-        <article class="card" data-testid="chat-usage-card">
-          <header><strong>Usage Snapshot (24h)</strong></header>
-          <div>{{ usage_snapshot.totals_24h.total_tokens }} total tokens</div>
-          <p class="muted">
-            {{ usage_snapshot.recent_models|join(", ") if usage_snapshot.recent_models else "No recent model usage recorded yet." }}
-          </p>
-        </article>
+          </div>
+        {% else %}
+          <p class="muted">No tool call has been recorded in the current web chat session yet.</p>
+        {% endif %}
       </div>
     </section>
   </div>
@@ -136,24 +126,27 @@
         </div>
       </div>
 
-      <div class="card-list">
-        {% for template in chat_templates %}
-          <article class="card" data-testid="chat-template-{{ template.key }}">
-            <header><strong>{{ template.label }}</strong></header>
-            <p class="muted">{{ template.description }}</p>
-            <form method="post" action="/chat/template">
-              <input type="hidden" name="template" value="{{ template.key }}">
-              <label>
-                Input
-                <input type="text" name="value" placeholder="{{ template.placeholder }}" data-testid="chat-template-input-{{ template.key }}">
-              </label>
-              <div class="actions">
-                <button class="secondary" type="submit" data-testid="chat-template-submit-{{ template.key }}">{{ template.submit_label }}</button>
-              </div>
-            </form>
-          </article>
-        {% endfor %}
-      </div>
+      <details open>
+        <summary>Open templates</summary>
+        <div class="card-list" style="margin-top: 14px;">
+          {% for template in chat_templates %}
+            <article class="card compact-card" data-testid="chat-template-{{ template.key }}">
+              <header><strong>{{ template.label }}</strong></header>
+              <p class="muted">{{ template.description }}</p>
+              <form method="post" action="/chat/template">
+                <input type="hidden" name="template" value="{{ template.key }}">
+                <label>
+                  Input
+                  <input type="text" name="value" placeholder="{{ template.placeholder }}" data-testid="chat-template-input-{{ template.key }}">
+                </label>
+                <div class="actions">
+                  <button class="secondary" type="submit" data-testid="chat-template-submit-{{ template.key }}">{{ template.submit_label }}</button>
+                </div>
+              </form>
+            </article>
+          {% endfor %}
+        </div>
+      </details>
     </section>
 
     <section class="panel">
@@ -164,32 +157,33 @@
         </div>
       </div>
 
-      <form method="post" action="/chat/upload" enctype="multipart/form-data" data-testid="chat-upload-form">
-        <label>
-          File
-          <input type="file" name="attachment" required data-testid="chat-attachment">
-        </label>
-        <label>
-          Optional instruction
-          <textarea name="message" placeholder="Example: explain this error log and tell me what to fix first." data-testid="chat-upload-message"></textarea>
-        </label>
-        <div class="actions">
-          <button type="submit" data-testid="chat-upload-submit">Upload and Send</button>
-        </div>
-      </form>
+      <details open>
+        <summary>Open file-to-chat tools</summary>
+        <form method="post" action="/chat/upload" enctype="multipart/form-data" data-testid="chat-upload-form" style="margin-top: 14px;">
+          <label>
+            File
+            <input type="file" name="attachment" required data-testid="chat-attachment">
+          </label>
+          <label>
+            Optional instruction
+            <textarea name="message" placeholder="Example: explain this error log and tell me what to fix first." data-testid="chat-upload-message"></textarea>
+          </label>
+          <div class="actions">
+            <button type="submit" data-testid="chat-upload-submit">Upload and Send</button>
+          </div>
+        </form>
+      </details>
 
-      <div class="card-list" style="margin-top: 16px;">
-        <article class="card" data-testid="chat-recent-uploads-card">
-          <header><strong>Recent uploads</strong></header>
-          {% for item in recent_uploads %}
-            <div style="margin-bottom: 12px;">
-              <div class="mono">{{ item.relative_path }}</div>
-              <p class="muted">{{ item.size_label }}, {{ item.modified_at }}</p>
-            </div>
-          {% else %}
-            <p class="muted">No files have been uploaded through the chat UI yet.</p>
-          {% endfor %}
-        </article>
+      <div class="card compact-card" style="margin-top: 16px;" data-testid="chat-recent-uploads-card">
+        <header><strong>Recent uploads</strong></header>
+        {% for item in recent_uploads %}
+          <div style="margin-bottom: 12px;">
+            <div class="mono">{{ item.relative_path }}</div>
+            <p class="muted">{{ item.size_label }}, {{ item.modified_at }}</p>
+          </div>
+        {% else %}
+          <p class="muted">No files have been uploaded through the chat UI yet.</p>
+        {% endfor %}
       </div>
     </section>
   </div>

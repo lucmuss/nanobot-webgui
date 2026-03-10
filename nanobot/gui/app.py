@@ -2168,6 +2168,21 @@ def _render(
     settings: GUISettings = request.app.state.settings
     config_service: GUIConfigService = request.app.state.config_service
     gui_logger: logging.Logger = request.app.state.gui_logger
+    config = config_service.load()
+    agent_health = config_service.get_agent_health()
+    installed_servers = _build_mcp_server_cards(config, config_service)
+    enabled_channels = [
+        name
+        for name in CHANNEL_DEFINITIONS
+        if name != "none" and getattr(config.channels, name, None) and getattr(config.channels, name).enabled
+    ]
+    setup_progress = _build_setup_progress(
+        config=config,
+        agent_health=agent_health,
+        installed_servers=installed_servers,
+        enabled_channels=enabled_channels,
+    )
+    provider_name = config.get_provider_name() or config.agents.defaults.provider
     update_status = _ensure_update_status(settings, config_service, gui_logger, user_present=bool(context.get("user")))
     shell_context = {
         "instance_name": settings.instance_name,
@@ -2186,6 +2201,13 @@ def _render(
         "restart_action": _get_restart_action(settings),
         "update_status": update_status,
         "update_action": _get_update_action(settings, update_status),
+        "shell_status": {
+            "runtime_label": "Online" if agent_health.get("ok") else "Needs setup" if not config_service.is_setup_complete() else "Attention",
+            "setup_done": len([item for item in setup_progress if item.get("done")]),
+            "setup_total": len(setup_progress),
+            "enabled_mcp": len(config_service.enabled_mcp_servers(config.tools.mcp_servers)),
+            "provider_label": provider_name or "Unset",
+        },
     }
     return _TEMPLATES.TemplateResponse(
         request=request,

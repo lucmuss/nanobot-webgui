@@ -120,6 +120,28 @@
         gap: 8px;
       }
 
+      .sidebar-status {
+        display: grid;
+        gap: 8px;
+        margin-top: 18px;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .sidebar-status-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+        font-size: 0.8rem;
+      }
+
+      .sidebar-status-row span:first-child {
+        color: var(--text-secondary);
+      }
+
       .nav a {
         display: flex;
         align-items: center;
@@ -301,6 +323,22 @@
         display: block;
         margin-top: 8px;
         color: var(--text-secondary);
+      }
+
+      .priority-metrics {
+        gap: 16px;
+      }
+
+      .priority-metrics .metric,
+      .secondary-metrics .metric {
+        min-height: 0;
+        padding: 16px;
+      }
+
+      .priority-metrics .metric strong,
+      .secondary-metrics .metric strong {
+        font-size: 1.2rem;
+        margin-top: 8px;
       }
 
       .card-list {
@@ -743,6 +781,44 @@
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       }
 
+      .details-grid.compact {
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      }
+
+      .compact-card {
+        padding: 14px 16px;
+      }
+
+      .meta-grid {
+        display: grid;
+        gap: 10px 18px;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      }
+
+      .meta-pair {
+        display: grid;
+        gap: 4px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+
+      .meta-pair strong {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+
+      .meta-grid .meta-pair:nth-child(-n + 2) {
+        padding-top: 0;
+        border-top: none;
+      }
+
+      .compact-list {
+        display: grid;
+        gap: 10px;
+      }
+
       .doc-switcher {
         display: grid;
         gap: 14px;
@@ -1021,6 +1097,24 @@
               <a href="/profile" class="{% if nav_active == 'profile' %}active{% endif %}" data-testid="nav-profile">Profile</a>
               <a href="/logs" class="{% if nav_active == 'logs' %}active{% endif %}" data-testid="nav-logs">Logs</a>
             </nav>
+            <div class="sidebar-status" data-testid="sidebar-status">
+              <div class="sidebar-status-row">
+                <span>Runtime</span>
+                <strong>{{ shell_status.runtime_label }}</strong>
+              </div>
+              <div class="sidebar-status-row">
+                <span>Setup</span>
+                <strong>{{ shell_status.setup_done }}/{{ shell_status.setup_total }}</strong>
+              </div>
+              <div class="sidebar-status-row">
+                <span>MCP</span>
+                <strong>{{ shell_status.enabled_mcp }} enabled</strong>
+              </div>
+              <div class="sidebar-status-row">
+                <span>Provider</span>
+                <strong>{{ shell_status.provider_label }}</strong>
+              </div>
+            </div>
           </div>
         </aside>
 

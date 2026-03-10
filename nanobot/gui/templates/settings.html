@@ -16,19 +16,18 @@
           <p class="muted">These values affect the day-to-day runtime behavior immediately and should remain easy to find.</p>
         </div>
 
-        <label>
-          Workspace path
-          <input type="text" name="workspace" value="{{ settings_form.workspace }}" {% if workspace_locked %}readonly{% endif %} data-testid="settings-workspace">
-        </label>
-        <p class="muted">
-          {% if workspace_locked %}
-            This stack locks the workspace path at container level.
-          {% else %}
-            Nanobot stores sessions, MCP installs, and memory under this workspace.
-          {% endif %}
-        </p>
+        <div class="meta-grid" style="margin-top: 16px;">
+          <div class="meta-pair">
+            <strong>Workspace path</strong>
+            <span class="mono">{{ settings_form.workspace }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Workspace mode</strong>
+            <span>{{ "Container-locked" if workspace_locked else "Editable" }}</span>
+          </div>
+        </div>
 
-        <div class="details-grid">
+        <div class="details-grid compact">
           <label>
             Exec timeout (seconds)
             <input type="number" name="exec_timeout" min="1" value="{{ settings_form.exec_timeout }}" data-testid="settings-exec-timeout">
@@ -39,34 +38,42 @@
           </label>
         </div>
 
-        <label class="checkbox">
-          <input type="checkbox" name="tools_enabled" {% if settings_form.tools_enabled %}checked{% endif %} data-testid="settings-tools-enabled">
-          <span>Enable tools in the main runtime</span>
-        </label>
+        <div class="card compact-card">
+          <header><strong>Core toggles</strong></header>
+          <div class="compact-list">
+            <label class="checkbox">
+              <input type="checkbox" name="tools_enabled" {% if settings_form.tools_enabled %}checked{% endif %} data-testid="settings-tools-enabled">
+              <span>Enable tools in the main runtime</span>
+            </label>
 
-        <label class="checkbox">
-          <input type="checkbox" name="restrict_to_workspace" {% if settings_form.restrict_to_workspace %}checked{% endif %} data-testid="settings-restrict-workspace">
-          <span>Restrict tool execution to the workspace</span>
-        </label>
+            <label class="checkbox">
+              <input type="checkbox" name="restrict_to_workspace" {% if settings_form.restrict_to_workspace %}checked{% endif %} data-testid="settings-restrict-workspace">
+              <span>Restrict tool execution to the workspace</span>
+            </label>
 
-        <label class="checkbox">
-          <input type="checkbox" name="send_progress" {% if settings_form.send_progress %}checked{% endif %} data-testid="settings-send-progress">
-          <span>Send progress updates to channels</span>
-        </label>
+            <label class="checkbox">
+              <input type="checkbox" name="send_progress" {% if settings_form.send_progress %}checked{% endif %} data-testid="settings-send-progress">
+              <span>Send progress updates to channels</span>
+            </label>
 
-        <label class="checkbox">
-          <input type="checkbox" name="send_tool_hints" {% if settings_form.send_tool_hints %}checked{% endif %} data-testid="settings-send-tool-hints">
-          <span>Send tool hints to channels</span>
-        </label>
-
-        <div class="danger-callout">
-          <strong>Danger Zone</strong>
-          <p class="muted">Unrestricted Agent + Shell allows MCP repair fallback plans to propose and execute arbitrary shell commands through the configured repair worker. Leave this off unless you fully trust the repositories and your deployment boundary.</p>
-          <label class="checkbox" style="margin-top: 12px;">
-            <input type="checkbox" name="dangerous_repair_mode" {% if settings_form.dangerous_repair_mode %}checked{% endif %} data-testid="settings-dangerous-repair-mode">
-            <span>Enable Unrestricted Agent + Shell for MCP repair fallback</span>
-          </label>
+            <label class="checkbox">
+              <input type="checkbox" name="send_tool_hints" {% if settings_form.send_tool_hints %}checked{% endif %} data-testid="settings-send-tool-hints">
+              <span>Send tool hints to channels</span>
+            </label>
+          </div>
         </div>
+
+        <details data-testid="settings-danger-zone" {% if not safe_mode and settings_form.dangerous_repair_mode %}open{% endif %}>
+          <summary>Risky controls</summary>
+          <div class="danger-callout" style="margin-top: 14px;">
+            <strong>Danger Zone</strong>
+            <p class="muted">Unrestricted Agent + Shell allows MCP repair fallback plans to propose and execute arbitrary shell commands through the configured repair worker. Leave this off unless you fully trust the repositories and your deployment boundary.</p>
+            <label class="checkbox" style="margin-top: 12px;">
+              <input type="checkbox" name="dangerous_repair_mode" {% if settings_form.dangerous_repair_mode %}checked{% endif %} data-testid="settings-dangerous-repair-mode">
+              <span>Enable Unrestricted Agent + Shell for MCP repair fallback</span>
+            </label>
+          </div>
+        </details>
 
         <div class="actions">
           <button type="submit" data-testid="settings-save">Save Settings</button>
@@ -97,9 +104,9 @@
         </div>
       {% endif %}
 
-      <div class="card-list">
+      <div class="details-grid compact">
         {% for item in validation_results %}
-          <article class="card" data-testid="validation-card-{{ item.label|lower|replace(' ', '-') }}">
+          <article class="card compact-card" data-testid="validation-card-{{ item.label|lower|replace(' ', '-') }}">
             <header>
               <strong>{{ item.label }}</strong>
               <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "OK" if item.ok else "Needs attention" }}</span>
@@ -121,39 +128,37 @@
       <h3>Instance Metadata</h3>
       <p class="muted">A compact overview of where this GUI points and which runtime capabilities are currently wired in.</p>
     </div>
-    <div class="details-grid">
-      <article class="card">
-        <header><strong>Config file</strong></header>
-        <div class="mono">{{ settings_meta.config_path }}</div>
-      </article>
-      <article class="card">
-        <header><strong>Provider</strong></header>
-        <div>{{ settings_meta.provider }}</div>
-      </article>
-      <article class="card">
-        <header><strong>Model</strong></header>
-        <div>{{ settings_meta.model }}</div>
-      </article>
-      <article class="card">
-        <header><strong>Installed MCP servers</strong></header>
-        <div>{{ settings_meta.installed_mcp_servers }}</div>
-      </article>
-      <article class="card">
-        <header><strong>Repair worker</strong></header>
-        <div>{{ "Configured" if settings_meta.repair_command_configured else "Disabled" }}</div>
-        <p class="muted">Mode: {{ settings_meta.repair_mode or "disabled" }}</p>
-      </article>
-      <article class="card">
-        <header><strong>Setup complete</strong></header>
-        <div>{{ "Yes" if settings_meta.setup_complete else "No" }}</div>
-      </article>
-      <article class="card">
-        <header><strong>Related areas</strong></header>
-        <div class="actions">
-          <a class="button secondary" href="/profile">Profile</a>
-          <a class="button secondary" href="/logs">Logs</a>
+    <div class="system-info">
+      <div class="meta-grid">
+        <div class="meta-pair">
+          <strong>Config file</strong>
+          <span class="mono">{{ settings_meta.config_path }}</span>
         </div>
-      </article>
+        <div class="meta-pair">
+          <strong>Provider</strong>
+          <span>{{ settings_meta.provider }}</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Model</strong>
+          <span>{{ settings_meta.model }}</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Installed MCP servers</strong>
+          <span>{{ settings_meta.installed_mcp_servers }}</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Repair worker</strong>
+          <span>{{ "Configured" if settings_meta.repair_command_configured else "Disabled" }}{% if settings_meta.repair_mode %} ({{ settings_meta.repair_mode }}){% endif %}</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Setup complete</strong>
+          <span>{{ "Yes" if settings_meta.setup_complete else "No" }}</span>
+        </div>
+      </div>
+    </div>
+    <div class="actions" style="margin-top: 14px;">
+      <a class="button secondary" href="/profile">Profile</a>
+      <a class="button secondary" href="/logs">Logs</a>
     </div>
   </section>
 {% endblock %}

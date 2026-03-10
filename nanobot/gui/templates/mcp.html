@@ -164,48 +164,56 @@
         <h3>Register MCP Manually</h3>
         <p class="muted">Use this only when repository inspection is not enough or when you already know the exact MCP command and transport.</p>
       </div>
-      <form method="post" action="/mcp/add" data-testid="mcp-manual-form">
-        <label>
-          Name
-          <input type="text" name="name" value="{{ manual_form.name if manual_form else '' }}" required data-testid="mcp-manual-name">
-        </label>
-        <label>
-          Transport
-          <select name="transport" data-testid="mcp-manual-transport">
-            <option value="" {% if not manual_form or not manual_form.transport %}selected{% endif %}>auto</option>
-            <option value="stdio" {% if manual_form and manual_form.transport == 'stdio' %}selected{% endif %}>stdio</option>
-            <option value="sse" {% if manual_form and manual_form.transport == 'sse' %}selected{% endif %}>sse</option>
-            <option value="streamableHttp" {% if manual_form and manual_form.transport == 'streamableHttp' %}selected{% endif %}>streamableHttp</option>
-          </select>
-        </label>
-        <label>
-          Command
-          <input type="text" name="command" value="{{ manual_form.command if manual_form else '' }}" data-testid="mcp-manual-command">
-        </label>
-        <label>
-          Args (comma-separated)
-          <input type="text" name="args" value="{{ manual_form.args if manual_form else '' }}" data-testid="mcp-manual-args">
-        </label>
-        <label>
-          URL
-          <input type="text" name="url" value="{{ manual_form.url if manual_form else '' }}" data-testid="mcp-manual-url">
-        </label>
-        <label>
-          Env JSON
-          <textarea name="env_json" data-testid="mcp-manual-env-json">{{ manual_form.env_json if manual_form else '{}' }}</textarea>
-        </label>
-        <label>
-          Headers JSON
-          <textarea name="headers_json" data-testid="mcp-manual-headers-json">{{ manual_form.headers_json if manual_form else '{}' }}</textarea>
-        </label>
-        <label>
-          Tool Timeout
-          <input type="number" name="tool_timeout" min="1" value="{{ manual_form.tool_timeout if manual_form else 30 }}" data-testid="mcp-manual-tool-timeout">
-        </label>
-        <div class="actions">
-          <button type="submit" data-testid="mcp-manual-submit">Register Server</button>
-        </div>
-      </form>
+      <details data-testid="mcp-manual-details" {% if manual_form and (manual_form.name or manual_form.command or manual_form.url) %}open{% endif %}>
+        <summary>Open manual registration</summary>
+        <form method="post" action="/mcp/add" data-testid="mcp-manual-form" style="margin-top: 14px;">
+          <label>
+            Name
+            <input type="text" name="name" value="{{ manual_form.name if manual_form else '' }}" required data-testid="mcp-manual-name">
+          </label>
+          <label>
+            Transport
+            <select name="transport" data-testid="mcp-manual-transport">
+              <option value="" {% if not manual_form or not manual_form.transport %}selected{% endif %}>auto</option>
+              <option value="stdio" {% if manual_form and manual_form.transport == 'stdio' %}selected{% endif %}>stdio</option>
+              <option value="sse" {% if manual_form and manual_form.transport == 'sse' %}selected{% endif %}>sse</option>
+              <option value="streamableHttp" {% if manual_form and manual_form.transport == 'streamableHttp' %}selected{% endif %}>streamableHttp</option>
+            </select>
+          </label>
+          <label>
+            Command
+            <input type="text" name="command" value="{{ manual_form.command if manual_form else '' }}" data-testid="mcp-manual-command">
+          </label>
+          <label>
+            Args (comma-separated)
+            <input type="text" name="args" value="{{ manual_form.args if manual_form else '' }}" data-testid="mcp-manual-args">
+          </label>
+          <label>
+            URL
+            <input type="text" name="url" value="{{ manual_form.url if manual_form else '' }}" data-testid="mcp-manual-url">
+          </label>
+          <label>
+            Env JSON
+            <textarea name="env_json" data-testid="mcp-manual-env-json">{{ manual_form.env_json if manual_form else '{}' }}</textarea>
+          </label>
+          <details {% if not safe_mode %}open{% endif %}>
+            <summary>Advanced JSON fields</summary>
+            <div class="form-columns" style="margin-top: 14px;">
+              <label>
+                Headers JSON
+                <textarea name="headers_json" data-testid="mcp-manual-headers-json">{{ manual_form.headers_json if manual_form else '{}' }}</textarea>
+              </label>
+              <label>
+                Tool Timeout
+                <input type="number" name="tool_timeout" min="1" value="{{ manual_form.tool_timeout if manual_form else 30 }}" data-testid="mcp-manual-tool-timeout">
+              </label>
+            </div>
+          </details>
+          <div class="actions">
+            <button type="submit" data-testid="mcp-manual-submit">Register Server</button>
+          </div>
+        </form>
+      </details>
     </section>
   </div>
 

@@ -8,20 +8,20 @@
         <p class="muted">Token usage collected from health checks, main chat turns, and MCP test chats.</p>
       </div>
 
-      <div class="details-grid">
-        <article class="card">
+      <div class="details-grid compact">
+        <article class="card compact-card">
           <header><strong>24h total tokens</strong></header>
           <div>{{ usage_summary.totals_24h.total_tokens }}</div>
         </article>
-        <article class="card">
+        <article class="card compact-card">
           <header><strong>24h prompt tokens</strong></header>
           <div>{{ usage_summary.totals_24h.prompt_tokens }}</div>
         </article>
-        <article class="card">
+        <article class="card compact-card">
           <header><strong>24h completion tokens</strong></header>
           <div>{{ usage_summary.totals_24h.completion_tokens }}</div>
         </article>
-        <article class="card">
+        <article class="card compact-card">
           <header><strong>All-time total tokens</strong></header>
           <div>{{ usage_summary.totals_all_time.total_tokens }}</div>
         </article>
@@ -33,32 +33,21 @@
         <p class="eyebrow">Model Activity</p>
         <h3>Recent Models</h3>
       </div>
-      <div class="card-list">
-        <article class="card">
-          <header><strong>Latest model list</strong></header>
-          {% if usage_summary.recent_models %}
-            <div>{{ usage_summary.recent_models|join(", ") }}</div>
-          {% else %}
-            <p class="muted">No recent model usage has been recorded yet.</p>
-          {% endif %}
-        </article>
-        <article class="card">
-          <header><strong>Rough cost</strong></header>
-          {% if usage_summary.totals_24h.estimated_cost_known %}
-            <div>${{ '%.4f'|format(usage_summary.totals_24h.estimated_cost_usd) }} in the last 24h</div>
-          {% else %}
-            <p class="muted">Rough cost is only shown when a verified local price profile exists for the active model.</p>
-          {% endif %}
-        </article>
-        <article class="card">
-          <header><strong>Last usage event</strong></header>
-          {% if usage_summary.last_event %}
-            <div>{{ usage_summary.last_event.source }} via {{ usage_summary.last_event.provider }} / {{ usage_summary.last_event.model }}</div>
-            <p class="muted">{{ usage_summary.last_event.timestamp }}</p>
-          {% else %}
-            <p class="muted">No usage events have been stored yet.</p>
-          {% endif %}
-        </article>
+      <div class="system-info">
+        <div class="meta-grid">
+          <div class="meta-pair">
+            <strong>Latest model list</strong>
+            <span>{{ usage_summary.recent_models|join(", ") if usage_summary.recent_models else "No recent model usage has been recorded yet." }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Rough cost</strong>
+            <span>{% if usage_summary.totals_24h.estimated_cost_known %}${{ '%.4f'|format(usage_summary.totals_24h.estimated_cost_usd) }} in the last 24h{% else %}Unavailable for the current model{% endif %}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Last usage event</strong>
+            <span>{% if usage_summary.last_event %}{{ usage_summary.last_event.source }} via {{ usage_summary.last_event.provider }} / {{ usage_summary.last_event.model }} · {{ usage_summary.last_event.timestamp }}{% else %}No usage events have been stored yet.{% endif %}</span>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -70,7 +59,7 @@
     </div>
     <div class="card-list">
       {% for event in usage_events %}
-        <article class="card">
+        <article class="card compact-card">
           <header>
             <strong>{{ event.source }}</strong>
             <span class="pill">{{ event.provider }} / {{ event.model }}</span>

@@ -41,12 +41,10 @@
             <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif" data-testid="profile-avatar">
           </label>
         </div>
-        <div class="subtle-panel">
-          <div class="label-stack">
-            <strong>Optional password change</strong>
-            <p class="muted">Leave these fields empty if you only want to update the profile information above.</p>
-          </div>
-          <div class="details-grid" style="margin-top: 14px;">
+        <details open data-testid="profile-password-section">
+          <summary>Optional password change</summary>
+          <p class="muted" style="margin-top: 14px;">Leave these fields empty if you only want to update the profile information above.</p>
+          <div class="details-grid compact" style="margin-top: 14px;">
             <label>
               New password
               <input type="password" name="password" placeholder="Leave empty to keep the current password" data-testid="profile-password">
@@ -56,7 +54,7 @@
               <input type="password" name="password_confirm" data-testid="profile-password-confirm">
             </label>
           </div>
-        </div>
+        </details>
         <div class="actions">
           <button type="submit" data-testid="profile-save">Save Profile</button>
         </div>
@@ -69,21 +67,26 @@
         <h3>Profile Entry Points</h3>
         <p class="muted">This page should feel directly connected to the rest of the shell instead of being a dead-end account form.</p>
       </div>
-      <div class="card-list">
-        <article class="card">
-          <header><strong>Top-right Profile Chip</strong></header>
-          <p class="muted">The avatar and display name in the top bar link directly back to this profile page.</p>
-        </article>
-        <article class="card">
-          <header><strong>Navigation Item</strong></header>
-          <p class="muted">There is also a dedicated Profile item in the main navigation so the account page remains easy to find.</p>
-        </article>
-        <article class="card">
-          <header><strong>Current account</strong></header>
-          <div class="mono">{{ user.label }}</div>
-          <p class="muted">Use this page whenever you want to update the public account label or rotate credentials.</p>
-        </article>
+      <div class="system-info">
+        <div class="meta-grid">
+          <div class="meta-pair">
+            <strong>Top-right profile chip</strong>
+            <span>The avatar and display name in the top bar link directly back to this profile page.</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Navigation item</strong>
+            <span>The dedicated Profile navigation entry keeps the account page easy to find.</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Current account</strong>
+            <span class="mono">{{ user.label }}</span>
+          </div>
+        </div>
       </div>
+      <details style="margin-top: 16px;">
+        <summary>Password guidance</summary>
+        <p class="muted" style="margin-top: 14px;">Use this page whenever you want to update the public account label or rotate credentials.</p>
+      </details>
     </section>
   </div>
 {% endblock %}

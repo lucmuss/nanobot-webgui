@@ -34,23 +34,25 @@
         <p class="eyebrow">Environment</p>
         <h3>Environment</h3>
       </div>
-      <div class="card-list">
-        <article class="card">
-          <header><strong>Config path</strong></header>
-          <div class="mono">{{ config_path_value }}</div>
-        </article>
-        <article class="card">
-          <header><strong>Workspace</strong></header>
-          <div class="mono">{{ workspace_value }}</div>
-        </article>
-        <article class="card">
-          <header><strong>Provider</strong></header>
-          <div>{{ agent_health.get("provider", "Unknown") if agent_health else "Unknown" }}</div>
-        </article>
-        <article class="card">
-          <header><strong>Model</strong></header>
-          <div>{{ agent_health.get("model", "Unknown") if agent_health else "Unknown" }}</div>
-        </article>
+      <div class="system-info">
+        <div class="meta-grid">
+          <div class="meta-pair">
+            <strong>Config path</strong>
+            <span class="mono">{{ config_path_value }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Workspace</strong>
+            <span class="mono">{{ workspace_value }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Provider</strong>
+            <span>{{ agent_health.get("provider", "Unknown") if agent_health else "Unknown" }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Model</strong>
+            <span>{{ agent_health.get("model", "Unknown") if agent_health else "Unknown" }}</span>
+          </div>
+        </div>
       </div>
     </section>
   </div>
@@ -61,16 +63,16 @@
       <h3>Last Agent Check</h3>
     </div>
     {% if agent_health %}
-      <div class="details-grid">
-        <article class="card">
+      <div class="details-grid compact">
+        <article class="card compact-card">
           <header><strong>Checked at</strong></header>
           <div>{{ agent_health.get("checked_at", "Unknown") }}</div>
         </article>
-        <article class="card">
+        <article class="card compact-card">
           <header><strong>Latency</strong></header>
           <div>{{ agent_health.get("latency_ms", "n/a") }} ms</div>
         </article>
-        <article class="card">
+        <article class="card compact-card">
           <header><strong>Preview</strong></header>
           <div class="mono">{{ agent_health.get("preview") or agent_health.get("error") or "No preview stored" }}</div>
         </article>
