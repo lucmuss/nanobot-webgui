@@ -3,12 +3,16 @@
   <section class="panel">
     <div class="split-header">
       <div>
+        <p class="eyebrow">Diagnostics</p>
         <h3 style="margin: 0;">GUI Logs</h3>
-        <p class="muted">Tail of the rotating action log for this dev instance.</p>
+        <p class="muted">Tail of the rotating action log for this instance, filtered into a more readable operator view.</p>
       </div>
       <a class="button secondary" href="/logs?level={{ log_level }}" data-testid="logs-refresh">Refresh</a>
     </div>
-    <p class="muted">{{ log_file }}</p>
+    <div class="subtle-panel" style="margin-bottom: 16px;">
+      <strong>Log file</strong>
+      <p class="muted">{{ log_file }}</p>
+    </div>
 
     <div class="quick-actions" style="margin-bottom: 16px;" data-testid="logs-filters">
       <a class="button secondary" href="/logs?level=all" data-testid="logs-filter-all">All</a>

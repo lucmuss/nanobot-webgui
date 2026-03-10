@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block body %}
-  <p class="muted">Sign in with your username or email address.</p>
+  <div class="section-intro">
+    <p class="eyebrow">Welcome Back</p>
+    <h3>Sign in</h3>
+    <p class="muted">Sign in with your username or email address to access the Nanobot admin workspace.</p>
+  </div>
   {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
+  <div class="highlight-panel" style="margin-bottom: 16px;">
+    <strong>Minimal login flow</strong>
+    <p class="muted">This screen only asks for the credentials needed to re-enter the GUI quickly.</p>
+  </div>
   <form method="post" action="/login" data-testid="login-form">
     <label>
       Username or email

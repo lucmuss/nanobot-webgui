@@ -41,7 +41,7 @@
         {% endfor %}
       </div>
 
-      <form method="post" action="/chat/send" data-testid="chat-form">
+      <form method="post" action="/chat/send" class="chat-composer" data-testid="chat-form">
         <label>
           Message
           <textarea name="message" placeholder="Ask nanobot to inspect a repository, explain a file, or draft a change." data-testid="chat-message"></textarea>
@@ -51,7 +51,7 @@
         </div>
       </form>
 
-      <div class="quick-actions" style="margin-top: 14px;">
+      <div class="chat-suggestions" style="margin-top: 14px;">
         {% for prompt in chat_quick_prompts %}
           <form class="inline-form" method="post" action="/chat/send">
             <input type="hidden" name="message" value="{{ prompt }}">

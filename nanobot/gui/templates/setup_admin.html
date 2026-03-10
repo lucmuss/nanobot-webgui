@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block body %}
-  <p class="muted">First launch. Create exactly one admin account for this dev instance.</p>
+  <div class="section-intro">
+    <p class="eyebrow">First Launch</p>
+    <h3>Create the first admin account</h3>
+    <p class="muted">Create exactly one admin account for this instance. After that, the regular login flow takes over.</p>
+  </div>
   {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
+  <div class="highlight-panel" style="margin-bottom: 16px;">
+    <strong>Bootstrap only</strong>
+    <p class="muted">This is a one-time setup step. Once the first admin exists, the GUI will block duplicate bootstrap creation.</p>
+  </div>
   <form method="post" action="/setup/admin" data-testid="admin-setup-form">
     <label>
       Username

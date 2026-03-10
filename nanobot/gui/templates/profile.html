@@ -5,8 +5,9 @@
       {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
       <div class="split-header">
         <div>
+          <p class="eyebrow">Admin Account</p>
           <h3 style="margin: 0;">Account Settings</h3>
-          <p class="muted">Update your identity, password, and avatar for this admin account.</p>
+          <p class="muted">Update your identity, password, and avatar for this admin account. Keep the key identity fields prominent and password changes secondary.</p>
         </div>
         <div class="avatar large">
           {% if user.avatar_url %}
@@ -18,30 +19,44 @@
       </div>
 
       <form method="post" action="/profile" enctype="multipart/form-data" data-testid="profile-form">
-        <label>
-          Display name
-          <input type="text" name="display_name" value="{{ profile_form.display_name }}" data-testid="profile-display-name">
-        </label>
-        <label>
-          Username
-          <input type="text" name="username" value="{{ profile_form.username }}" required data-testid="profile-username">
-        </label>
-        <label>
-          Email
-          <input type="email" name="email" value="{{ profile_form.email }}" required data-testid="profile-email">
-        </label>
-        <label>
-          Avatar image
-          <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif" data-testid="profile-avatar">
-        </label>
-        <label>
-          New password
-          <input type="password" name="password" placeholder="Leave empty to keep the current password" data-testid="profile-password">
-        </label>
-        <label>
-          Confirm new password
-          <input type="password" name="password_confirm" data-testid="profile-password-confirm">
-        </label>
+        <div class="highlight-panel">
+          <strong>Visible account identity</strong>
+          <p class="muted">These values shape how the account appears across the GUI, especially in the top-right profile chip.</p>
+        </div>
+        <div class="details-grid">
+          <label>
+            Display name
+            <input type="text" name="display_name" value="{{ profile_form.display_name }}" data-testid="profile-display-name">
+          </label>
+          <label>
+            Username
+            <input type="text" name="username" value="{{ profile_form.username }}" required data-testid="profile-username">
+          </label>
+          <label>
+            Email
+            <input type="email" name="email" value="{{ profile_form.email }}" required data-testid="profile-email">
+          </label>
+          <label>
+            Avatar image
+            <input type="file" name="avatar" accept="image/png,image/jpeg,image/webp,image/gif" data-testid="profile-avatar">
+          </label>
+        </div>
+        <div class="subtle-panel">
+          <div class="label-stack">
+            <strong>Optional password change</strong>
+            <p class="muted">Leave these fields empty if you only want to update the profile information above.</p>
+          </div>
+          <div class="details-grid" style="margin-top: 14px;">
+            <label>
+              New password
+              <input type="password" name="password" placeholder="Leave empty to keep the current password" data-testid="profile-password">
+            </label>
+            <label>
+              Confirm new password
+              <input type="password" name="password_confirm" data-testid="profile-password-confirm">
+            </label>
+          </div>
+        </div>
         <div class="actions">
           <button type="submit" data-testid="profile-save">Save Profile</button>
         </div>
@@ -49,7 +64,11 @@
     </section>
 
     <section class="panel">
-      <h3>Profile Entry Points</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Account Visibility</p>
+        <h3>Profile Entry Points</h3>
+        <p class="muted">This page should feel directly connected to the rest of the shell instead of being a dead-end account form.</p>
+      </div>
       <div class="card-list">
         <article class="card">
           <header><strong>Top-right Profile Chip</strong></header>
@@ -58,6 +77,11 @@
         <article class="card">
           <header><strong>Navigation Item</strong></header>
           <p class="muted">There is also a dedicated Profile item in the main navigation so the account page remains easy to find.</p>
+        </article>
+        <article class="card">
+          <header><strong>Current account</strong></header>
+          <div class="mono">{{ user.label }}</div>
+          <p class="muted">Use this page whenever you want to update the public account label or rotate credentials.</p>
         </article>
       </div>
     </section>

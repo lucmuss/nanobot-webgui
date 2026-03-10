@@ -2,11 +2,10 @@
 {% block body %}
   <div class="panel-grid two">
     <section class="panel">
-      <div class="split-header">
-        <div>
-          <h3 style="margin: 0;">Usage Snapshot</h3>
-          <p class="muted">Token usage collected from health checks, main chat turns, and MCP test chats.</p>
-        </div>
+      <div class="section-intro">
+        <p class="eyebrow">Consumption</p>
+        <h3>Usage Snapshot</h3>
+        <p class="muted">Token usage collected from health checks, main chat turns, and MCP test chats.</p>
       </div>
 
       <div class="details-grid">
@@ -30,7 +29,10 @@
     </section>
 
     <section class="panel">
-      <h3>Recent Models</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Model Activity</p>
+        <h3>Recent Models</h3>
+      </div>
       <div class="card-list">
         <article class="card">
           <header><strong>Latest model list</strong></header>
@@ -62,7 +64,10 @@
   </div>
 
   <section class="panel" style="margin-top: 22px;">
-    <h3>Recent Usage Events</h3>
+    <div class="section-intro">
+      <p class="eyebrow">Event Log</p>
+      <h3>Recent Usage Events</h3>
+    </div>
     <div class="card-list">
       {% for event in usage_events %}
         <article class="card">

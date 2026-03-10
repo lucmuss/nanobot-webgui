@@ -4,14 +4,18 @@
 
   <div class="panel-grid two">
     <section class="panel">
-      <div class="split-header">
-        <div>
-          <h3 style="margin: 0;">Runtime Controls</h3>
-          <p class="muted">Edit the core instance values that are safe and useful to manage from the GUI.</p>
-        </div>
+      <div class="section-intro">
+        <p class="eyebrow">Core Controls</p>
+        <h3>Runtime Controls</h3>
+        <p class="muted">Edit the core instance values that are safe and useful to manage from the GUI. Keep the critical values at the top and move risky toggles lower.</p>
       </div>
 
       <form method="post" action="/settings" data-testid="settings-form">
+        <div class="highlight-panel">
+          <strong>Primary instance settings</strong>
+          <p class="muted">These values affect the day-to-day runtime behavior immediately and should remain easy to find.</p>
+        </div>
+
         <label>
           Workspace path
           <input type="text" name="workspace" value="{{ settings_form.workspace }}" {% if workspace_locked %}readonly{% endif %} data-testid="settings-workspace">
@@ -55,7 +59,7 @@
           <span>Send tool hints to channels</span>
         </label>
 
-        <div class="hero-callout" style="background: rgba(170, 61, 42, 0.08); border-color: rgba(170, 61, 42, 0.16);">
+        <div class="danger-callout">
           <strong>Danger Zone</strong>
           <p class="muted">Unrestricted Agent + Shell allows MCP repair fallback plans to propose and execute arbitrary shell commands through the configured repair worker. Leave this off unless you fully trust the repositories and your deployment boundary.</p>
           <label class="checkbox" style="margin-top: 12px;">
@@ -77,15 +81,14 @@
     </section>
 
     <section class="panel">
-      <div class="split-header">
-        <div>
-          <h3 style="margin: 0;">Setup Validation</h3>
-          <p class="muted">This is the quick health checklist for provider, runtime, paths, and MCP readiness.</p>
-        </div>
+      <div class="section-intro">
+        <p class="eyebrow">Validation</p>
+        <h3>Setup Validation</h3>
+        <p class="muted">This is the quick health checklist for provider, runtime, paths, and MCP readiness.</p>
       </div>
 
       {% if next_validation_issue %}
-        <div class="hero-callout" style="margin-bottom: 16px;">
+        <div class="highlight-panel" style="margin-bottom: 16px;">
           <strong>Recommended next fix: {{ next_validation_issue.label }}</strong>
           <p class="muted">{{ next_validation_issue.hint }}</p>
           {% if next_validation_issue.action_url %}
@@ -113,7 +116,11 @@
   </div>
 
   <section class="panel" style="margin-top: 22px;">
-    <h3>Instance Metadata</h3>
+    <div class="section-intro">
+      <p class="eyebrow">Instance Snapshot</p>
+      <h3>Instance Metadata</h3>
+      <p class="muted">A compact overview of where this GUI points and which runtime capabilities are currently wired in.</p>
+    </div>
     <div class="details-grid">
       <article class="card">
         <header><strong>Config file</strong></header>

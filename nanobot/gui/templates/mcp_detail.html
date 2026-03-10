@@ -6,6 +6,7 @@
     <section class="panel">
       <div class="split-header">
         <div>
+          <p class="eyebrow">MCP Runtime</p>
           <h3 style="margin: 0;">MCP Detail</h3>
           <p class="muted">You are testing MCP: <strong>{{ server.name }}</strong></p>
         </div>
@@ -14,9 +15,44 @@
         </span>
       </div>
 
-      {% if server.summary %}
-        <p class="muted">{{ server.summary }}</p>
-      {% endif %}
+      <div class="highlight-panel">
+        <strong>{{ server.name }}</strong>
+        {% if server.summary %}
+          <p class="muted">{{ server.summary }}</p>
+        {% endif %}
+        <div class="badge-row">
+          <span class="pill">transport {{ server.transport }}</span>
+          <span class="pill {% if server.enabled %}good{% else %}muted{% endif %}">{{ "enabled" if server.enabled else "disabled" }}</span>
+          <span class="pill">{{ server.status_label }}</span>
+          {% if server.repo_type %}<span class="pill">repo {{ server.repo_type }}</span>{% endif %}
+        </div>
+      </div>
+
+      <div class="action-cluster" style="margin-top: 16px;">
+        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}" data-testid="mcp-detail-test-form">
+          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+          <button class="secondary" type="submit" data-testid="mcp-detail-test">Run MCP Test</button>
+        </form>
+        <form class="inline-form" method="post" action="/mcp/repair/{{ server.name }}" data-testid="mcp-detail-repair-form">
+          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+          <button
+            class="secondary"
+            type="submit"
+            data-testid="mcp-detail-repair"
+            title="{{ repair_action.description }}"
+            {% if not repair_action.enabled %}disabled aria-disabled="true"{% endif %}
+          >
+            {{ repair_action.label }}
+          </button>
+        </form>
+        <form class="inline-form" method="post" action="/mcp/toggle/{{ server.name }}" data-testid="mcp-detail-toggle-form">
+          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+          <button class="secondary" type="submit" data-testid="mcp-detail-toggle">{{ "Disable for Chat" if server.enabled else "Enable for Chat" }}</button>
+        </form>
+        <form class="inline-form" method="post" action="/mcp/remove/{{ server.name }}" data-testid="mcp-detail-remove-form">
+          <button class="bad" type="submit" data-testid="mcp-detail-remove">Remove</button>
+        </form>
+      </div>
 
       <div class="details-grid" data-testid="mcp-detail-cards">
         <article class="card">
@@ -86,32 +122,6 @@
         </article>
       </div>
 
-      <div class="actions" style="margin-top: 16px;">
-        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}" data-testid="mcp-detail-test-form">
-          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
-          <button class="secondary" type="submit" data-testid="mcp-detail-test">Run MCP Test</button>
-        </form>
-        <form class="inline-form" method="post" action="/mcp/repair/{{ server.name }}" data-testid="mcp-detail-repair-form">
-          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
-          <button
-            class="secondary"
-            type="submit"
-            data-testid="mcp-detail-repair"
-            title="{{ repair_action.description }}"
-            {% if not repair_action.enabled %}disabled aria-disabled="true"{% endif %}
-          >
-            {{ repair_action.label }}
-          </button>
-        </form>
-        <form class="inline-form" method="post" action="/mcp/toggle/{{ server.name }}" data-testid="mcp-detail-toggle-form">
-          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
-          <button class="secondary" type="submit" data-testid="mcp-detail-toggle">{{ "Disable for Chat" if server.enabled else "Enable for Chat" }}</button>
-        </form>
-        <form class="inline-form" method="post" action="/mcp/remove/{{ server.name }}" data-testid="mcp-detail-remove-form">
-          <button class="bad" type="submit" data-testid="mcp-detail-remove">Remove</button>
-        </form>
-      </div>
-
       {% if mcp_last_error %}
         <div class="error-card" style="margin-top: 18px;" data-testid="mcp-error-card">
           <strong>{{ mcp_last_error.title }}</strong>
@@ -142,7 +152,7 @@
           <p class="muted">No runtime repair is currently suggested for this MCP.</p>
         {% endif %}
         {% if server.dangerous_repair_enabled %}
-          <p class="muted" style="margin-top: 10px; color: var(--bad);">Unrestricted Agent + Shell is enabled for MCP repair fallback.</p>
+          <p class="muted" style="margin-top: 10px; color: var(--danger);">Unrestricted Agent + Shell is enabled for MCP repair fallback.</p>
         {% endif %}
         {% if server.repair_status_label %}
           <p class="muted" style="margin-top: 10px;">Last repair status: {{ server.repair_status_label }}{% if server.repair_requested_at %} at {{ server.repair_requested_at }}{% endif %}</p>
@@ -151,10 +161,14 @@
     </section>
 
     <section class="panel">
-      <h3>Edit MCP Settings</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Configuration</p>
+        <h3>Edit MCP Settings</h3>
+        <p class="muted">Keep the missing secrets and essential transport settings on top. Raw JSON remains available below for advanced fixes.</p>
+      </div>
       <form method="post" action="/mcp/{{ server.name }}" data-testid="mcp-detail-form">
         {% if env_fields %}
-          <div class="hero-callout">
+          <div class="highlight-panel">
             <strong>Fix Configuration</strong>
             <p class="muted">Use the simple fields below first. The raw JSON section stays available for advanced cases.</p>
           </div>
@@ -168,15 +182,21 @@
           </div>
         {% endif %}
 
-        <label>
-          Transport
-          <select name="transport" data-testid="mcp-detail-transport">
-            <option value="" {% if not server_form.transport %}selected{% endif %}>auto</option>
-            <option value="stdio" {% if server_form.transport == 'stdio' %}selected{% endif %}>stdio</option>
-            <option value="sse" {% if server_form.transport == 'sse' %}selected{% endif %}>sse</option>
-            <option value="streamableHttp" {% if server_form.transport == 'streamableHttp' %}selected{% endif %}>streamableHttp</option>
-          </select>
-        </label>
+        <div class="details-grid">
+          <label>
+            Transport
+            <select name="transport" data-testid="mcp-detail-transport">
+              <option value="" {% if not server_form.transport %}selected{% endif %}>auto</option>
+              <option value="stdio" {% if server_form.transport == 'stdio' %}selected{% endif %}>stdio</option>
+              <option value="sse" {% if server_form.transport == 'sse' %}selected{% endif %}>sse</option>
+              <option value="streamableHttp" {% if server_form.transport == 'streamableHttp' %}selected{% endif %}>streamableHttp</option>
+            </select>
+          </label>
+          <label>
+            URL
+            <input type="text" name="url" value="{{ server_form.url }}" data-testid="mcp-detail-url">
+          </label>
+        </div>
         <label>
           Command
           <input type="text" name="command" value="{{ server_form.command }}" data-testid="mcp-detail-command">
@@ -184,10 +204,6 @@
         <label>
           Args (comma-separated)
           <input type="text" name="args" value="{{ server_form.args }}" data-testid="mcp-detail-args">
-        </label>
-        <label>
-          URL
-          <input type="text" name="url" value="{{ server_form.url }}" data-testid="mcp-detail-url">
         </label>
         <label>
           Env JSON
@@ -217,6 +233,7 @@
     <section class="panel">
       <div class="split-header">
         <div>
+          <p class="eyebrow">Practical Validation</p>
           <h3 style="margin: 0;">MCP Test Chat</h3>
           <p class="muted">Practical validation with only this MCP loaded into the runtime.</p>
         </div>
@@ -256,7 +273,11 @@
     </section>
 
     <section class="panel">
-      <h3>MCP Logs</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Diagnostics</p>
+        <h3>MCP Logs</h3>
+        <p class="muted">Keep installation, runtime, and repair output readable without sending the admin straight into raw terminal output.</p>
+      </div>
       <div class="card">
         <header><strong>Install directory</strong></header>
         <div class="mono">{{ server.install_dir or "Not tracked" }}</div>

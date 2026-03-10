@@ -6,6 +6,7 @@
     <section class="panel">
       <div class="split-header">
         <div>
+          <p class="eyebrow">Primary Flow</p>
           <h3 style="margin: 0;">MCP Search</h3>
           <p class="muted">Inspect a GitHub repository, install it, test it, then enable it for the main chat runtime.</p>
         </div>
@@ -16,6 +17,11 @@
         {% else %}
           <span class="pill muted">Agent not tested yet</span>
         {% endif %}
+      </div>
+
+      <div class="highlight-panel" style="margin-bottom: 16px;">
+        <strong>Git URL to working MCP</strong>
+        <p class="muted">This is the main automation path for non-technical users: inspect, install, test, then enable.</p>
       </div>
 
       <form method="post" action="/mcp/analyze" data-testid="mcp-search-form">
@@ -153,7 +159,11 @@
     </section>
 
     <section class="panel">
-      <h3>Register MCP Manually</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Advanced Path</p>
+        <h3>Register MCP Manually</h3>
+        <p class="muted">Use this only when repository inspection is not enough or when you already know the exact MCP command and transport.</p>
+      </div>
       <form method="post" action="/mcp/add" data-testid="mcp-manual-form">
         <label>
           Name
@@ -202,6 +212,7 @@
   <section class="panel" style="margin-top: 22px;">
     <div class="split-header">
       <div>
+        <p class="eyebrow">Registry</p>
         <h3 style="margin: 0;">Installed MCP Servers</h3>
         <p class="muted">Registry view with edit, test, enable, disable, and remove actions.</p>
       </div>

@@ -1,8 +1,9 @@
 <div align="center">
-  <img src="nanobot/gui/assets/branding/nanobot-webgui-banner.png" alt="nanobot-webgui" width="920">
   <h1>nanobot-webgui</h1>
+  <p><strong>Release 0.2.0</strong></p>
   <p>Production-focused web GUI for <a href="https://github.com/HKUDS/nanobot">HKUDS/nanobot</a>.</p>
   <p>
+    <img src="https://img.shields.io/badge/release-0.2.0-f59e0b" alt="Release 0.2.0">
     <a href="https://github.com/HKUDS/nanobot"><img src="https://img.shields.io/badge/upstream-HKUDS%2Fnanobot-c4632c" alt="Upstream"></a>
     <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">
     <img src="https://img.shields.io/badge/gui-FastAPI%20%2B%20Jinja2%20%2B%20HTMX-2c7a5a" alt="GUI stack">
@@ -334,7 +335,7 @@ This is intentionally dangerous and should only be used in trusted self-hosted e
 - [x] single-chat runtime
 - [x] memory editor and markdown preview
 - [x] logs and validation
-- [x] static branding banner linked in the GUI
+- [x] text-first WebGUI branding and updated dashboard shell
 - [x] Docker service for the GUI
 - [x] production deployment notes
 

@@ -2,13 +2,12 @@
 {% block body %}
   <div class="panel-grid two">
     <section class="panel">
-      <div class="split-header">
-        <div>
-          <h3 style="margin: 0;">Memory Workspace</h3>
-          <p class="muted">Edit the Markdown documents that shape Nanobot memory, instructions, and project context.</p>
-        </div>
-        <span class="pill">{{ active_document.group }}</span>
+      <div class="section-intro">
+        <p class="eyebrow">Memory Workspace</p>
+        <h3>Document Switcher</h3>
+        <p class="muted">Edit the Markdown documents that shape Nanobot memory, instructions, and project context.</p>
       </div>
+      <span class="pill">{{ active_document.group }}</span>
 
       <div class="doc-switcher">
         {% for group in document_groups %}
@@ -24,7 +23,7 @@
         {% endfor %}
       </div>
 
-      <div class="card" style="margin-top: 18px;">
+      <div class="subtle-panel" style="margin-top: 18px;">
         <header><strong>{{ active_document.label }}</strong></header>
         <p class="muted">{{ active_document.description }}</p>
         <div class="mono">{{ active_document.path }}</div>
@@ -34,11 +33,10 @@
     </section>
 
     <section class="panel">
-      <div class="split-header">
-        <div>
-          <h3 style="margin: 0;">Editor</h3>
-          <p class="muted">Use this for fast edits. The preview updates after save.</p>
-        </div>
+      <div class="section-intro">
+        <p class="eyebrow">Editing</p>
+        <h3>Editor</h3>
+        <p class="muted">Use this for fast edits. The preview updates after save.</p>
       </div>
 
       <form method="post" action="/memory" data-testid="memory-form">
@@ -65,14 +63,20 @@
 
   <div class="panel-grid two" style="margin-top: 22px;">
     <section class="panel" data-testid="memory-preview-panel">
-      <h3>Preview</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Rendered Output</p>
+        <h3>Preview</h3>
+      </div>
       <div class="markdown-preview">
         {{ markdown_preview | safe }}
       </div>
     </section>
 
     <section class="panel">
-      <h3>Markdown Help</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Syntax Guide</p>
+        <h3>Markdown Help</h3>
+      </div>
       <ul class="markdown-help">
         <li>Use <span class="mono"># Heading</span> for titles and <span class="mono">##</span> for sections.</li>
         <li>Use <span class="mono">- item</span> for lists and <span class="mono">`inline code`</span> for commands or paths.</li>

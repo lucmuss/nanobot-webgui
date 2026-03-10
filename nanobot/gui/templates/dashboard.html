@@ -1,7 +1,44 @@
 {% extends "base.html" %}
 {% block body %}
-  <section class="metrics">
-    {% for metric in metrics %}
+  <div class="page-stack">
+  <section class="system-info" data-testid="dashboard-system-info">
+    <div class="split-header">
+      <div>
+        <p class="eyebrow">System Info</p>
+        <h3>Instance Overview</h3>
+      </div>
+      <span class="pill {% if setup_complete %}good{% else %}muted{% endif %}">
+        {{ "Setup complete" if setup_complete else "Setup in progress" }}
+      </span>
+    </div>
+    <div class="system-info-grid">
+      <div>
+        <strong>Workspace</strong>
+        <span class="mono">{{ workspace_path }}</span>
+      </div>
+      <div>
+        <strong>Config File</strong>
+        <span class="mono">{{ config_path }}</span>
+      </div>
+      <div>
+        <strong>Project</strong>
+        <a href="{{ upstream_repo_url }}" target="_blank" rel="noreferrer">HKUDS/nanobot</a>
+      </div>
+      <div>
+        <strong>WebGUI</strong>
+        <a href="{{ project_repo_url }}" target="_blank" rel="noreferrer">nanobot-webgui</a>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-intro">
+      <p class="eyebrow">Control Center</p>
+      <h3>Core Runtime Overview</h3>
+      <p class="muted">The first row keeps the primary system state visible: runtime, provider, agent, and MCP readiness.</p>
+    </div>
+    <section class="metrics priority-metrics">
+    {% for metric in metrics[:4] %}
       {% if metric.href %}
         <a class="metric-link" href="{{ metric.href }}" data-testid="dashboard-metric-link-{{ metric.label|lower|replace(' ', '-') }}">
           <article class="metric interactive" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
@@ -18,9 +55,31 @@
         </article>
       {% endif %}
     {% endfor %}
+    </section>
+    {% if metrics|length > 4 %}
+      <section class="metrics secondary-metrics" style="margin-top: 14px;">
+        {% for metric in metrics[4:] %}
+          {% if metric.href %}
+            <a class="metric-link" href="{{ metric.href }}" data-testid="dashboard-metric-link-{{ metric.label|lower|replace(' ', '-') }}">
+              <article class="metric interactive" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
+                <span class="muted">{{ metric.label }}</span>
+                <strong>{{ metric.value }}</strong>
+                {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
+              </article>
+            </a>
+          {% else %}
+            <article class="metric" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
+              <span class="muted">{{ metric.label }}</span>
+              <strong>{{ metric.value }}</strong>
+              {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
+            </article>
+          {% endif %}
+        {% endfor %}
+      </section>
+    {% endif %}
   </section>
 
-  <div class="panel-grid two" style="margin-top: 22px;">
+  <div class="panel-grid two" style="margin-top: 24px;">
     <section class="panel">
       <div class="split-header">
         <div>
@@ -42,7 +101,7 @@
         {% endfor %}
       </div>
 
-      <div class="hero-callout" style="margin-top: 16px;" data-testid="dashboard-next-step">
+      <div class="highlight-panel" style="margin-top: 16px;" data-testid="dashboard-next-step">
         <strong>Next step: {{ next_step.label }}</strong>
         <p class="muted">{{ next_step.description }}</p>
         <a class="button secondary" href="{{ next_step.href }}" data-testid="dashboard-next-step-action">{{ next_step.action_label }}</a>
@@ -78,7 +137,7 @@
     </section>
   </div>
 
-  <section class="panel" style="margin-top: 22px;">
+  <section class="panel" style="margin-top: 24px;">
     <div class="split-header">
       <div>
         <h3 style="margin: 0;">Readiness</h3>
@@ -102,12 +161,12 @@
     </div>
   </section>
 
-  <div class="panel-grid two" style="margin-top: 22px;">
+  <div class="panel-grid two" style="margin-top: 24px;">
     <section class="panel">
       <div class="split-header">
         <div>
           <h3 style="margin: 0;">Quick Actions</h3>
-          <p class="muted">Shortcuts for the most common admin tasks.</p>
+          <p class="muted">Use this block for the most common admin actions, then glance at the runtime cards below.</p>
         </div>
       </div>
       <div class="quick-actions">
@@ -141,7 +200,11 @@
     </section>
 
     <section class="panel">
-      <h3>Recent Activity</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Recent Signals</p>
+        <h3>Recent Activity</h3>
+        <p class="muted">Keep the last useful outcome, last MCP status, and most recent actionable error in one place.</p>
+      </div>
       <div class="card-list">
         <article class="card">
           <header><strong>Last Successful Chat</strong></header>
@@ -192,12 +255,12 @@
     </section>
   </div>
 
-  <div class="panel-grid two" style="margin-top: 22px;">
+  <div class="panel-grid two" style="margin-top: 24px;">
     <section class="panel">
       <div class="split-header">
         <div>
           <h3 style="margin: 0;">MCP Discovery</h3>
-          <p class="muted">Paste a GitHub repository and let Nanobot inspect the repository before installation.</p>
+          <p class="muted">Paste a GitHub repository and let Nanobot inspect the repository before installation. This is the main automation entry point.</p>
         </div>
         <a class="button secondary" href="/mcp">Open MCP Page</a>
       </div>
@@ -214,7 +277,11 @@
     </section>
 
     <section class="panel">
-      <h3>MCP Registry</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Registry</p>
+        <h3>MCP Registry</h3>
+        <p class="muted">Installed servers stay visible here so the dashboard doubles as an overview, not only a wizard landing page.</p>
+      </div>
       <div class="card-list">
         {% for server in installed_servers %}
           <article class="card" data-testid="dashboard-mcp-card-{{ server.name }}">
@@ -244,5 +311,6 @@
         {% endfor %}
       </div>
     </section>
+  </div>
   </div>
 {% endblock %}

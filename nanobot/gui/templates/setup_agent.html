@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block body %}
+  <div class="page-stack">
+    <div class="section-intro">
+      <p class="eyebrow">Setup</p>
+      <h3>Agent Configuration</h3>
+      <p class="muted">Keep the runtime defaults obvious, highlight what is required, and hide tuning until the instance is already working.</p>
+    </div>
+
   {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
 
   <form method="post" action="/setup/agent" data-testid="agent-form">
@@ -146,4 +153,5 @@
       <button type="submit" name="action" value="finish" data-testid="agent-finish">Finish Setup</button>
     </div>
   </form>
+  </div>
 {% endblock %}

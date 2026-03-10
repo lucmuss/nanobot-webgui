@@ -4,6 +4,7 @@
     <section class="panel">
       <div class="split-header">
         <div>
+          <p class="eyebrow">Runtime Overview</p>
           <h3 style="margin: 0;">Runtime Status</h3>
           <p class="muted">Live summary of the GUI, gateway, and agent runtime.</p>
         </div>
@@ -29,7 +30,10 @@
     </section>
 
     <section class="panel">
-      <h3>Environment</h3>
+      <div class="section-intro">
+        <p class="eyebrow">Environment</p>
+        <h3>Environment</h3>
+      </div>
       <div class="card-list">
         <article class="card">
           <header><strong>Config path</strong></header>
@@ -52,7 +56,10 @@
   </div>
 
   <section class="panel" style="margin-top: 22px;">
-    <h3>Last Agent Check</h3>
+    <div class="section-intro">
+      <p class="eyebrow">Latest Probe</p>
+      <h3>Last Agent Check</h3>
+    </div>
     {% if agent_health %}
       <div class="details-grid">
         <article class="card">

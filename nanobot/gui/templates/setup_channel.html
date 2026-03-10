@@ -1,9 +1,27 @@
 {% extends "base.html" %}
 {% block body %}
+  <div class="page-stack">
+    <div class="section-intro">
+      <p class="eyebrow">Setup</p>
+      <h3>Channel Configuration</h3>
+      <p class="muted">Choose the first delivery channel, keep progress updates understandable, and only show channel-specific fields when they matter.</p>
+    </div>
+
   <div class="panel-grid two">
     <section class="panel">
-      <p class="muted">Step 2 of 3. Pick the primary channel you want to enable first.</p>
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Primary Channel</h3>
+          <p class="muted">Step 2 of 3. Pick the primary channel you want to enable first.</p>
+        </div>
+        <span class="pill">Messaging</span>
+      </div>
       <form method="post" action="/setup/channel" data-testid="channel-form">
+        <div class="hero-callout">
+          <strong>Required</strong>
+          <p class="muted">Select one channel first, then keep streaming options simple for the initial setup.</p>
+        </div>
+
         <label>
           Channel
           <select
@@ -41,8 +59,22 @@
     </section>
 
     <section class="panel">
-      <h3>Why This Is Simplified</h3>
-      <p class="muted">The wizard exposes only the highest-impact fields for the selected channel. Advanced channel-specific options can remain in the fuller management experience later.</p>
+      <div class="section-intro">
+        <p class="eyebrow">Guidance</p>
+        <h3>Why This Is Simplified</h3>
+        <p class="muted">The wizard exposes only the highest-impact fields for the selected channel. Advanced channel-specific options can remain in the fuller management experience later.</p>
+      </div>
+      <div class="card-list">
+        <article class="card">
+          <header><strong>Focused onboarding</strong></header>
+          <p class="muted">This step keeps only the channel that gets the first messages out. Additional channels can be tuned later.</p>
+        </article>
+        <article class="card">
+          <header><strong>Progress visibility</strong></header>
+          <p class="muted">Progress and tool hints can help while testing. If you want a quieter experience later, disable them from settings.</p>
+        </article>
+      </div>
     </section>
+  </div>
   </div>
 {% endblock %}

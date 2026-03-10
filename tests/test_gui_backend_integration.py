@@ -467,11 +467,11 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
     def fake_fetch(repo: str) -> dict[str, str]:
         calls.append(repo)
         return {
-            "tag_name": "v0.1.5",
-            "latest_version": "0.1.5",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.1.5",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.1.5",
-            "release_name": "v0.1.5",
+            "tag_name": "v0.2.1",
+            "latest_version": "0.2.1",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
+            "release_name": "v0.2.1",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         }
@@ -484,14 +484,14 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
         follow_redirects=True,
     )
     assert login_response.status_code == 200
-    assert "New version available: v0.1.5" in login_response.text
+    assert "New version available: v0.2.1" in login_response.text
     assert "View release notes" in login_response.text
     assert "Update now" in login_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     dashboard_response = client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert "New version available: v0.1.5" in dashboard_response.text
+    assert "New version available: v0.2.1" in dashboard_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     status = app.state.config_service.get_update_status()
@@ -514,14 +514,14 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     app.state.config_service.set_update_status(
         {
             "enabled": True,
-            "current_version": "0.1.4.post4",
-            "latest_version": "0.1.5",
-            "tag_name": "v0.1.5",
+            "current_version": "0.2.0",
+            "latest_version": "0.2.1",
+            "tag_name": "v0.2.1",
             "available": True,
             "checked_at": "2026-03-10T00:00:00+00:00",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.1.5",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.1.5",
-            "release_name": "v0.1.5",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
+            "release_name": "v0.2.1",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
             "repo": "lucmuss/nanobot-webgui",
@@ -541,11 +541,11 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     monkeypatch.setattr(
         "nanobot.gui.app._fetch_latest_release_info",
         lambda _repo: {
-            "tag_name": "v0.1.5",
-            "latest_version": "0.1.5",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.1.5",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.1.5",
-            "release_name": "v0.1.5",
+            "tag_name": "v0.2.1",
+            "latest_version": "0.2.1",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
+            "release_name": "v0.2.1",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         },
@@ -561,5 +561,5 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     update_response = client.post("/actions/update")
     assert update_response.status_code == 202
     assert "Updating GUI" in update_response.text
-    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.1.5")]
+    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.2.1")]
     assert app.state.config_service.get_update_status()["updating"] is True

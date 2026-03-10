@@ -1,8 +1,21 @@
 {% extends "base.html" %}
 {% block body %}
+  <div class="page-stack">
+    <div class="section-intro">
+      <p class="eyebrow">Setup</p>
+      <h3>Provider Configuration</h3>
+      <p class="muted">Keep the first-run path focused on provider, model, and credentials. Advanced endpoint settings stay collapsed unless they are needed.</p>
+    </div>
+
   <div class="panel-grid two">
     <section class="panel">
-      <p class="muted">Step 1 of 3. Choose the provider, model, and API details for this instance.</p>
+      <div class="split-header">
+        <div>
+          <h3 style="margin: 0;">Primary Instance Settings</h3>
+          <p class="muted">Step 1 of 3. Choose the provider, model, and API details for this instance.</p>
+        </div>
+        <span class="pill good">Required</span>
+      </div>
       {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
       <form method="post" action="/setup/provider" data-testid="provider-form">
         <div class="hero-callout">
@@ -51,8 +64,11 @@
     </section>
 
     <section class="panel">
-      <h3>Recommendation</h3>
-      <p class="muted">For the first test run, OpenRouter is usually the fastest path. Use `custom` when you want to point Nanobot at your own OpenAI-compatible endpoint.</p>
+      <div class="section-intro">
+        <p class="eyebrow">Guidance</p>
+        <h3>Recommendation</h3>
+        <p class="muted">For the first test run, OpenRouter is usually the fastest path. Use `custom` when you want to point Nanobot at your own OpenAI-compatible endpoint.</p>
+      </div>
       <div class="card-list">
         <article class="card">
           <header><strong>OpenRouter</strong></header>
@@ -68,5 +84,6 @@
         </article>
       </div>
     </section>
+  </div>
   </div>
 {% endblock %}
