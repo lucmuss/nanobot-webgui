@@ -24,6 +24,8 @@ This repository is intended to be published as a WebGUI-focused fork or distribu
 - Dashboard with readiness, health, setup progress, and next-step guidance
 - MCP inspect, install, test, enable/disable, remove, and detail editing
 - Community navigation with real marketplace, stacks, showcase, and stats data from `nanobot-community-hub`
+- Direct `Install from Community` flow for MCPs discovered through the Hub
+- Direct `Import Stack` flow for community stack presets
 - MCP detail pages can publish local MCP repositories into the Community Hub
 - Single-chat runtime with file upload, prompt templates, usage snapshot, and recent tool activity
 - Memory editor with preview, reset-to-template, and document switching
@@ -202,7 +204,7 @@ That service provides:
 
 - MCP marketplace discovery
 - MCP detail pages with community stats and recommended config
-- public MCP submission flow in the hub itself
+- admin-authenticated MCP, stack, and showcase submission flows in the hub
 - stack presets
 - basic showcase entries
 - anonymous telemetry ingest for MCP runtime outcomes
@@ -219,7 +221,15 @@ The running `ai-stack` wiring now uses:
 - public hub URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
 - the hub service uses the shared PostgreSQL instance from `apps-stack` over `apps-shared`
 - public GUI URL: `https://nanobot-gui.kolibri-kollektiv.eu`
+- service-to-service write auth via `NANOBOT_GUI_COMMUNITY_API_TOKEN` -> `NANOBOT_HUB_API_TOKEN`
 - GUI-side MCP publishing is controlled by the Community setting `Allow this GUI to publish MCP repository entries to the community hub`
+
+The community pages now support:
+
+- `Discover MCP` -> `Install from Community`
+- `MCP Stacks` -> `Import Stack`
+- `Showcase` -> `Import Setup` (imports the linked stack)
+- recommended config visibility on community MCP detail pages and matched local MCP detail pages
 
 For the Cloudflare tunnel, map:
 

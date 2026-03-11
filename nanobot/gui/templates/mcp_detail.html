@@ -146,7 +146,7 @@
             <a class="button secondary" href="/community/mcp/{{ community_item.slug }}">Open Community Detail</a>
           </div>
         </div>
-      {% elif community_preferences.allow_public_mcp_submissions %}
+      {% elif community_preferences.allow_public_mcp_submissions and community_write_enabled %}
         <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-publish-card">
           <header><strong>Publish to Community Hub</strong></header>
           {% if server.repo_url %}
@@ -181,7 +181,13 @@
       {% else %}
         <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-publish-disabled">
           <header><strong>Community Publishing</strong></header>
-          <p class="muted">Enable MCP publishing in Settings if you want this GUI to publish locally installed MCP repositories to the community hub.</p>
+          <p class="muted">
+            {% if not community_preferences.allow_public_mcp_submissions %}
+              Enable MCP publishing in Settings if you want this GUI to publish locally installed MCP repositories to the community hub.
+            {% else %}
+              Hub write access is not configured for this GUI instance. Add the admin API token before publishing directly from the GUI.
+            {% endif %}
+          </p>
           <div class="actions" style="margin-top: 14px;">
             <a class="button secondary" href="/settings">Open Settings</a>
           </div>

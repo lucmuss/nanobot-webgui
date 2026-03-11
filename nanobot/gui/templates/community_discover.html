@@ -49,7 +49,7 @@
         {{ "Publishing enabled" if community_preferences.allow_public_mcp_submissions else "Publishing disabled" }}
       </div>
     </div>
-    {% if community_preferences.allow_public_mcp_submissions %}
+    {% if community_preferences.allow_public_mcp_submissions and community_write_enabled %}
       <form method="post" action="/community/submit/mcp" class="form-columns" data-testid="community-submit-form">
         <label>
           Repository URL
@@ -76,7 +76,13 @@
         </div>
       </form>
     {% else %}
-      <p class="muted">Publishing from this GUI is currently disabled. Turn on the Community submission toggle in Settings first.</p>
+      <p class="muted">
+        {% if not community_preferences.allow_public_mcp_submissions %}
+          Publishing from this GUI is currently disabled. Turn on the Community submission toggle in Settings first.
+        {% else %}
+          Publishing is enabled in the GUI, but this instance has no admin write token configured for the Community Hub.
+        {% endif %}
+      </p>
       <div class="actions" style="margin-top: 14px;">
         <a class="button secondary" href="/settings">Open Settings</a>
       </div>
@@ -145,7 +151,9 @@
         </div>
         <div class="actions" style="margin-top: 16px;">
           <a class="button secondary" href="/community/mcp/{{ item.slug }}" data-testid="community-mcp-open-{{ item.slug }}">View Details</a>
-          <a class="button secondary" href="/mcp?q={{ item.repo_url }}">Open Install Flow</a>
+          <form method="post" action="/community/install/mcp/{{ item.slug }}">
+            <button type="submit" data-testid="community-mcp-install-{{ item.slug }}">Install from Community</button>
+          </form>
         </div>
       </article>
     {% else %}

@@ -25,6 +25,11 @@
         <strong>Example Prompt</strong>
         <span>{{ community_item.example_prompt }}</span>
       </div>
+      <div class="actions" style="margin-top: 16px;">
+        <form method="post" action="/community/import/stack/{{ community_item.slug }}">
+          <button type="submit" data-testid="community-stack-detail-import">Import Stack</button>
+        </form>
+      </div>
     </section>
   </div>
 
@@ -38,7 +43,9 @@
         <span>{{ entry.name }}</span>
         <div class="actions">
           <a class="button secondary" href="/community/mcp/{{ entry.slug }}">Open</a>
-          <a class="button secondary" href="/mcp?q={{ entry.repo_url }}">Install Flow</a>
+          <form method="post" action="/community/install/mcp/{{ entry.slug }}">
+            <button class="secondary" type="submit" data-testid="community-stack-install-{{ entry.slug }}">Install</button>
+          </form>
         </div>
       </div>
     {% endfor %}

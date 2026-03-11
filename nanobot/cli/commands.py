@@ -301,6 +301,11 @@ def gui(
         "--community-public-url",
         help="Optional public community hub URL shown in the GUI, for example https://nanobot-community-hub.kolibri-kollektiv.eu",
     ),
+    community_api_token: str | None = typer.Option(
+        None,
+        "--community-api-token",
+        help="Optional admin API token for authenticated hub write actions such as publish and moderated submissions.",
+    ),
     instance_name: str = typer.Option("nanobot-dev", "--instance-name", help="GUI instance label"),
 ):
     """Start the nanobot web GUI."""
@@ -324,6 +329,7 @@ def gui(
     repair_command_value = (repair_command or os.getenv("NANOBOT_GUI_REPAIR_COMMAND", "")).strip()
     community_api_url_value = (community_api_url or os.getenv("NANOBOT_GUI_COMMUNITY_API_URL", "")).strip()
     community_public_url_value = (community_public_url or os.getenv("NANOBOT_GUI_COMMUNITY_PUBLIC_URL", "")).strip()
+    community_api_token_value = (community_api_token or os.getenv("NANOBOT_GUI_COMMUNITY_API_TOKEN", "")).strip()
 
     if not restart_mode_value:
         restart_mode_value = "command" if restart_command_value else "disabled"
@@ -370,6 +376,7 @@ def gui(
         repair_command=repair_command_value or None,
         community_api_url=community_api_url_value or None,
         community_public_url=community_public_url_value or None,
+        community_api_token=community_api_token_value or None,
     )
     app_instance = create_gui_app(settings)
 

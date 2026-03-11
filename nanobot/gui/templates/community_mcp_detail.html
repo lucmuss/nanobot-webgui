@@ -18,7 +18,10 @@
         <div class="meta-pair"><strong>Recent Runs</strong><span>{{ community_item.recent_runs }}</span></div>
       </div>
       <div class="actions" style="margin-top: 16px;">
-        <a class="button secondary" href="/mcp?q={{ community_item.repo_url }}">Open Install Flow</a>
+        <form method="post" action="/community/install/mcp/{{ community_item.slug }}">
+          <button type="submit" data-testid="community-detail-install">Install from Community</button>
+        </form>
+        <a class="button secondary" href="/mcp?q={{ community_item.repo_url }}">Open Local Install Flow</a>
       </div>
     </section>
     <section class="panel">

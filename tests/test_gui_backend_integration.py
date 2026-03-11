@@ -15,7 +15,15 @@ PNG_1X1 = base64.b64decode(
 )
 
 
-def _make_client(tmp_path: Path, *, update_check_enabled: bool = False, update_mode: str = "disabled", update_command: str | None = None) -> tuple[TestClient, object]:
+def _make_client(
+    tmp_path: Path,
+    *,
+    update_check_enabled: bool = False,
+    update_mode: str = "disabled",
+    update_command: str | None = None,
+    community_api_url: str | None = None,
+    community_api_token: str | None = None,
+) -> tuple[TestClient, object]:
     config_path = tmp_path / "runtime" / "config.json"
     workspace = tmp_path / "workspace"
     app = create_gui_app(
@@ -29,6 +37,8 @@ def _make_client(tmp_path: Path, *, update_check_enabled: bool = False, update_m
             update_check_enabled=update_check_enabled,
             update_mode=update_mode,
             update_command=update_command,
+            community_api_url=community_api_url,
+            community_api_token=community_api_token,
         )
     )
     return TestClient(app), app
@@ -378,6 +388,143 @@ def test_gui_mcp_analyze_preview_shows_pipeline_metadata(tmp_path: Path):
     assert "Deterministic install pipeline" in response.text
     assert "Required runtimes" in response.text
     assert "Next step" in response.text
+
+
+def test_gui_community_detail_and_install_flow_persist_recommendations(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    _install_fixture_mcp_backend(app)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=True,
+    )
+
+    install_metrics: list[str] = []
+
+    async def fake_marketplace_detail(slug: str):
+        assert slug == "echo-mcp"
+        return {
+            "slug": "echo-mcp",
+            "name": "Echo MCP",
+            "repo_url": "https://github.com/example/echo-mcp",
+            "description": "Fixture-backed community MCP.",
+            "category": "Automation",
+            "language": "Python",
+            "install_method": "python",
+            "verified": True,
+            "success_rate": 0.98,
+            "active_instances": 42,
+            "avg_latency_ms": 1200,
+            "tools": ["echo_text"],
+            "tool_count": 1,
+            "known_issues": ["Requires Python runtime."],
+            "recommended_config": {
+                "transport": "stdio",
+                "timeout": 60,
+                "retries": 1,
+                "confidence_score": 0.93,
+                "based_on_instances": 20,
+            },
+        }
+
+    async def fake_mark_install(slug: str):
+        install_metrics.append(slug)
+        return {"ok": True}
+
+    app.state.community_service.marketplace_detail = fake_marketplace_detail  # type: ignore[method-assign]
+    app.state.community_service.mark_install = fake_mark_install  # type: ignore[method-assign]
+
+    detail = client.get("/community/mcp/echo-mcp")
+    assert detail.status_code == 200
+    assert "Recommended Config" in detail.text
+    assert "60 seconds" in detail.text
+    assert "Install from Community" in detail.text
+
+    install = client.post("/community/install/mcp/echo-mcp", follow_redirects=True)
+    assert install.status_code == 200
+    assert "MCP Detail" in install.text
+
+    config = app.state.config_service.load()
+    record = app.state.config_service.get_mcp_record("echo")
+    assert "echo" in config.tools.mcp_servers
+    assert record["community_slug"] == "echo-mcp"
+    assert record["enabled"] is False
+    assert install_metrics == ["echo-mcp"]
+
+
+def test_gui_community_stack_import_installs_and_enables_active_mcps(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    _install_fixture_mcp_backend(app)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=False,
+    )
+
+    install_metrics: list[str] = []
+    stack_metrics: list[str] = []
+
+    async def fake_stack_detail(slug: str):
+        assert slug == "community-dev-stack"
+        return {
+            "slug": "community-dev-stack",
+            "title": "Community Dev Stack",
+            "description": "Install one healthy MCP and one MCP that still needs configuration.",
+            "recommended_model": "moonshot/kimi-k2.5",
+            "items": [
+                {
+                    "slug": "echo-mcp",
+                    "name": "Echo MCP",
+                    "repo_url": "https://github.com/example/echo-mcp",
+                },
+                {
+                    "slug": "secret-mcp",
+                    "name": "Secret MCP",
+                    "repo_url": "https://github.com/example/secret-mcp",
+                },
+            ],
+        }
+
+    async def fake_mark_install(slug: str):
+        install_metrics.append(slug)
+        return {"ok": True}
+
+    async def fake_mark_stack_import(slug: str):
+        stack_metrics.append(slug)
+        return {"ok": True}
+
+    app.state.community_service.stack_detail = fake_stack_detail  # type: ignore[method-assign]
+    app.state.community_service.mark_install = fake_mark_install  # type: ignore[method-assign]
+    app.state.community_service.mark_stack_import = fake_mark_stack_import  # type: ignore[method-assign]
+
+    response = client.post("/community/import/stack/community-dev-stack", follow_redirects=True)
+    assert response.status_code == 200
+    assert "MCP" in response.text
+
+    echo_record = app.state.config_service.get_mcp_record("echo")
+    secret_record = app.state.config_service.get_mcp_record("secret")
+    assert echo_record["community_slug"] == "echo-mcp"
+    assert echo_record["enabled"] is True
+    assert secret_record["community_slug"] == "secret-mcp"
+    assert secret_record["enabled"] is False
+    assert install_metrics == ["echo-mcp", "secret-mcp"]
+    assert stack_metrics == ["community-dev-stack"]
 
 
 def test_gui_mcp_repair_route_dispatches_configured_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

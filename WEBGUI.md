@@ -89,6 +89,39 @@ The GUI settings page includes three community toggles:
 - `Share anonymous MCP runtime metrics`
 - `Allow this GUI to publish MCP repository entries to the community hub`
 
+The main community-backed user flows are now:
+
+- `Community -> Discover MCP -> Install from Community`
+- `Community -> MCP Stacks -> Import Stack`
+- `Community -> Showcase -> Import Setup`
+- local MCP detail -> `Publish to Community Hub`
+
+Recommended config from the Hub is shown in:
+
+- community MCP detail pages
+- local MCP detail pages when the local repository matches a Hub entry
+
+### Community write authentication
+
+Read-only community browsing only needs:
+
+- `NANOBOT_GUI_COMMUNITY_API_URL`
+- `NANOBOT_GUI_COMMUNITY_PUBLIC_URL`
+
+Publishing from the GUI needs an additional trusted service token:
+
+- `NANOBOT_GUI_COMMUNITY_API_TOKEN`
+
+That token must match the Hub-side:
+
+- `NANOBOT_HUB_API_TOKEN`
+
+The Hub itself also supports browser admin authentication:
+
+- first-run bootstrap: `/setup/admin`
+- later login: `/login`
+- moderation and controlled write flows: `/admin`
+
 With that publishing toggle enabled, users can:
 
 - submit a GitHub MCP repository directly from `Community -> Discover MCP`

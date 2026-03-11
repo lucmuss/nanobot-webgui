@@ -37,6 +37,9 @@
         </div>
         <div class="actions" style="margin-top: 16px;">
           <a class="button secondary" href="/community/stacks/{{ item.slug }}">View Stack</a>
+          <form method="post" action="/community/import/stack/{{ item.slug }}">
+            <button type="submit" data-testid="community-stack-import-{{ item.slug }}">Import Stack</button>
+          </form>
         </div>
       </article>
     {% else %}

@@ -10,7 +10,13 @@ import httpx
 class GUICommunityService:
     """Minimal async client for the external Nanobot community hub."""
 
-    def __init__(self, api_url: str | None = None, public_url: str | None = None, timeout_seconds: int = 8) -> None:
+    def __init__(
+        self,
+        api_url: str | None = None,
+        public_url: str | None = None,
+        timeout_seconds: int = 8,
+        api_token: str | None = None,
+    ) -> None:
         api = str(api_url or "").strip().rstrip("/")
         public = str(public_url or "").strip().rstrip("/")
         if not api and public:
@@ -18,11 +24,17 @@ class GUICommunityService:
         self.api_url = api
         self.public_url = public
         self.timeout_seconds = timeout_seconds
+        self.api_token = str(api_token or "").strip()
 
     @property
     def enabled(self) -> bool:
         """Return whether the client is configured."""
         return bool(self.api_url)
+
+    @property
+    def can_write(self) -> bool:
+        """Return whether authenticated write operations are configured."""
+        return bool(self.enabled and self.api_token)
 
     async def overview(self) -> dict[str, Any]:
         """Return the marketplace overview payload."""
@@ -69,13 +81,37 @@ class GUICommunityService:
 
     async def submit_mcp(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Submit one MCP repository to the community hub."""
-        if not self.enabled:
+        if not self.can_write:
             return {}
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            response = await client.post(f"{self.api_url}/submissions/mcp", json=payload)
+            response = await client.post(
+                f"{self.api_url}/submissions/mcp",
+                json=payload,
+                headers=self._write_headers(),
+            )
             response.raise_for_status()
             data = response.json()
             return data if isinstance(data, dict) else {}
+
+    async def mark_install(self, slug: str) -> dict[str, Any]:
+        """Record one community-driven MCP install."""
+        return await self._post_json(f"/marketplace/{slug}/installs")
+
+    async def mark_stack_import(self, slug: str) -> dict[str, Any]:
+        """Record one community stack import."""
+        return await self._post_json(f"/stacks/{slug}/imports")
+
+    async def submit_stack(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Submit one stack to the community hub."""
+        if not self.can_write:
+            return {}
+        return await self._post_json("/submissions/stack", json=payload, include_write_auth=True)
+
+    async def submit_showcase(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Submit one showcase entry to the community hub."""
+        if not self.can_write:
+            return {}
+        return await self._post_json("/submissions/showcase", json=payload, include_write_auth=True)
 
     async def _get_json(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Fetch one JSON payload from the community hub."""
@@ -86,3 +122,26 @@ class GUICommunityService:
             response.raise_for_status()
             data = response.json()
             return data if isinstance(data, dict) else {}
+
+    async def _post_json(
+        self,
+        path: str,
+        *,
+        json: dict[str, Any] | None = None,
+        include_write_auth: bool = False,
+    ) -> dict[str, Any]:
+        """Send one JSON POST request to the community hub."""
+        if not self.enabled:
+            return {}
+        headers = self._write_headers() if include_write_auth else {}
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            response = await client.post(f"{self.api_url}{path}", json=json or {}, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            return data if isinstance(data, dict) else {}
+
+    def _write_headers(self) -> dict[str, str]:
+        """Return the authorization headers for admin-only hub writes."""
+        if not self.api_token:
+            return {}
+        return {"Authorization": f"Bearer {self.api_token}"}

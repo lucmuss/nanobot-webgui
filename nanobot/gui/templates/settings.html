@@ -75,6 +75,14 @@
               <strong>Public Hub URL</strong>
               <span class="mono">{{ settings_meta.community_public_url or "Not configured" }}</span>
             </div>
+            <div class="meta-pair">
+              <strong>Read Access</strong>
+              <span>{{ "Configured" if settings_meta.community_enabled else "Disabled" }}</span>
+            </div>
+            <div class="meta-pair">
+              <strong>Write Access</strong>
+              <span>{{ "Configured" if settings_meta.community_write_enabled else "Disabled" }}</span>
+            </div>
           </div>
           <div class="compact-list">
             <label class="checkbox">

@@ -42,6 +42,14 @@
           <strong>Example Prompt</strong>
           <span>{{ item.example_prompt }}</span>
         </div>
+        {% if item.stack %}
+          <div class="actions" style="margin-top: 16px;">
+            <a class="button secondary" href="/community/stacks/{{ item.stack.slug }}">Open Stack</a>
+            <form method="post" action="/community/import/stack/{{ item.stack.slug }}">
+              <button type="submit" data-testid="community-showcase-import-{{ item.slug }}">Import Setup</button>
+            </form>
+          </div>
+        {% endif %}
       </article>
     {% else %}
       <article class="card">
