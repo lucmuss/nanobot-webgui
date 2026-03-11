@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block body %}
+{% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
+{% if community_item %}
+  <div class="panel-grid two">
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Stack</p>
+        <h3>{{ community_item.title }}</h3>
+        <p class="muted">{{ community_item.description }}</p>
+      </div>
+      <div class="details-grid compact">
+        <div class="meta-pair"><strong>Use Case</strong><span>{{ community_item.use_case }}</span></div>
+        <div class="meta-pair"><strong>Recommended Model</strong><span>{{ community_item.recommended_model }}</span></div>
+        <div class="meta-pair"><strong>Imports</strong><span>{{ community_item.imports_count }}</span></div>
+        <div class="meta-pair"><strong>Rating</strong><span>{{ community_item.rating }}</span></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Prompt</p>
+        <h3>Example workflow</h3>
+      </div>
+      <div class="meta-pair">
+        <strong>Example Prompt</strong>
+        <span>{{ community_item.example_prompt }}</span>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top: 22px;">
+    <div class="section-intro">
+      <p class="eyebrow">Included MCP Servers</p>
+      <h3>Stack contents</h3>
+    </div>
+    {% for entry in community_item["items"] %}
+      <div class="stat-line">
+        <span>{{ entry.name }}</span>
+        <div class="actions">
+          <a class="button secondary" href="/community/mcp/{{ entry.slug }}">Open</a>
+          <a class="button secondary" href="/mcp?q={{ entry.repo_url }}">Install Flow</a>
+        </div>
+      </div>
+    {% endfor %}
+  </section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block body %}
+{% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
+  <section class="panel">
+    <div class="section-intro">
+      <p class="eyebrow">Stacks</p>
+      <h3>Import proven MCP combinations</h3>
+      <p class="muted">These are working MCP bundles for concrete use cases such as coding reviews or research loops.</p>
+    </div>
+    <form method="get" action="/community/stacks" class="form-columns" data-testid="community-stacks-form">
+      <label>
+        Search
+        <input type="text" name="q" value="{{ query }}" placeholder="Search stack title or use case" data-testid="community-stacks-query">
+      </label>
+      <div class="actions" style="align-self: end;">
+        <button type="submit" data-testid="community-stacks-submit">Search</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card-list" style="margin-top: 22px;">
+    {% for item in community_items %}
+      <article class="card" data-testid="community-stack-card-{{ item.slug }}">
+        <header>
+          <strong>{{ item.title }}</strong>
+          <span class="pill good">{{ item.rating }}</span>
+        </header>
+        <p class="muted">{{ item.description }}</p>
+        <div class="details-grid compact">
+          <div class="meta-pair"><strong>Imports</strong><span>{{ item.imports_count }}</span></div>
+          <div class="meta-pair"><strong>Recommended Model</strong><span>{{ item.recommended_model }}</span></div>
+        </div>
+        <div class="stack-list" style="margin-top: 14px;">
+          {% for entry in item["items"] %}
+            <span class="pill">{{ entry.name }}</span>
+          {% endfor %}
+        </div>
+        <div class="actions" style="margin-top: 16px;">
+          <a class="button secondary" href="/community/stacks/{{ item.slug }}">View Stack</a>
+        </div>
+      </article>
+    {% else %}
+      <article class="card">
+        <strong>No stacks matched this search.</strong>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

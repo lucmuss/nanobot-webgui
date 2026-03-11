@@ -49,6 +49,7 @@ The repository ships with a basic compose file that exposes:
 
 - `18790` for `nanobot-gateway`
 - `18791` for `nanobot-gui`
+- `18811` for `nanobot-community-hub`
 
 Start:
 
@@ -67,7 +68,51 @@ Logs:
 ```bash
 docker compose logs -f nanobot-gui
 docker compose logs -f nanobot-gateway
+docker compose logs -f nanobot-community-hub
 ```
+
+## Community Hub Integration
+
+The GUI can now consume real community data from a separate FastAPI/Jinja2/HTMX service called `nanobot-community-hub`.
+
+In the current `ai-stack` deployment, the intended wiring is:
+
+- GUI internal community API: `http://nanobot-community-hub:18811/api/v1`
+- GUI public URL: `https://nanobot-gui.kolibri-kollektiv.eu`
+- Hub public URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
+- Hub database: shared PostgreSQL from `apps-stack`, reachable as `postgres:5432` on `apps-shared`
+
+The GUI settings page includes three community toggles:
+
+- `Receive community recommendations`
+- `Show community marketplace stats`
+- `Share anonymous MCP runtime metrics`
+- `Allow this GUI to publish MCP repository entries to the community hub`
+
+With that publishing toggle enabled, users can:
+
+- submit a GitHub MCP repository directly from `Community -> Discover MCP`
+- publish a locally installed MCP from its MCP detail page
+
+Telemetry is intentionally limited to technical MCP runtime fields such as:
+
+- MCP slug
+- success / error code
+- transport
+- timeout bucket
+- retries
+- Nanobot version
+
+It must not send prompts, local paths, API keys, or chat contents.
+
+### Cloudflare Tunnel Mapping
+
+If you use the existing `cloudflared` service in `ai-stack`, create these public hostname mappings in the Cloudflare dashboard:
+
+- `nanobot-gui.kolibri-kollektiv.eu` -> `http://host.docker.internal:18791`
+- `nanobot-community-hub.kolibri-kollektiv.eu` -> `http://host.docker.internal:18811`
+
+That is enough for this stack because the services already publish fixed local ports and the Cloudflare tunnel container can reach `host.docker.internal`.
 
 Important:
 

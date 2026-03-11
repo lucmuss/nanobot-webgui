@@ -19,8 +19,12 @@ fi
 
 docker run --rm \
   --entrypoint bash \
+  --add-host host.docker.internal:host-gateway \
   -e PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers \
   -e NANOBOT_GUI_E2E_BROWSERS="${NANOBOT_GUI_E2E_BROWSERS:-chromium}" \
+  -e NANOBOT_GUI_COMMUNITY_API_URL="${NANOBOT_GUI_COMMUNITY_API_URL:-}" \
+  -e NANOBOT_GUI_COMMUNITY_PUBLIC_URL="${NANOBOT_GUI_COMMUNITY_PUBLIC_URL:-}" \
+  -e NANOBOT_GUI_PUBLIC_URL="${NANOBOT_GUI_PUBLIC_URL:-}" \
   -v "${REPO_ROOT}:/app" \
   -w /app \
   "${IMAGE}" \

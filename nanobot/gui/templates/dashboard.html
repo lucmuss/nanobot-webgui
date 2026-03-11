@@ -28,6 +28,12 @@
         <strong>WebGUI</strong>
         <a href="{{ project_repo_url }}" target="_blank" rel="noreferrer">nanobot-webgui</a>
       </div>
+      {% if public_url %}
+        <div>
+          <strong>Instance URL</strong>
+          <a href="{{ public_url }}" target="_blank" rel="noreferrer">{{ public_url }}</a>
+        </div>
+      {% endif %}
     </div>
   </section>
 
@@ -196,6 +202,18 @@
           <p class="muted">{{ active_memory_document.description }}</p>
           <a class="button secondary" href="/memory?doc={{ active_memory_document.key }}">Open Memory</a>
         </article>
+        {% if community_preferences.show_marketplace_stats %}
+          <article class="card" data-testid="dashboard-community-card">
+            <header><strong>Community Hub</strong></header>
+            {% if community_overview %}
+              <div>{{ community_overview.registry_count }} tracked MCPs</div>
+              <p class="muted">{{ community_overview.active_instances }} active instances · {{ community_overview.runs_today }} runs today</p>
+              <a class="button secondary" href="/community/discover">Open Marketplace</a>
+            {% else %}
+              <p class="muted">Community stats are currently unavailable or disabled.</p>
+            {% endif %}
+          </article>
+        {% endif %}
       </div>
     </section>
 

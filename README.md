@@ -23,6 +23,8 @@ This repository is intended to be published as a WebGUI-focused fork or distribu
 - Guided setup wizard for provider, channel, and agent defaults
 - Dashboard with readiness, health, setup progress, and next-step guidance
 - MCP inspect, install, test, enable/disable, remove, and detail editing
+- Community navigation with real marketplace, stacks, showcase, and stats data from `nanobot-community-hub`
+- MCP detail pages can publish local MCP repositories into the Community Hub
 - Single-chat runtime with file upload, prompt templates, usage snapshot, and recent tool activity
 - Memory editor with preview, reset-to-template, and document switching
 - Runtime logs, validation checks, profile editing, and restart controls
@@ -178,6 +180,7 @@ docker compose up -d --build nanobot-gateway nanobot-gui
 ### Default ports
 - `18790`: gateway
 - `18791`: WebGUI
+- `18811`: Community Hub
 
 ### Persistent state
 The default compose file mounts:
@@ -190,6 +193,40 @@ That keeps:
 - uploaded avatars
 - GUI state and logs
 - MCP installs managed by the WebGUI
+
+## Community Hub
+
+The WebGUI can now talk to a separate community backend called `nanobot-community-hub`.
+
+That service provides:
+
+- MCP marketplace discovery
+- MCP detail pages with community stats and recommended config
+- public MCP submission flow in the hub itself
+- stack presets
+- basic showcase entries
+- anonymous telemetry ingest for MCP runtime outcomes
+
+Recommended local deployment split in this environment:
+
+- GUI: `/srv/projects/agents/nanobot-dev-src`
+- Community Hub: `/srv/projects/services/nanobot-hub`
+- Stack: `/srv/docker/ai-stack/docker-compose.yml`
+
+The running `ai-stack` wiring now uses:
+
+- internal API URL: `http://nanobot-community-hub:18811/api/v1`
+- public hub URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
+- the hub service uses the shared PostgreSQL instance from `apps-stack` over `apps-shared`
+- public GUI URL: `https://nanobot-gui.kolibri-kollektiv.eu`
+- GUI-side MCP publishing is controlled by the Community setting `Allow this GUI to publish MCP repository entries to the community hub`
+
+For the Cloudflare tunnel, map:
+
+- `nanobot-gui.kolibri-kollektiv.eu` -> `http://host.docker.internal:18791`
+- `nanobot-community-hub.kolibri-kollektiv.eu` -> `http://host.docker.internal:18811`
+
+This keeps the GUI and community backend on separate services while still letting the GUI use real API calls to the hub.
 
 ## Production Notes
 

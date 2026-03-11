@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block body %}
+{% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
+{% if community_item %}
+  <div class="panel-grid two">
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Overview</p>
+        <h3>{{ community_item.name }}</h3>
+        <p class="muted">{{ community_item.description }}</p>
+      </div>
+      <div class="details-grid compact">
+        <div class="meta-pair"><strong>Repository</strong><span class="mono">{{ community_item.repo_url }}</span></div>
+        <div class="meta-pair"><strong>Install Method</strong><span>{{ community_item.install_method }}</span></div>
+        <div class="meta-pair"><strong>Active Instances</strong><span>{{ community_item.active_instances }}</span></div>
+        <div class="meta-pair"><strong>Success Rate</strong><span>{{ "%.0f"|format(community_item.success_rate * 100) }}%</span></div>
+        <div class="meta-pair"><strong>Average Latency</strong><span>{{ community_item.avg_latency_ms }} ms</span></div>
+        <div class="meta-pair"><strong>Recent Runs</strong><span>{{ community_item.recent_runs }}</span></div>
+      </div>
+      <div class="actions" style="margin-top: 16px;">
+        <a class="button secondary" href="/mcp?q={{ community_item.repo_url }}">Open Install Flow</a>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Recommended Config</p>
+        <h3>Community-backed defaults</h3>
+      </div>
+      {% if community_item.recommended_config %}
+        <div class="details-grid compact">
+          <div class="meta-pair"><strong>Transport</strong><span>{{ community_item.recommended_config.transport }}</span></div>
+          <div class="meta-pair"><strong>Timeout</strong><span>{{ community_item.recommended_config.timeout }} seconds</span></div>
+          <div class="meta-pair"><strong>Retries</strong><span>{{ community_item.recommended_config.retries }}</span></div>
+          <div class="meta-pair"><strong>Confidence</strong><span>{{ "%.0f"|format(community_item.recommended_config.confidence_score * 100) }}%</span></div>
+          <div class="meta-pair"><strong>Evidence</strong><span>{{ community_item.recommended_config.based_on_instances }} instances</span></div>
+        </div>
+      {% else %}
+        <p class="muted">No recommended config is available yet.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="panel-grid two" style="margin-top: 22px;">
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Tools</p>
+        <h3>Known capabilities</h3>
+      </div>
+      <div class="stack-list">
+        {% for tool in community_item.tools %}
+          <span class="pill">{{ tool }}</span>
+        {% endfor %}
+      </div>
+    </section>
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Known Issues</p>
+        <h3>Common friction points</h3>
+      </div>
+      {% for issue in community_item.known_issues %}
+        <div class="stat-line">
+          <span>{{ issue }}</span>
+        </div>
+      {% else %}
+        <p class="muted">No common issues are tracked yet.</p>
+      {% endfor %}
+    </section>
+  </div>
+{% endif %}
+{% endblock %}

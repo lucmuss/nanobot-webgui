@@ -925,6 +925,13 @@
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
+      .metric-value {
+        margin-top: 10px;
+        font-size: 1.8rem;
+        font-weight: 700;
+        line-height: 1.1;
+      }
+
       .kpi-strip {
         display: grid;
         gap: 14px;
@@ -1086,6 +1093,7 @@
         <aside class="sidebar">
           <div class="sidebar-inner">
             <nav class="nav">
+              <p class="sidebar-label">Core</p>
               <a href="/dashboard" class="{% if nav_active == 'dashboard' %}active{% endif %}" data-testid="nav-dashboard">Dashboard</a>
               <a href="/setup/provider" class="{% if nav_active == 'provider' %}active{% endif %}" data-testid="nav-provider">Provider</a>
               <a href="/setup/channel" class="{% if nav_active == 'channel' %}active{% endif %}" data-testid="nav-channel">Channel</a>
@@ -1093,6 +1101,12 @@
               <a href="/mcp" class="{% if nav_active == 'mcp' %}active{% endif %}" data-testid="nav-mcp">MCP</a>
               <a href="/chat" class="{% if nav_active == 'chat' %}active{% endif %}" data-testid="nav-chat">Chat</a>
               <a href="/memory" class="{% if nav_active == 'memory' %}active{% endif %}" data-testid="nav-memory">Memory</a>
+              <p class="sidebar-label" style="margin-top: 10px;">Community</p>
+              <a href="/community/discover" class="{% if nav_active == 'community-discover' %}active{% endif %}" data-testid="nav-community-discover">Discover MCP</a>
+              <a href="/community/stacks" class="{% if nav_active == 'community-stacks' %}active{% endif %}" data-testid="nav-community-stacks">MCP Stacks</a>
+              <a href="/community/showcase" class="{% if nav_active == 'community-showcase' %}active{% endif %}" data-testid="nav-community-showcase">Showcase</a>
+              <a href="/community/stats" class="{% if nav_active == 'community-stats' %}active{% endif %}" data-testid="nav-community-stats">Community Stats</a>
+              <p class="sidebar-label" style="margin-top: 10px;">System</p>
               <a href="/settings" class="{% if nav_active == 'settings' %}active{% endif %}" data-testid="nav-settings">Settings</a>
               <a href="/profile" class="{% if nav_active == 'profile' %}active{% endif %}" data-testid="nav-profile">Profile</a>
               <a href="/logs" class="{% if nav_active == 'logs' %}active{% endif %}" data-testid="nav-logs">Logs</a>

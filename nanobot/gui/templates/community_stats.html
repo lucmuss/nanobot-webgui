@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block body %}
+{% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
+{% if community_overview %}
+  <section class="card-grid four">
+    <article class="card compact-card">
+      <strong>Registry</strong>
+      <div class="metric-value">{{ community_overview.registry_count }}</div>
+      <p class="muted">Tracked MCP servers</p>
+    </article>
+    <article class="card compact-card">
+      <strong>Verified</strong>
+      <div class="metric-value">{{ community_overview.verified_count }}</div>
+      <p class="muted">Verified entries</p>
+    </article>
+    <article class="card compact-card">
+      <strong>Active Instances</strong>
+      <div class="metric-value">{{ community_overview.active_instances }}</div>
+      <p class="muted">Across known community setups</p>
+    </article>
+    <article class="card compact-card">
+      <strong>Runs Today</strong>
+      <div class="metric-value">{{ community_overview.runs_today }}</div>
+      <p class="muted">Telemetry ingested today</p>
+    </article>
+  </section>
+
+  <section class="panel" style="margin-top: 22px;">
+    <div class="section-intro">
+      <p class="eyebrow">Top MCP Servers</p>
+      <h3>Most active entries right now</h3>
+    </div>
+    {% for item in community_overview.top_mcps %}
+      <div class="stat-line">
+        <div>
+          <strong>{{ item.name }}</strong>
+          <div class="muted">{{ item.active_instances }} active instances · {{ item.installs }} installs</div>
+        </div>
+        <a class="button secondary" href="/community/mcp/{{ item.slug }}">Open</a>
+      </div>
+    {% endfor %}
+  </section>
+{% endif %}
+{% endblock %}

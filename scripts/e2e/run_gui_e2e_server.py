@@ -444,8 +444,11 @@ def main() -> None:
         host=host,
         port=port,
         instance_name="nanobot-e2e",
+        public_url=os.getenv("NANOBOT_GUI_PUBLIC_URL", "").strip() or None,
         restart_mode="self",
         update_check_enabled=False,
+        community_api_url=os.getenv("NANOBOT_GUI_COMMUNITY_API_URL", "").strip() or None,
+        community_public_url=os.getenv("NANOBOT_GUI_COMMUNITY_PUBLIC_URL", "").strip() or None,
     )
     app = create_gui_app(settings)
     _install_e2e_harness(

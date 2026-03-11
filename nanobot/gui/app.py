@@ -29,6 +29,7 @@ from nanobot import __version__
 from nanobot.config.schema import MCPServerConfig
 from nanobot.gui.agent_service import GUIAgentService
 from nanobot.gui.auth import AdminUser, AuthService
+from nanobot.gui.community_service import GUICommunityService
 from nanobot.gui.config_service import GUIConfigService
 from nanobot.gui.error_utils import explain_error
 from nanobot.gui.mcp_service import GUIMCPService, _append_log
@@ -146,6 +147,7 @@ class GUISettings:
     host: str = "127.0.0.1"
     port: int = 18791
     instance_name: str = "nanobot-dev"
+    public_url: str | None = None
     gateway_health_url: str | None = None
     https_only_cookies: bool = False
     restart_mode: str = "disabled"
@@ -157,6 +159,9 @@ class GUISettings:
     update_command: str | None = None
     repair_mode: str = "disabled"
     repair_command: str | None = None
+    community_api_url: str | None = None
+    community_public_url: str | None = None
+    community_timeout_seconds: int = 8
 
 
 def create_gui_app(settings: GUISettings) -> FastAPI:
@@ -176,6 +181,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
     mcp_service = GUIMCPService(config_service, gui_logger)
     mcp_service.ai_plan_builder = agent_service.plan_mcp_install
     mcp_service.ai_repair_planner = agent_service.plan_mcp_repair
+    community_service = GUICommunityService(
+        api_url=settings.community_api_url,
+        public_url=settings.community_public_url,
+        timeout_seconds=settings.community_timeout_seconds,
+    )
 
     app = FastAPI(title="nanobot GUI", version=__version__)
     app.add_middleware(
@@ -192,6 +202,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
     app.state.auth_service = auth_service
     app.state.agent_service = agent_service
     app.state.mcp_service = mcp_service
+    app.state.community_service = community_service
     app.state.gui_logger = gui_logger
 
     async def run_agent_health_check() -> dict[str, Any]:
@@ -250,6 +261,54 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
     def clear_error() -> None:
         """Clear the stored GUI error after a successful action."""
         config_service.clear_last_error()
+
+    async def resolve_community_match(repo_url: str) -> dict[str, Any] | None:
+        """Resolve one repository against the configured community hub."""
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("receive_recommendations") or not community_service.enabled:
+            return None
+        try:
+            return await community_service.resolve_repository(repo_url)
+        except Exception:
+            gui_logger.exception("community_repo_resolve_failed repo=%s", repo_url)
+            return None
+
+    async def fetch_community_overview() -> dict[str, Any]:
+        """Load a compact community overview payload when enabled."""
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("show_marketplace_stats") or not community_service.enabled:
+            return {}
+        try:
+            return await community_service.overview()
+        except Exception:
+            gui_logger.exception("community_overview_failed")
+            return {}
+
+    async def send_community_telemetry(record: dict[str, Any]) -> None:
+        """Send one anonymous MCP runtime event to the community hub when enabled."""
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("share_anonymous_metrics") or not community_service.enabled:
+            return
+        community_slug = str(record.get("community_slug", "")).strip()
+        if not community_slug:
+            return
+        try:
+            await community_service.ingest_telemetry(
+                {
+                    "mcp_slug": community_slug,
+                    "version": str(record.get("version", "")),
+                    "success": str(record.get("status", "")).strip() == "active",
+                    "error_code": _community_error_code(str(record.get("last_error", "")).strip()),
+                    "latency_ms": 0,
+                    "transport": str(record.get("transport", "") or ""),
+                    "timeout_bucket": _community_timeout_bucket(record.get("tool_timeout")),
+                    "retries": 0,
+                    "instance_hash": settings.instance_name,
+                    "nanobot_version": __version__,
+                }
+            )
+        except Exception:
+            gui_logger.exception("community_telemetry_failed slug=%s", community_slug)
 
     def record_usage(
         *,
@@ -334,6 +393,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         *,
         config,
         server_name: str,
+        community_item: dict[str, Any] | None = None,
         mcp_test_history: list[dict[str, Any]] | None = None,
         error: str | None = None,
         status_code: int = 200,
@@ -352,6 +412,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             "recommended_recipe": str(card.get("repair_recipe", "")).strip()
             or (card.get("repair_available_recipes") or ["unrestricted_agent_shell" if unrestricted_enabled and card.get("last_error") else ""])[0],
         }
+        community_preferences = config_service.get_community_preferences()
         return _render(
             request,
             "mcp_detail.html",
@@ -380,6 +441,9 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 ],
                 "mcp_test_history": mcp_test_history or [],
                 "mcp_last_error": last_error,
+                "community_item": community_item or {},
+                "community_preferences": community_preferences,
+                "publish_form": _default_mcp_publish_form(card, user),
                 "repair_action": _get_repair_action(settings, repair_preview),
                 "repair_recipe_details": REPAIR_RECIPE_DETAILS,
                 "error": error,
@@ -1105,6 +1169,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             gateway_health=gateway_status,
             agent_health=agent_health,
         )
+        community_preferences = config_service.get_community_preferences()
+        community_overview = await fetch_community_overview()
         setup_progress = _build_setup_progress(
             config=config,
             agent_health=agent_health,
@@ -1168,9 +1234,12 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "next_step": next_step,
                 "validation_results": validation_results,
                 "activity_feed": _build_activity_feed(config_service, settings),
+                "community_overview": community_overview,
+                "community_preferences": community_preferences,
                 "quick_actions": [
                     {"label": "Open Chat", "href": "/chat"},
                     {"label": "Add MCP", "href": "/mcp"},
+                    {"label": "Discover MCP", "href": "/community/discover"},
                     {"label": "Save Agent", "href": "/setup/agent"},
                     {"label": "Open Validator", "href": "/settings"},
                     {"label": "Open Logs", "href": "/logs"},
@@ -1188,6 +1257,284 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         config = config_service.load()
         return render_mcp_page(request, user, config=config, query=q.strip())
+
+    @app.get("/community/discover", response_class=HTMLResponse)
+    async def community_discover_page(
+        request: Request,
+        q: str = Query(""),
+        category: str = Query(""),
+        sort: str = Query("trending"),
+    ):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        payload: dict[str, Any] = {}
+        error = ""
+        if community_service.enabled:
+            try:
+                payload = await community_service.marketplace(query=q.strip(), category=category.strip(), sort=sort.strip())
+            except Exception as exc:
+                gui_logger.exception("community_marketplace_failed")
+                error = str(exc)
+        else:
+            error = "Community hub is not configured for this GUI instance."
+
+        overview = await fetch_community_overview()
+        return _render(
+            request,
+            "community_discover.html",
+            {
+                "title": "Discover MCP",
+                "nav_active": "community-discover",
+                "user": user,
+                "query": q.strip(),
+                "category": category.strip(),
+                "sort": sort.strip() or "trending",
+                "community_items": payload.get("items", []),
+                "community_overview": overview,
+                "community_error": error,
+                "community_preferences": config_service.get_community_preferences(),
+                "submission_form": {
+                    "repo_url": q.strip() if q.strip().startswith("http") else "",
+                    "name": "",
+                    "description": "",
+                    "category": "",
+                    "tags": "",
+                },
+            },
+        )
+
+    @app.post("/community/submit/mcp")
+    async def community_submit_mcp(request: Request):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("allow_public_mcp_submissions"):
+            _set_flash(request, "Enable MCP publishing in Settings before submitting to the community hub.", level="error")
+            return RedirectResponse("/settings", status_code=303)
+        if not community_service.enabled:
+            _set_flash(request, "Community hub is not configured for this GUI instance.", level="error")
+            return RedirectResponse("/community/discover", status_code=303)
+
+        form = await request.form()
+        payload = {
+            "repo_url": str(form.get("repo_url", "")).strip(),
+            "name": str(form.get("name", "")).strip(),
+            "description": str(form.get("description", "")).strip(),
+            "category": str(form.get("category", "")).strip(),
+            "tags": _split_list(str(form.get("tags", "")).strip()),
+            "submitted_by": user.username,
+            "source_instance": settings.instance_name,
+            "source_public_url": settings.public_url or "",
+        }
+        try:
+            result = await community_service.submit_mcp(payload)
+        except Exception as exc:
+            gui_logger.exception("community_submit_failed repo=%s", payload["repo_url"])
+            _set_flash(request, f"Community submission failed: {exc}", level="error")
+            return RedirectResponse("/community/discover", status_code=303)
+
+        item = result.get("item") if isinstance(result.get("item"), dict) else {}
+        if item.get("slug"):
+            if result.get("created"):
+                _set_flash(request, f"Published '{item.get('name', item['slug'])}' to the Community Hub.")
+            else:
+                _set_flash(request, f"That repository is already tracked. Opened '{item.get('name', item['slug'])}'.")
+            return RedirectResponse(f"/community/mcp/{item['slug']}", status_code=303)
+
+        _set_flash(request, "Community submission finished, but no marketplace entry was returned.", level="error")
+        return RedirectResponse("/community/discover", status_code=303)
+
+    @app.get("/community/mcp/{slug}", response_class=HTMLResponse)
+    async def community_mcp_detail_page(request: Request, slug: str):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        if not community_service.enabled:
+            return _render(
+                request,
+                "community_mcp_detail.html",
+                {
+                    "title": "Community MCP",
+                    "nav_active": "community-discover",
+                    "user": user,
+                    "community_error": "Community hub is not configured for this GUI instance.",
+                    "community_item": {},
+                },
+                status_code=503,
+            )
+
+        try:
+            item = await community_service.marketplace_detail(slug)
+        except Exception as exc:
+            gui_logger.exception("community_marketplace_detail_failed slug=%s", slug)
+            return _render(
+                request,
+                "community_mcp_detail.html",
+                {
+                    "title": "Community MCP",
+                    "nav_active": "community-discover",
+                    "user": user,
+                    "community_error": str(exc),
+                    "community_item": {},
+                },
+                status_code=502,
+            )
+
+        return _render(
+            request,
+            "community_mcp_detail.html",
+            {
+                "title": item.get("name", slug),
+                "nav_active": "community-discover",
+                "user": user,
+                "community_error": "",
+                "community_item": item,
+            },
+        )
+
+    @app.get("/community/stacks", response_class=HTMLResponse)
+    async def community_stacks_page(request: Request, q: str = Query("")):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        payload: dict[str, Any] = {}
+        error = ""
+        if community_service.enabled:
+            try:
+                payload = await community_service.stacks(query=q.strip())
+            except Exception as exc:
+                gui_logger.exception("community_stacks_failed")
+                error = str(exc)
+        else:
+            error = "Community hub is not configured for this GUI instance."
+
+        return _render(
+            request,
+            "community_stacks.html",
+            {
+                "title": "MCP Stacks",
+                "nav_active": "community-stacks",
+                "user": user,
+                "query": q.strip(),
+                "community_items": payload.get("items", []),
+                "community_error": error,
+            },
+        )
+
+    @app.get("/community/stacks/{slug}", response_class=HTMLResponse)
+    async def community_stack_detail_page(request: Request, slug: str):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        if not community_service.enabled:
+            return _render(
+                request,
+                "community_stack_detail.html",
+                {
+                    "title": "Stack",
+                    "nav_active": "community-stacks",
+                    "user": user,
+                    "community_error": "Community hub is not configured for this GUI instance.",
+                    "community_item": {},
+                },
+                status_code=503,
+            )
+
+        try:
+            item = await community_service.stack_detail(slug)
+        except Exception as exc:
+            gui_logger.exception("community_stack_detail_failed slug=%s", slug)
+            return _render(
+                request,
+                "community_stack_detail.html",
+                {
+                    "title": "Stack",
+                    "nav_active": "community-stacks",
+                    "user": user,
+                    "community_error": str(exc),
+                    "community_item": {},
+                },
+                status_code=502,
+            )
+
+        return _render(
+            request,
+            "community_stack_detail.html",
+            {
+                "title": item.get("title", slug),
+                "nav_active": "community-stacks",
+                "user": user,
+                "community_error": "",
+                "community_item": item,
+            },
+        )
+
+    @app.get("/community/showcase", response_class=HTMLResponse)
+    async def community_showcase_page(
+        request: Request,
+        q: str = Query(""),
+        category: str = Query(""),
+    ):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        payload: dict[str, Any] = {}
+        error = ""
+        if community_service.enabled:
+            try:
+                payload = await community_service.showcase(query=q.strip(), category=category.strip())
+            except Exception as exc:
+                gui_logger.exception("community_showcase_failed")
+                error = str(exc)
+        else:
+            error = "Community hub is not configured for this GUI instance."
+
+        return _render(
+            request,
+            "community_showcase.html",
+            {
+                "title": "Showcase",
+                "nav_active": "community-showcase",
+                "user": user,
+                "query": q.strip(),
+                "category": category.strip(),
+                "community_items": payload.get("items", []),
+                "community_error": error,
+            },
+        )
+
+    @app.get("/community/stats", response_class=HTMLResponse)
+    async def community_stats_page(request: Request):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        overview = await fetch_community_overview()
+        error = ""
+        if not overview and community_service.enabled:
+            error = "Community stats are temporarily unavailable."
+        elif not community_service.enabled:
+            error = "Community hub is not configured for this GUI instance."
+
+        return _render(
+            request,
+            "community_stats.html",
+            {
+                "title": "Community Stats",
+                "nav_active": "community-stats",
+                "user": user,
+                "community_overview": overview,
+                "community_error": error,
+            },
+        )
 
     @app.post("/mcp/analyze", response_class=HTMLResponse)
     async def mcp_analyze(request: Request):
@@ -1214,6 +1561,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         try:
             preview = await mcp_service.analyze_repository(query, allow_ai_fallback=True)
+            preview["community_match"] = await resolve_community_match(str(preview.get("repo_url", query)))
         except ValueError as exc:
             store_error(str(exc), context="mcp")
             return render_mcp_page(
@@ -1265,6 +1613,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         try:
             record = await mcp_service.install_repository(query, allow_ai_fallback=True)
+            community_match = await resolve_community_match(str(record.get("repo_url", query)))
+            if community_match:
+                record["community_slug"] = community_match.get("slug", "")
+                record["community_match"] = community_match
+                config_service.set_mcp_record(record["server_name"], record)
         except ValueError as exc:
             config = config_service.load()
             store_error(str(exc), context="mcp")
@@ -1299,6 +1652,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             }
         )
         if record["status"] == "active":
+            await send_community_telemetry(record)
             clear_error()
             _set_flash(
                 request,
@@ -1411,6 +1765,13 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             _set_flash(request, str(exc), level="error")
             return RedirectResponse(next_url, status_code=303)
 
+        if not record.get("community_slug"):
+            community_match = await resolve_community_match(str(record.get("repo_url", "")))
+            if community_match:
+                record["community_slug"] = community_match.get("slug", "")
+                record["community_match"] = community_match
+                config_service.set_mcp_record(server_name, record)
+
         config_service.set_last_mcp_test(
             {
                 "server_name": server_name,
@@ -1420,6 +1781,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             }
         )
         if record["status"] == "active":
+            await send_community_telemetry(record)
             clear_error()
             _set_flash(
                 request,
@@ -1499,11 +1861,20 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         config = config_service.load()
         history = await agent_service.get_mcp_test_history(user, server_name)
+        record = config_service.get_mcp_record(server_name)
+        community_item: dict[str, Any] = {}
+        community_slug = str(record.get("community_slug", "")).strip()
+        if community_slug and community_service.enabled:
+            try:
+                community_item = await community_service.marketplace_detail(community_slug)
+            except Exception:
+                gui_logger.exception("community_marketplace_detail_failed slug=%s", community_slug)
         return render_mcp_detail_page(
             request,
             user,
             config=config,
             server_name=server_name,
+            community_item=community_item,
             mcp_test_history=history,
         )
 
@@ -1533,11 +1904,20 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             headers = _parse_json_object(headers_raw, field_name="Headers JSON")
         except ValueError as exc:
             history = await agent_service.get_mcp_test_history(user, server_name)
+            record = config_service.get_mcp_record(server_name)
+            community_item: dict[str, Any] = {}
+            community_slug = str(record.get("community_slug", "")).strip()
+            if community_slug and community_service.enabled:
+                try:
+                    community_item = await community_service.marketplace_detail(community_slug)
+                except Exception:
+                    gui_logger.exception("community_marketplace_detail_failed slug=%s", community_slug)
             return render_mcp_detail_page(
                 request,
                 user,
                 config=config,
                 server_name=server_name,
+                community_item=community_item,
                 mcp_test_history=history,
                 error=str(exc),
                 status_code=400,
@@ -1579,6 +1959,66 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         )
         agent_service.invalidate()
         _set_flash(request, f"MCP server '{server_name}' saved. Run the test before enabling it.")
+        return RedirectResponse(f"/mcp/{server_name}", status_code=303)
+
+    @app.post("/mcp/publish/{server_name}")
+    async def mcp_publish(request: Request, server_name: str):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("allow_public_mcp_submissions"):
+            _set_flash(request, "Enable MCP publishing in Settings before publishing to the Community Hub.", level="error")
+            return RedirectResponse("/settings", status_code=303)
+        if not community_service.enabled:
+            _set_flash(request, "Community hub is not configured for this GUI instance.", level="error")
+            return RedirectResponse(f"/mcp/{server_name}", status_code=303)
+
+        config = config_service.load()
+        server = config.tools.mcp_servers.get(server_name)
+        if server is None:
+            _set_flash(request, f"MCP server '{server_name}' was not found.", level="error")
+            return RedirectResponse("/mcp", status_code=303)
+
+        card = _build_mcp_server_card(server_name, server, config_service)
+        form = await request.form()
+        payload = _build_mcp_submission_payload(
+            server_name=server_name,
+            card=card,
+            form=form,
+            submitted_by=user.username,
+            source_instance=settings.instance_name,
+            source_public_url=settings.public_url or "",
+        )
+        if not payload.get("repo_url"):
+            _set_flash(request, "This MCP has no repository URL recorded yet, so it cannot be published to the Community Hub.", level="error")
+            return RedirectResponse(f"/mcp/{server_name}", status_code=303)
+        try:
+            result = await community_service.submit_mcp(payload)
+        except Exception as exc:
+            gui_logger.exception("mcp_publish_failed server=%s", server_name)
+            _set_flash(request, f"Community publish failed: {exc}", level="error")
+            return RedirectResponse(f"/mcp/{server_name}", status_code=303)
+
+        item = result.get("item") if isinstance(result.get("item"), dict) else {}
+        if item.get("slug"):
+            record = config_service.get_mcp_record(server_name)
+            config_service.set_mcp_record(
+                server_name,
+                {
+                    **record,
+                    "community_slug": item["slug"],
+                    "community_submission_status": "published" if result.get("created") else "duplicate",
+                    "community_submission_at": _utc_now(),
+                },
+            )
+            if result.get("created"):
+                _set_flash(request, f"Published '{item.get('name', item['slug'])}' to the Community Hub.")
+            else:
+                _set_flash(request, f"That MCP is already tracked as '{item.get('name', item['slug'])}'.")
+        else:
+            _set_flash(request, "Community publish finished, but the hub did not return a marketplace entry.", level="error")
         return RedirectResponse(f"/mcp/{server_name}", status_code=303)
 
     @app.post("/mcp/repair/{server_name}")
@@ -1928,6 +2368,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "exec_timeout": config.tools.exec.timeout,
                     "path_append": config.tools.exec.path_append,
                     "dangerous_repair_mode": config_service.is_unrestricted_agent_shell_enabled(),
+                    **config_service.get_community_preferences(),
                 },
                 "settings_meta": {
                     "config_path": str(settings.config_path),
@@ -1937,6 +2378,9 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "setup_complete": config_service.is_setup_complete(),
                     "repair_mode": settings.repair_mode,
                     "repair_command_configured": bool(str(settings.repair_command or "").strip()),
+                    "community_api_url": settings.community_api_url or "",
+                    "community_public_url": settings.community_public_url or "",
+                    "community_enabled": bool(community_service.enabled),
                 },
                 "validation_results": validation,
                 "next_validation_issue": _next_validation_issue(validation),
@@ -1962,6 +2406,10 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             config.tools.exec.timeout = _form_int(form.get("exec_timeout"), config.tools.exec.timeout)
             config.tools.exec.path_append = str(form.get("path_append", config.tools.exec.path_append)).strip()
             dangerous_repair_mode = bool(form.get("dangerous_repair_mode"))
+            share_anonymous_metrics = bool(form.get("share_anonymous_metrics"))
+            receive_recommendations = bool(form.get("receive_recommendations"))
+            show_marketplace_stats = bool(form.get("show_marketplace_stats"))
+            allow_public_mcp_submissions = bool(form.get("allow_public_mcp_submissions"))
         except ValueError as exc:
             validation = await _validate_setup(
                 config=config,
@@ -1986,6 +2434,10 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                         "exec_timeout": str(form.get("exec_timeout", config.tools.exec.timeout)),
                         "path_append": str(form.get("path_append", config.tools.exec.path_append)),
                         "dangerous_repair_mode": bool(form.get("dangerous_repair_mode")),
+                        "share_anonymous_metrics": bool(form.get("share_anonymous_metrics")),
+                        "receive_recommendations": bool(form.get("receive_recommendations")),
+                        "show_marketplace_stats": bool(form.get("show_marketplace_stats")),
+                        "allow_public_mcp_submissions": bool(form.get("allow_public_mcp_submissions")),
                     },
                     "settings_meta": {
                         "config_path": str(settings.config_path),
@@ -1995,6 +2447,9 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                         "setup_complete": config_service.is_setup_complete(),
                         "repair_mode": settings.repair_mode,
                         "repair_command_configured": bool(str(settings.repair_command or "").strip()),
+                        "community_api_url": settings.community_api_url or "",
+                        "community_public_url": settings.community_public_url or "",
+                        "community_enabled": bool(community_service.enabled),
                     },
                     "validation_results": validation,
                     "next_validation_issue": _next_validation_issue(validation),
@@ -2005,6 +2460,12 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         config_service.save(config)
         config_service.set_unrestricted_agent_shell_enabled(dangerous_repair_mode)
+        config_service.set_community_preferences(
+            share_anonymous_metrics=share_anonymous_metrics,
+            receive_recommendations=receive_recommendations,
+            show_marketplace_stats=show_marketplace_stats,
+            allow_public_mcp_submissions=allow_public_mcp_submissions,
+        )
         agent_service.invalidate()
         clear_error()
         _set_flash(request, "Settings saved.")
@@ -2197,6 +2658,7 @@ def _render(
         "branding_banner_url": "/media/branding/nanobot-webgui-banner.png" if config_service.branding_banner_path.exists() else "",
         "project_repo_url": "https://github.com/lucmuss/nanobot-webgui",
         "upstream_repo_url": "https://github.com/HKUDS/nanobot",
+        "public_url": settings.public_url or "",
         "flash": context.get("flash") or _pop_flash(request),
         "restart_action": _get_restart_action(settings),
         "update_status": update_status,
@@ -2437,6 +2899,106 @@ def _display_summary_text(value: Any) -> str:
     text = re.sub(r"</?[^>]+>", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def _default_mcp_publish_form(card: dict[str, Any], user: AdminUser) -> dict[str, str]:
+    """Build sensible defaults for publishing one local MCP entry to the hub."""
+    return {
+        "name": str(card.get("name", "")).strip(),
+        "description": str(card.get("summary", "")).strip() or "Community-submitted MCP server from a Nanobot instance.",
+        "category": _guess_community_category(card),
+        "tags": ", ".join(_guess_community_tags(card)),
+        "submitted_by": user.username,
+    }
+
+
+def _build_mcp_submission_payload(
+    *,
+    server_name: str,
+    card: dict[str, Any],
+    form,
+    submitted_by: str,
+    source_instance: str,
+    source_public_url: str,
+) -> dict[str, Any]:
+    """Build one bounded MCP submission payload for the community hub."""
+    name = str(form.get("name", "")).strip() or server_name
+    description = str(form.get("description", "")).strip() or str(card.get("summary", "")).strip()
+    category = str(form.get("category", "")).strip() or _guess_community_category(card)
+    tags = _split_list(str(form.get("tags", "")).strip()) or _guess_community_tags(card)
+    known_issues = []
+    if str(card.get("last_error", "")).strip():
+        known_issues.append(str(card.get("last_error", "")).strip())
+    return {
+        "repo_url": str(card.get("repo_url", "")).strip(),
+        "name": name,
+        "description": description or "Community-submitted MCP server from a Nanobot instance.",
+        "category": category,
+        "install_method": _guess_community_install_method(card),
+        "language": _guess_community_language(card),
+        "tags": tags,
+        "tools": [str(item) for item in card.get("tool_names", [])],
+        "known_issues": known_issues,
+        "submitted_by": submitted_by,
+        "source_instance": source_instance,
+        "source_public_url": source_public_url,
+        "repo_type": str(card.get("repo_type", "")).strip(),
+    }
+
+
+def _guess_community_category(card: dict[str, Any]) -> str:
+    """Infer a coarse community category from local MCP metadata."""
+    haystack = " ".join(
+        [
+            str(card.get("name", "")),
+            str(card.get("summary", "")),
+            *[str(item) for item in card.get("tool_names", [])],
+        ]
+    ).lower()
+    if any(token in haystack for token in ("github", "repo", "pull", "issue", "code", "devtools")):
+        return "Coding"
+    if any(token in haystack for token in ("search", "crawl", "extract", "browser", "doc", "context")):
+        return "Research"
+    return "Automation"
+
+
+def _guess_community_install_method(card: dict[str, Any]) -> str:
+    """Infer the install method used for one MCP record."""
+    repo_type = str(card.get("repo_type", "")).strip()
+    if repo_type:
+        return repo_type
+    transport = str(card.get("transport", "")).strip().lower()
+    if transport in {"sse", "streamablehttp"}:
+        return "remote"
+    return "unknown"
+
+
+def _guess_community_language(card: dict[str, Any]) -> str:
+    """Infer a coarse runtime/language label for the community hub."""
+    method = _guess_community_install_method(card).lower()
+    if method in {"npm", "workspace_package", "monorepo"}:
+        return "Node.js"
+    if method in {"python", "pip", "uv"}:
+        return "Python"
+    if method in {"remote", "http", "sse", "streamablehttp"}:
+        return "Remote"
+    if method == "docker":
+        return "Docker"
+    return "Unknown"
+
+
+def _guess_community_tags(card: dict[str, Any]) -> list[str]:
+    """Suggest a small tag list for a community submission."""
+    tags: list[str] = []
+    repo_type = str(card.get("repo_type", "")).strip()
+    if repo_type:
+        tags.append(repo_type)
+    for tool in [str(item).strip() for item in card.get("tool_names", [])]:
+        if tool and tool.lower() not in {tag.lower() for tag in tags}:
+            tags.append(tool)
+        if len(tags) >= 6:
+            break
+    return tags
 
 
 def _provider_has_credentials(config, provider_name: str | None) -> bool:
@@ -3431,6 +3993,39 @@ def _run_mcp_repair_command(
     )
     if result.returncode != 0:
         logger.error("mcp_repair_command_exit code=%s server=%s recipe=%s", result.returncode, server_name, recipe)
+
+
+def _community_error_code(raw_error: str) -> str:
+    """Reduce one MCP error down to a small telemetry-safe code."""
+    value = str(raw_error or "").strip().lower()
+    if not value:
+        return ""
+    if "timeout" in value:
+        return "timeout"
+    if "unauthorized" in value or "401" in value or "authentication" in value:
+        return "auth"
+    if "missing required environment variables" in value or "missing" in value:
+        return "missing_env"
+    if "enoent" in value or "not found" in value:
+        return "missing_runtime"
+    return "probe_failed"
+
+
+def _community_timeout_bucket(raw_timeout: Any) -> str:
+    """Bucket the configured tool timeout for anonymous telemetry."""
+    try:
+        timeout_value = int(raw_timeout or 0)
+    except (TypeError, ValueError):
+        timeout_value = 0
+    if timeout_value <= 0:
+        return ""
+    if timeout_value <= 30:
+        return "0-30"
+    if timeout_value <= 60:
+        return "31-60"
+    if timeout_value <= 120:
+        return "61-120"
+    return "120+"
 
 
 def _render_reconnect_page(*, title: str, message: str, redirect_url: str, status_code: int = 202) -> HTMLResponse:

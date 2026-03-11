@@ -63,6 +63,39 @@
           </div>
         </div>
 
+        <div class="card compact-card" style="margin-top: 16px;">
+          <header><strong>Community Integration</strong></header>
+          <p class="muted">These toggles control how this Nanobot instance talks to the external community hub.</p>
+          <div class="meta-grid" style="margin-top: 12px; margin-bottom: 12px;">
+            <div class="meta-pair">
+              <strong>Community API</strong>
+              <span class="mono">{{ settings_meta.community_api_url or "Not configured" }}</span>
+            </div>
+            <div class="meta-pair">
+              <strong>Public Hub URL</strong>
+              <span class="mono">{{ settings_meta.community_public_url or "Not configured" }}</span>
+            </div>
+          </div>
+          <div class="compact-list">
+            <label class="checkbox">
+              <input type="checkbox" name="receive_recommendations" {% if settings_form.receive_recommendations %}checked{% endif %} data-testid="settings-community-recommendations">
+              <span>Receive community recommendations and MCP metadata</span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" name="show_marketplace_stats" {% if settings_form.show_marketplace_stats %}checked{% endif %} data-testid="settings-community-stats">
+              <span>Show community marketplace stats in the dashboard and community pages</span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" name="share_anonymous_metrics" {% if settings_form.share_anonymous_metrics %}checked{% endif %} data-testid="settings-community-telemetry">
+              <span>Share anonymous MCP runtime metrics with the community hub</span>
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" name="allow_public_mcp_submissions" {% if settings_form.allow_public_mcp_submissions %}checked{% endif %} data-testid="settings-community-submit">
+              <span>Allow this GUI to publish MCP repository entries to the community hub</span>
+            </label>
+          </div>
+        </div>
+
         <details data-testid="settings-danger-zone" {% if not safe_mode and settings_form.dangerous_repair_mode %}open{% endif %}>
           <summary>Risky controls</summary>
           <div class="danger-callout" style="margin-top: 14px;">
@@ -129,11 +162,11 @@
       <p class="muted">A compact overview of where this GUI points and which runtime capabilities are currently wired in.</p>
     </div>
     <div class="system-info">
-      <div class="meta-grid">
-        <div class="meta-pair">
-          <strong>Config file</strong>
-          <span class="mono">{{ settings_meta.config_path }}</span>
-        </div>
+        <div class="meta-grid">
+          <div class="meta-pair">
+            <strong>Config file</strong>
+            <span class="mono">{{ settings_meta.config_path }}</span>
+          </div>
         <div class="meta-pair">
           <strong>Provider</strong>
           <span>{{ settings_meta.provider }}</span>
@@ -150,11 +183,15 @@
           <strong>Repair worker</strong>
           <span>{{ "Configured" if settings_meta.repair_command_configured else "Disabled" }}{% if settings_meta.repair_mode %} ({{ settings_meta.repair_mode }}){% endif %}</span>
         </div>
-        <div class="meta-pair">
-          <strong>Setup complete</strong>
-          <span>{{ "Yes" if settings_meta.setup_complete else "No" }}</span>
+          <div class="meta-pair">
+            <strong>Setup complete</strong>
+            <span>{{ "Yes" if settings_meta.setup_complete else "No" }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Community hub</strong>
+            <span>{{ "Configured" if settings_meta.community_enabled else "Disabled" }}</span>
+          </div>
         </div>
-      </div>
     </div>
     <div class="actions" style="margin-top: 14px;">
       <a class="button secondary" href="/profile">Profile</a>

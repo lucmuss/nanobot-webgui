@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block body %}
+{% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
+  <section class="panel">
+    <div class="section-intro">
+      <p class="eyebrow">Showcase</p>
+      <h3>See real Nanobot use cases</h3>
+      <p class="muted">The showcase stays practical: which stack, which prompt, and why the setup is useful.</p>
+    </div>
+    <form method="get" action="/community/showcase" class="form-columns" data-testid="community-showcase-form">
+      <label>
+        Search
+        <input type="text" name="q" value="{{ query }}" placeholder="Search title or use case" data-testid="community-showcase-query">
+      </label>
+      <label>
+        Category
+        <input type="text" name="category" value="{{ category }}" placeholder="Coding, Research, Automation" data-testid="community-showcase-category">
+      </label>
+      <div class="actions" style="align-self: end;">
+        <button type="submit" data-testid="community-showcase-submit">Search</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card-list" style="margin-top: 22px;">
+    {% for item in community_items %}
+      <article class="card" data-testid="community-showcase-card-{{ item.slug }}">
+        <p class="eyebrow">{{ item.category }}</p>
+        <h3 style="margin-top: 0;">{{ item.title }}</h3>
+        <p class="muted">{{ item.description }}</p>
+        {% if item.stack %}
+          <div class="meta-pair">
+            <strong>Stack</strong>
+            <span>{{ item.stack.title }}</span>
+          </div>
+        {% endif %}
+        <div class="details-grid compact" style="margin-top: 14px;">
+          <div class="meta-pair"><strong>Imports</strong><span>{{ item.imports_count }}</span></div>
+          <div class="meta-pair"><strong>Upvotes</strong><span>{{ item.upvotes_count }}</span></div>
+        </div>
+        <div class="meta-pair" style="margin-top: 14px;">
+          <strong>Example Prompt</strong>
+          <span>{{ item.example_prompt }}</span>
+        </div>
+      </article>
+    {% else %}
+      <article class="card">
+        <strong>No showcase entries matched this filter.</strong>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

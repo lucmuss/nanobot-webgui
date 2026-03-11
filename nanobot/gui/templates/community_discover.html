@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block body %}
+{% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
+
+  <section class="panel">
+    <div class="split-header">
+      <div>
+        <p class="eyebrow">Marketplace</p>
+        <h3 style="margin: 0;">Discover MCP</h3>
+        <p class="muted">Browse community-tracked MCP servers, compare reliability, and jump into details before you install anything locally.</p>
+      </div>
+      <div class="pill {% if community_overview %}good{% else %}muted{% endif %}">
+        {{ community_overview.registry_count if community_overview else 0 }} tracked
+      </div>
+    </div>
+
+    <form method="get" action="/community/discover" class="form-columns" data-testid="community-discover-form">
+      <label>
+        Search
+        <input type="text" name="q" value="{{ query }}" placeholder="Search MCP name or repository" data-testid="community-discover-query">
+      </label>
+      <label>
+        Category
+        <input type="text" name="category" value="{{ category }}" placeholder="Coding, Research, Automation" data-testid="community-discover-category">
+      </label>
+      <label>
+        Sort
+        <select name="sort" data-testid="community-discover-sort">
+          <option value="trending" {% if sort == "trending" %}selected{% endif %}>Trending</option>
+          <option value="reliable" {% if sort == "reliable" %}selected{% endif %}>Most Reliable</option>
+          <option value="installed" {% if sort == "installed" %}selected{% endif %}>Most Installed</option>
+          <option value="new" {% if sort == "new" %}selected{% endif %}>New</option>
+        </select>
+      </label>
+      <div class="actions" style="align-self: end;">
+        <button type="submit" data-testid="community-discover-submit">Search</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel" style="margin-top: 22px;" data-testid="community-submit-card">
+    <div class="split-header">
+      <div>
+        <p class="eyebrow">Submit MCP</p>
+        <h3 style="margin: 0;">Publish a repository to the hub</h3>
+        <p class="muted">Use this to add a GitHub MCP repository directly to the Community Hub. The hub will deduplicate known URLs and reject obvious secrets.</p>
+      </div>
+      <div class="pill {% if community_preferences.allow_public_mcp_submissions %}good{% else %}muted{% endif %}">
+        {{ "Publishing enabled" if community_preferences.allow_public_mcp_submissions else "Publishing disabled" }}
+      </div>
+    </div>
+    {% if community_preferences.allow_public_mcp_submissions %}
+      <form method="post" action="/community/submit/mcp" class="form-columns" data-testid="community-submit-form">
+        <label>
+          Repository URL
+          <input type="url" name="repo_url" value="{{ submission_form.repo_url }}" placeholder="https://github.com/owner/repo" required data-testid="community-submit-repo-url">
+        </label>
+        <label>
+          Name
+          <input type="text" name="name" value="{{ submission_form.name }}" placeholder="Optional display name" data-testid="community-submit-name">
+        </label>
+        <label>
+          Category
+          <input type="text" name="category" value="{{ submission_form.category }}" placeholder="Coding, Research, Automation" data-testid="community-submit-category">
+        </label>
+        <label style="grid-column: 1 / -1;">
+          Description
+          <textarea name="description" rows="3" data-testid="community-submit-description">{{ submission_form.description }}</textarea>
+        </label>
+        <label style="grid-column: 1 / -1;">
+          Tags
+          <input type="text" name="tags" value="{{ submission_form.tags }}" placeholder="browser, automation, docs" data-testid="community-submit-tags">
+        </label>
+        <div class="actions" style="align-self: end;">
+          <button type="submit" data-testid="community-submit-submit">Publish MCP</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="muted">Publishing from this GUI is currently disabled. Turn on the Community submission toggle in Settings first.</p>
+      <div class="actions" style="margin-top: 14px;">
+        <a class="button secondary" href="/settings">Open Settings</a>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if community_overview %}
+    <section class="card-grid four" style="margin-top: 22px;">
+      <article class="card compact-card">
+        <strong>Registry</strong>
+        <div class="metric-value">{{ community_overview.registry_count }}</div>
+      </article>
+      <article class="card compact-card">
+        <strong>Verified</strong>
+        <div class="metric-value">{{ community_overview.verified_count }}</div>
+      </article>
+      <article class="card compact-card">
+        <strong>Active Instances</strong>
+        <div class="metric-value">{{ community_overview.active_instances }}</div>
+      </article>
+      <article class="card compact-card">
+        <strong>Runs Today</strong>
+        <div class="metric-value">{{ community_overview.runs_today }}</div>
+      </article>
+    </section>
+  {% endif %}
+
+  <section class="card-list" style="margin-top: 22px;">
+    {% for item in community_items %}
+      <article class="card" data-testid="community-mcp-card-{{ item.slug }}">
+        <header>
+          <strong>{{ item.name }}</strong>
+          <span class="pill {% if item.success_rate >= 0.95 %}good{% elif item.success_rate >= 0.85 %}muted{% else %}bad{% endif %}">
+            {{ "%.0f"|format(item.success_rate * 100) }}% success
+          </span>
+        </header>
+        <p class="muted">{{ item.description }}</p>
+        <div class="badge-row">
+          <span class="pill">{{ item.category }}</span>
+          <span class="pill">{{ item.language }}</span>
+          <span class="pill">{{ item.install_method }}</span>
+          {% if item.verified %}<span class="pill good">Verified</span>{% endif %}
+        </div>
+        <div class="details-grid compact" style="margin-top: 14px;">
+          <div class="meta-pair">
+            <strong>Active Instances</strong>
+            <span>{{ item.active_instances }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Average Latency</strong>
+            <span>{{ item.avg_latency_ms }} ms</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Tools</strong>
+            <span>{{ item.tool_count }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Installs</strong>
+            <span>{{ item.installs }}</span>
+          </div>
+        </div>
+        <div class="stack-list" style="margin-top: 14px;">
+          {% for tool in item.tools[:4] %}
+            <span class="pill">{{ tool }}</span>
+          {% endfor %}
+        </div>
+        <div class="actions" style="margin-top: 16px;">
+          <a class="button secondary" href="/community/mcp/{{ item.slug }}" data-testid="community-mcp-open-{{ item.slug }}">View Details</a>
+          <a class="button secondary" href="/mcp?q={{ item.repo_url }}">Open Install Flow</a>
+        </div>
+      </article>
+    {% else %}
+      <article class="card">
+        <strong>No marketplace entries matched this filter.</strong>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

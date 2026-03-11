@@ -131,6 +131,24 @@
               <strong>Next step</strong>
               <div class="muted">{{ preview.next_action }}</div>
             </div>
+            {% if preview.community_match %}
+              <div>
+                <strong>Community match</strong>
+                <div>
+                  <a href="/community/mcp/{{ preview.community_match.slug }}">{{ preview.community_match.name }}</a>
+                </div>
+              </div>
+              {% if preview.community_match.recommended_config %}
+                <div>
+                  <strong>Community recommendation</strong>
+                  <div class="muted">
+                    {{ preview.community_match.recommended_config.transport }}
+                    · timeout {{ preview.community_match.recommended_config.timeout }}
+                    · retries {{ preview.community_match.recommended_config.retries }}
+                  </div>
+                </div>
+              {% endif %}
+            {% endif %}
           </div>
 
           <form method="post" action="/mcp/install" style="margin-top: 16px;" data-testid="mcp-preview-install-form">

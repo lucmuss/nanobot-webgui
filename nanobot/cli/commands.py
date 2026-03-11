@@ -240,6 +240,7 @@ def gui(
     port: int = typer.Option(18791, "--port", "-p", help="GUI port"),
     workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
     config: str | None = typer.Option(None, "--config", "-c", help="Config file path"),
+    public_url: str | None = typer.Option(None, "--public-url", help="Optional public GUI URL shown in the dashboard"),
     secure_cookies: bool = typer.Option(
         False,
         "--secure-cookies/--insecure-cookies",
@@ -290,6 +291,16 @@ def gui(
         "--repair-command",
         help="Command to run when an MCP repair is requested. Use with --repair-mode command.",
     ),
+    community_api_url: str | None = typer.Option(
+        None,
+        "--community-api-url",
+        help="Optional community hub API base URL, for example http://nanobot-community-hub:18811/api/v1",
+    ),
+    community_public_url: str | None = typer.Option(
+        None,
+        "--community-public-url",
+        help="Optional public community hub URL shown in the GUI, for example https://nanobot-community-hub.kolibri-kollektiv.eu",
+    ),
     instance_name: str = typer.Option("nanobot-dev", "--instance-name", help="GUI instance label"),
 ):
     """Start the nanobot web GUI."""
@@ -303,6 +314,7 @@ def gui(
         else (Path.home() / ".nanobot" / "config.json")
     )
     gateway_url = gateway_health_url or os.getenv("NANOBOT_GUI_GATEWAY_HEALTH_URL")
+    public_url_value = (public_url or os.getenv("NANOBOT_GUI_PUBLIC_URL", "")).strip()
     restart_mode_value = (restart_mode or os.getenv("NANOBOT_GUI_RESTART_MODE", "")).strip().lower()
     restart_command_value = (restart_command or os.getenv("NANOBOT_GUI_RESTART_COMMAND", "")).strip()
     update_mode_value = (update_mode or os.getenv("NANOBOT_GUI_UPDATE_MODE", "")).strip().lower()
@@ -310,6 +322,8 @@ def gui(
     update_repo_value = (update_repo or os.getenv("NANOBOT_GUI_UPDATE_REPO", "")).strip()
     repair_mode_value = (repair_mode or os.getenv("NANOBOT_GUI_REPAIR_MODE", "")).strip().lower()
     repair_command_value = (repair_command or os.getenv("NANOBOT_GUI_REPAIR_COMMAND", "")).strip()
+    community_api_url_value = (community_api_url or os.getenv("NANOBOT_GUI_COMMUNITY_API_URL", "")).strip()
+    community_public_url_value = (community_public_url or os.getenv("NANOBOT_GUI_COMMUNITY_PUBLIC_URL", "")).strip()
 
     if not restart_mode_value:
         restart_mode_value = "command" if restart_command_value else "disabled"
@@ -343,6 +357,7 @@ def gui(
         host=host,
         port=port,
         instance_name=instance_name,
+        public_url=public_url_value or None,
         gateway_health_url=gateway_url,
         https_only_cookies=secure_cookies,
         restart_mode=restart_mode_value,
@@ -353,6 +368,8 @@ def gui(
         update_command=update_command_value or None,
         repair_mode=repair_mode_value,
         repair_command=repair_command_value or None,
+        community_api_url=community_api_url_value or None,
+        community_public_url=community_public_url_value or None,
     )
     app_instance = create_gui_app(settings)
 

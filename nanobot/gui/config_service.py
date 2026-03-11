@@ -290,6 +290,39 @@ class GUIConfigService:
         self.save_state(state)
         return clean
 
+    def get_community_preferences(self) -> dict[str, bool]:
+        """Return the current community integration preferences."""
+        state = self.load_state()
+        value = state.get("community_preferences")
+        if not isinstance(value, dict):
+            value = {}
+        return {
+            "share_anonymous_metrics": bool(value.get("share_anonymous_metrics", False)),
+            "receive_recommendations": bool(value.get("receive_recommendations", True)),
+            "show_marketplace_stats": bool(value.get("show_marketplace_stats", True)),
+            "allow_public_mcp_submissions": bool(value.get("allow_public_mcp_submissions", False)),
+        }
+
+    def set_community_preferences(
+        self,
+        *,
+        share_anonymous_metrics: bool,
+        receive_recommendations: bool,
+        show_marketplace_stats: bool,
+        allow_public_mcp_submissions: bool,
+    ) -> dict[str, bool]:
+        """Persist the current community integration preferences."""
+        state = self.load_state()
+        payload = {
+            "share_anonymous_metrics": bool(share_anonymous_metrics),
+            "receive_recommendations": bool(receive_recommendations),
+            "show_marketplace_stats": bool(show_marketplace_stats),
+            "allow_public_mcp_submissions": bool(allow_public_mcp_submissions),
+        }
+        state["community_preferences"] = payload
+        self.save_state(state)
+        return payload
+
     def get_active_memory_doc(self) -> str:
         """Return the most recently opened memory document key."""
         state = self.load_state()
@@ -597,6 +630,15 @@ class GUIConfigService:
             normalized["active_memory_doc"] = "memory"
         if not isinstance(normalized.get("update_status"), dict):
             normalized["update_status"] = {}
+        if not isinstance(normalized.get("community_preferences"), dict):
+            normalized["community_preferences"] = {
+                "share_anonymous_metrics": False,
+                "receive_recommendations": True,
+                "show_marketplace_stats": True,
+                "allow_public_mcp_submissions": False,
+            }
+        else:
+            normalized["community_preferences"].setdefault("allow_public_mcp_submissions", False)
         return normalized
 
     @staticmethod

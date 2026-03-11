@@ -118,6 +118,76 @@
         </div>
       </div>
 
+      {% if community_item %}
+        <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-card">
+          <header><strong>Community Intelligence</strong></header>
+          <p class="muted">This MCP has a tracked community profile in the Nanobot Hub.</p>
+          <div class="details-grid compact">
+            <div class="meta-pair">
+              <strong>Marketplace entry</strong>
+              <span>{{ community_item.name }}</span>
+            </div>
+            <div class="meta-pair">
+              <strong>Community success rate</strong>
+              <span>{{ "%.0f"|format(community_item.success_rate * 100) }}%</span>
+            </div>
+            <div class="meta-pair">
+              <strong>Active instances</strong>
+              <span>{{ community_item.active_instances }}</span>
+            </div>
+            {% if community_item.recommended_config %}
+              <div class="meta-pair">
+                <strong>Recommended config</strong>
+                <span>{{ community_item.recommended_config.transport }} · timeout {{ community_item.recommended_config.timeout }} · retries {{ community_item.recommended_config.retries }}</span>
+              </div>
+            {% endif %}
+          </div>
+          <div class="actions" style="margin-top: 14px;">
+            <a class="button secondary" href="/community/mcp/{{ community_item.slug }}">Open Community Detail</a>
+          </div>
+        </div>
+      {% elif community_preferences.allow_public_mcp_submissions %}
+        <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-publish-card">
+          <header><strong>Publish to Community Hub</strong></header>
+          {% if server.repo_url %}
+            <p class="muted">This MCP is local-only right now. Publish its repository and metadata so other Nanobot instances can discover it.</p>
+            <form method="post" action="/mcp/publish/{{ server.name }}" data-testid="mcp-community-publish-form">
+              <div class="details-grid compact">
+                <label>
+                  Name
+                  <input type="text" name="name" value="{{ publish_form.name }}" data-testid="mcp-community-publish-name">
+                </label>
+                <label>
+                  Category
+                  <input type="text" name="category" value="{{ publish_form.category }}" data-testid="mcp-community-publish-category">
+                </label>
+              </div>
+              <label style="margin-top: 12px; display: block;">
+                Description
+                <textarea name="description" rows="3" data-testid="mcp-community-publish-description">{{ publish_form.description }}</textarea>
+              </label>
+              <label style="margin-top: 12px; display: block;">
+                Tags
+                <input type="text" name="tags" value="{{ publish_form.tags }}" data-testid="mcp-community-publish-tags">
+              </label>
+              <div class="actions" style="margin-top: 14px;">
+                <button type="submit" data-testid="mcp-community-publish-submit">Publish MCP to Hub</button>
+              </div>
+            </form>
+          {% else %}
+            <p class="muted">This MCP has no repository URL recorded yet, so it cannot be published to the hub.</p>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-publish-disabled">
+          <header><strong>Community Publishing</strong></header>
+          <p class="muted">Enable MCP publishing in Settings if you want this GUI to publish locally installed MCP repositories to the community hub.</p>
+          <div class="actions" style="margin-top: 14px;">
+            <a class="button secondary" href="/settings">Open Settings</a>
+          </div>
+        </div>
+      {% endif %}
+
       {% if mcp_last_error %}
         <div class="error-card" style="margin-top: 18px;" data-testid="mcp-error-card">
           <strong>{{ mcp_last_error.title }}</strong>
