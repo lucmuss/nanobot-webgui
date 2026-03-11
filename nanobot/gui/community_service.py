@@ -40,11 +40,25 @@ class GUICommunityService:
         """Return the marketplace overview payload."""
         return await self._get_json("/stats/overview")
 
-    async def marketplace(self, *, query: str = "", category: str = "", sort: str = "trending") -> dict[str, Any]:
+    async def marketplace(
+        self,
+        *,
+        query: str = "",
+        category: str = "",
+        language: str = "",
+        min_reliability: int = 0,
+        sort: str = "trending",
+    ) -> dict[str, Any]:
         """Return the marketplace list."""
         return await self._get_json(
             "/marketplace",
-            params={"q": query.strip(), "category": category.strip(), "sort": sort.strip() or "trending"},
+            params={
+                "q": query.strip(),
+                "category": category.strip(),
+                "language": language.strip(),
+                "min_reliability": max(0, int(min_reliability or 0)),
+                "sort": sort.strip() or "trending",
+            },
         )
 
     async def marketplace_detail(self, slug: str) -> dict[str, Any]:
@@ -68,6 +82,30 @@ class GUICommunityService:
     async def showcase(self, *, query: str = "", category: str = "") -> dict[str, Any]:
         """Return showcase entries."""
         return await self._get_json("/showcase", params={"q": query.strip(), "category": category.strip()})
+
+    async def showcase_detail(self, slug: str) -> dict[str, Any]:
+        """Return one showcase entry."""
+        return await self._get_json(f"/showcase/{slug}")
+
+    async def marketplace_fixes(
+        self,
+        slug: str,
+        *,
+        error_code: str = "",
+        current_transport: str = "",
+        current_timeout: int = 0,
+        missing_runtimes: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Return bounded community fix suggestions for one MCP."""
+        return await self._get_json(
+            f"/marketplace/{slug}/fixes",
+            params={
+                "error_code": error_code.strip(),
+                "current_transport": current_transport.strip(),
+                "current_timeout": max(0, int(current_timeout or 0)),
+                "missing_runtimes": ",".join(str(item).strip() for item in (missing_runtimes or []) if str(item).strip()),
+            },
+        )
 
     async def ingest_telemetry(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Send one anonymous telemetry event to the hub."""
@@ -100,6 +138,10 @@ class GUICommunityService:
     async def mark_stack_import(self, slug: str) -> dict[str, Any]:
         """Record one community stack import."""
         return await self._post_json(f"/stacks/{slug}/imports")
+
+    async def mark_showcase_import(self, slug: str) -> dict[str, Any]:
+        """Record one community showcase import."""
+        return await self._post_json(f"/showcase/{slug}/imports")
 
     async def submit_stack(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Submit one stack to the community hub."""

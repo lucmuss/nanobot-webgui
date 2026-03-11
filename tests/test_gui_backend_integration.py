@@ -433,6 +433,21 @@ def test_gui_community_detail_and_install_flow_persist_recommendations(tmp_path:
                 "confidence_score": 0.93,
                 "based_on_instances": 20,
             },
+            "known_fixes": [
+                {
+                    "title": "Increase timeout to the community default",
+                    "summary": "Community telemetry links timeout errors to shorter timeouts.",
+                    "evidence_count": 4,
+                }
+            ],
+            "error_clusters": [
+                {
+                    "error_code": "timeout",
+                    "event_count": 4,
+                    "instance_count": 2,
+                    "summary": "Observed timeout failures 4 times across 2 instance fingerprints.",
+                }
+            ],
         }
 
     async def fake_mark_install(slug: str):
@@ -447,6 +462,8 @@ def test_gui_community_detail_and_install_flow_persist_recommendations(tmp_path:
     assert "Recommended Config" in detail.text
     assert "60 seconds" in detail.text
     assert "Install from Community" in detail.text
+    assert "Community Fixes" in detail.text
+    assert "Error Clusters" in detail.text
 
     install = client.post("/community/install/mcp/echo-mcp", follow_redirects=True)
     assert install.status_code == 200
@@ -458,6 +475,96 @@ def test_gui_community_detail_and_install_flow_persist_recommendations(tmp_path:
     assert record["community_slug"] == "echo-mcp"
     assert record["enabled"] is False
     assert install_metrics == ["echo-mcp"]
+
+
+def test_gui_community_discover_supports_language_and_reliability_filters(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    captured: dict[str, object] = {}
+
+    async def fake_marketplace(
+        *,
+        query: str = "",
+        category: str = "",
+        language: str = "",
+        min_reliability: int = 0,
+        sort: str = "trending",
+    ):
+        captured.update(
+            {
+                "query": query,
+                "category": category,
+                "language": language,
+                "min_reliability": min_reliability,
+                "sort": sort,
+            }
+        )
+        return {
+            "items": [
+                {
+                    "slug": "context7",
+                    "name": "Context7",
+                    "description": "Research context MCP.",
+                    "category": "Research",
+                    "language": "Remote",
+                    "install_method": "remote",
+                    "verified": True,
+                    "active_instances": 1200,
+                    "installs": 9800,
+                    "success_rate": 0.97,
+                    "avg_latency_ms": 1800,
+                    "recent_runs": 44,
+                    "tools": ["fetch_doc", "search_context"],
+                    "tool_count": 2,
+                    "dependencies": ["Remote MCP endpoint"],
+                    "best_for": ["Research agents"],
+                    "difficulty": {"label": "Beginner", "tone": "good"},
+                    "reliability": {"label": "Stable", "tone": "good", "percent": 97, "bar_width": 97},
+                    "known_fixes": [
+                        {
+                            "title": "Review required environment variables",
+                            "summary": "Missing secrets are a common cause of failure.",
+                            "evidence_count": 3,
+                        }
+                    ],
+                }
+            ],
+            "categories": ["Coding", "Research"],
+            "languages": ["Node.js", "Remote"],
+            "reliability_options": [0, 80, 90, 95],
+        }
+
+    app.state.community_service.marketplace = fake_marketplace  # type: ignore[method-assign]
+
+    response = client.get(
+        "/community/discover",
+        params={
+            "q": "context",
+            "category": "Research",
+            "language": "Remote",
+            "min_reliability": 95,
+            "sort": "reliable",
+        },
+    )
+    assert response.status_code == 200
+    body = response.text
+    assert "All languages" in body
+    assert "95% reliability" in body
+    assert "Known fix" in body
+    assert captured == {
+        "query": "context",
+        "category": "Research",
+        "language": "Remote",
+        "min_reliability": 95,
+        "sort": "reliable",
+    }
 
 
 def test_gui_community_stack_import_installs_and_enables_active_mcps(tmp_path: Path):
@@ -525,6 +632,289 @@ def test_gui_community_stack_import_installs_and_enables_active_mcps(tmp_path: P
     assert secret_record["enabled"] is False
     assert install_metrics == ["echo-mcp", "secret-mcp"]
     assert stack_metrics == ["community-dev-stack"]
+
+
+def test_gui_community_apply_fix_updates_local_mcp_config(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    _install_fixture_mcp_backend(app)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=False,
+    )
+
+    install = client.post(
+        "/mcp/install",
+        data={"source": "https://github.com/example/echo-mcp"},
+        follow_redirects=True,
+    )
+    assert install.status_code == 200
+
+    config = app.state.config_service.load()
+    config.tools.mcp_servers["echo"].type = "sse"
+    config.tools.mcp_servers["echo"].tool_timeout = 15
+    app.state.config_service.save(config)
+    app.state.config_service.set_mcp_record(
+        "echo",
+        {
+            **app.state.config_service.get_mcp_record("echo"),
+            "community_slug": "echo-mcp",
+            "last_error": "Timeout while probing the MCP server.",
+            "status": "error",
+            "status_label": "Probe failed",
+            "transport": "sse",
+            "tool_timeout": 15,
+            "missing_runtimes": [],
+        },
+    )
+
+    async def fake_marketplace_detail(slug: str):
+        assert slug == "echo-mcp"
+        return {
+            "slug": "echo-mcp",
+            "name": "Echo MCP",
+            "repo_url": "https://github.com/example/echo-mcp",
+            "description": "Fixture-backed community MCP.",
+            "recommended_config": {
+                "transport": "stdio",
+                "timeout": 60,
+                "retries": 1,
+                "confidence_score": 0.93,
+                "based_on_instances": 20,
+            },
+            "reliability": {"label": "Stable", "tone": "good", "percent": 98, "bar_width": 98},
+            "best_for": ["Automation agents"],
+            "dependencies": ["Python 3.11+"],
+            "known_issues": ["Increase timeout on slower systems."],
+            "active_instances": 42,
+        }
+
+    async def fake_marketplace_fixes(*_args, **_kwargs):
+        return {
+            "slug": "echo-mcp",
+            "fixes": [
+                {
+                    "id": "apply-recommended-config",
+                    "title": "Apply the community-recommended config",
+                    "summary": "Switch transport to stdio, then increase timeout to 60s.",
+                    "action_type": "apply_recommended_config",
+                    "config_changes": {"transport": "stdio", "tool_timeout": 60},
+                    "recommended_config": {"transport": "stdio", "timeout": 60, "retries": 1},
+                    "confidence_score": 0.93,
+                    "based_on_instances": 20,
+                }
+            ],
+        }
+
+    app.state.community_service.marketplace_detail = fake_marketplace_detail  # type: ignore[method-assign]
+    app.state.community_service.marketplace_fixes = fake_marketplace_fixes  # type: ignore[method-assign]
+
+    response = client.post(
+        "/mcp/apply-community-fix/echo",
+        data={"fix_id": "apply-recommended-config", "next": "/mcp/echo"},
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "Run the MCP test again now" in response.text
+
+    updated_config = app.state.config_service.load()
+    updated_record = app.state.config_service.get_mcp_record("echo")
+    assert updated_config.tools.mcp_servers["echo"].type == "stdio"
+    assert updated_config.tools.mcp_servers["echo"].tool_timeout == 60
+    assert updated_record["status"] == "registered"
+    assert updated_record["enabled"] is False
+
+
+def test_gui_community_submit_stack_and_showcase_routes(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=True,
+    )
+
+    submitted_stack_payloads: list[dict[str, object]] = []
+    submitted_showcase_payloads: list[dict[str, object]] = []
+
+    async def fake_submit_stack(payload: dict[str, object]):
+        submitted_stack_payloads.append(payload)
+        return {
+            "created": True,
+            "item": {
+                "slug": "docs-stack",
+                "title": "Docs Stack",
+                "description": "Research docs with browser support.",
+                "recommended_model": "moonshot/kimi-k2.5",
+                "use_case": "Inspect docs and summarize stable guidance.",
+                "example_prompt": "Summarize the docs.",
+                "imports_count": 0,
+                "rating": 0.0,
+                "items": [
+                    {"slug": "context7", "name": "Context7", "repo_url": "https://github.com/upstash/context7"},
+                ],
+                "difficulty": {"label": "Beginner", "tone": "good"},
+            },
+        }
+
+    async def fake_stack_detail(slug: str):
+        assert slug == "docs-stack"
+        return {
+            "slug": "docs-stack",
+            "title": "Docs Stack",
+            "description": "Research docs with browser support.",
+            "recommended_model": "moonshot/kimi-k2.5",
+            "use_case": "Inspect docs and summarize stable guidance.",
+            "example_prompt": "Summarize the docs.",
+            "imports_count": 0,
+            "rating": 0.0,
+            "items": [
+                {"slug": "context7", "name": "Context7", "repo_url": "https://github.com/upstash/context7"},
+            ],
+            "difficulty": {"label": "Beginner", "tone": "good"},
+        }
+
+    async def fake_submit_showcase(payload: dict[str, object]):
+        submitted_showcase_payloads.append(payload)
+        return {
+            "created": True,
+            "item": {
+                "slug": "docs-assistant",
+                "title": "Docs Assistant",
+            },
+        }
+
+    async def fake_stacks(query: str = ""):
+        return {"items": [{"slug": "docs-stack", "title": "Docs Stack"}]}
+
+    async def fake_showcase(query: str = "", category: str = ""):
+        return {
+            "items": [
+                {
+                    "slug": "docs-assistant",
+                    "title": "Docs Assistant",
+                    "description": "Practical docs research setup.",
+                    "category": category or "Research",
+                    "use_case": "Inspect docs and summarize stable guidance.",
+                    "example_prompt": "Summarize the docs.",
+                    "stack": {"slug": "docs-stack", "title": "Docs Stack", "recommended_model": "moonshot/kimi-k2.5"},
+                    "stack_items": [],
+                    "imports_count": 0,
+                }
+            ]
+        }
+
+    app.state.community_service.submit_stack = fake_submit_stack  # type: ignore[method-assign]
+    app.state.community_service.stack_detail = fake_stack_detail  # type: ignore[method-assign]
+    app.state.community_service.submit_showcase = fake_submit_showcase  # type: ignore[method-assign]
+    app.state.community_service.stacks = fake_stacks  # type: ignore[method-assign]
+    app.state.community_service.showcase = fake_showcase  # type: ignore[method-assign]
+
+    stack_response = client.post(
+        "/community/submit/stack",
+        data={
+            "title": "Docs Stack",
+            "description": "Research docs with browser support.",
+            "use_case": "Inspect docs and summarize stable guidance.",
+            "recommended_model": "moonshot/kimi-k2.5",
+            "example_prompt": "Summarize the docs.",
+            "items": "context7",
+        },
+        follow_redirects=True,
+    )
+    assert stack_response.status_code == 200
+    assert "Docs Stack" in stack_response.text
+    assert submitted_stack_payloads[0]["title"] == "Docs Stack"
+
+    showcase_response = client.post(
+        "/community/submit/showcase",
+        data={
+            "title": "Docs Assistant",
+            "description": "Practical docs research setup.",
+            "use_case": "Inspect docs and summarize stable guidance.",
+            "category": "Research",
+            "example_prompt": "Summarize the docs.",
+            "stack_slug": "docs-stack",
+        },
+        follow_redirects=True,
+    )
+    assert showcase_response.status_code == 200
+    assert "Saved showcase" in showcase_response.text
+    assert submitted_showcase_payloads[0]["stack_slug"] == "docs-stack"
+
+
+def test_gui_community_showcase_import_marks_metric_and_redirects_to_stack_import(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=False,
+    )
+
+    marked_showcases: list[str] = []
+    imported_stacks: list[str] = []
+
+    async def fake_showcase_detail(slug: str):
+        assert slug == "docs-assistant"
+        return {
+            "slug": "docs-assistant",
+            "title": "Docs Assistant",
+            "stack": {"slug": "docs-stack", "title": "Docs Stack"},
+        }
+
+    async def fake_mark_showcase_import(slug: str):
+        marked_showcases.append(slug)
+        return {"ok": True}
+
+    async def fake_stack_detail(slug: str):
+        imported_stacks.append(slug)
+        return {
+            "slug": "docs-stack",
+            "title": "Docs Stack",
+            "recommended_model": "moonshot/kimi-k2.5",
+            "items": [],
+        }
+
+    app.state.community_service.showcase_detail = fake_showcase_detail  # type: ignore[method-assign]
+    app.state.community_service.mark_showcase_import = fake_mark_showcase_import  # type: ignore[method-assign]
+    app.state.community_service.stack_detail = fake_stack_detail  # type: ignore[method-assign]
+    app.state.agent_service.check_runtime = lambda: {  # type: ignore[assignment]
+        "ok": True,
+        "provider": "openrouter",
+        "model": "openai/gpt-4.1-mini",
+        "latency_ms": 12,
+        "checked_at": "2026-03-10T00:00:00+00:00",
+        "usage": {"prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 12},
+    }
+
+    response = client.post("/community/import/showcase/docs-assistant", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/community/import/stack/docs-stack"
+    assert marked_showcases == ["docs-assistant"]
+    assert imported_stacks == []
 
 
 def test_gui_mcp_repair_route_dispatches_configured_worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

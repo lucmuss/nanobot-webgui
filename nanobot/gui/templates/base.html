@@ -260,6 +260,12 @@
         color: var(--text-secondary);
       }
 
+      .pill.warn {
+        border-color: rgba(146, 64, 14, 0.14);
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
       .panel,
       .card {
         border: 1px solid var(--border);
@@ -605,6 +611,182 @@
         gap: 14px;
         align-items: flex-start;
         margin-bottom: 14px;
+      }
+
+      .page-header {
+        display: grid;
+        gap: 16px;
+        padding: 20px;
+        border-radius: var(--radius-card);
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .page-header-main {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        align-items: flex-start;
+      }
+
+      .page-header-copy {
+        display: grid;
+        gap: 6px;
+      }
+
+      .page-header-copy h3,
+      .page-header-copy p {
+        margin: 0;
+      }
+
+      .page-header-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: flex-start;
+        justify-content: flex-end;
+      }
+
+      .page-meta-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-muted);
+        font-size: 0.78rem;
+        color: var(--text-secondary);
+      }
+
+      .meta-chip strong {
+        color: var(--text-primary);
+        font-size: 0.74rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .meta-chip.good {
+        border-color: rgba(22, 101, 52, 0.14);
+        background: var(--success-soft);
+        color: var(--success);
+      }
+
+      .meta-chip.warn {
+        border-color: rgba(146, 64, 14, 0.14);
+        background: var(--warning-soft);
+        color: var(--warning);
+      }
+
+      .meta-chip.bad {
+        border-color: rgba(153, 27, 27, 0.14);
+        background: var(--danger-soft);
+        color: var(--danger);
+      }
+
+      .compact-kpi-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      }
+
+      .compact-kpi {
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .compact-kpi strong {
+        display: block;
+        margin-top: 6px;
+        font-size: 1.1rem;
+      }
+
+      .compact-kpi small {
+        display: block;
+        margin-top: 4px;
+        color: var(--text-secondary);
+      }
+
+      .insight-panel {
+        padding: 16px 18px;
+        border-radius: var(--radius-card);
+        border: 1px solid var(--border);
+        background: var(--surface);
+      }
+
+      .insight-panel.local {
+        border-color: rgba(29, 78, 216, 0.14);
+        background: var(--info-soft);
+      }
+
+      .insight-panel.community {
+        border-color: rgba(249, 115, 22, 0.18);
+        background: var(--primary-soft);
+      }
+
+      .insight-panel h4,
+      .insight-panel p {
+        margin: 0;
+      }
+
+      .reliability-stack {
+        display: grid;
+        gap: 8px;
+      }
+
+      .reliability-bar {
+        height: 10px;
+        border-radius: 999px;
+        background: #eceff3;
+        overflow: hidden;
+      }
+
+      .reliability-fill {
+        height: 100%;
+        border-radius: 999px;
+        background: var(--primary);
+      }
+
+      .reliability-fill.good {
+        background: #10b981;
+      }
+
+      .reliability-fill.warn {
+        background: #f59e0b;
+      }
+
+      .reliability-fill.bad {
+        background: #ef4444;
+      }
+
+      .flow-diagram {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .flow-node {
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--surface-muted);
+        font-size: 0.82rem;
+      }
+
+      .flow-arrow {
+        color: var(--text-secondary);
+        font-size: 0.82rem;
       }
 
       .chat-stack {
@@ -1064,6 +1246,7 @@
 
       @media (max-width: 720px) {
         .split-header,
+        .page-header-main,
         .progress-item {
           flex-direction: column;
           align-items: flex-start;

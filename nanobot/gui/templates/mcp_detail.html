@@ -2,23 +2,56 @@
 {% block body %}
 {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
 
-  <div class="panel-grid two">
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">MCP Detail</p>
+        <h3>{{ server.name }}</h3>
+        <p class="muted">Keep local MCP configuration and community recommendations visible side by side before you enable the server for the main chat runtime.</p>
+      </div>
+      <div class="page-header-actions">
+        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}" data-testid="mcp-detail-test-form">
+          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+          <button class="secondary" type="submit" data-testid="mcp-detail-test">Run MCP Test</button>
+        </form>
+        <form class="inline-form" method="post" action="/mcp/toggle/{{ server.name }}" data-testid="mcp-detail-toggle-form">
+          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+          <button class="secondary" type="submit" data-testid="mcp-detail-toggle">{{ "Disable for Chat" if server.enabled else "Enable for Chat" }}</button>
+        </form>
+        <form class="inline-form" method="post" action="/mcp/remove/{{ server.name }}" data-testid="mcp-detail-remove-form">
+          <button class="bad" type="submit" data-testid="mcp-detail-remove">Remove</button>
+        </form>
+      </div>
+    </div>
+    <div class="page-meta-bar">
+      <span class="meta-chip"><strong>Transport</strong>{{ server.transport }}</span>
+      <span class="meta-chip {% if server.enabled %}good{% else %}muted{% endif %}"><strong>Local config</strong>{{ "Enabled" if server.enabled else "Disabled" }}</span>
+      <span class="meta-chip {{ server.status_tone }}"><strong>Observed locally</strong>{{ server.status_label }}</span>
+      {% if community_item %}
+        {% for item in community_meta %}
+          <span class="meta-chip {{ item.tone }}"><strong>{{ item.label }}</strong>{{ item.value }}</span>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </section>
+
+  <div class="panel-grid two" style="margin-top: 22px;">
     <section class="panel">
       <div class="split-header">
         <div>
-          <p class="eyebrow">MCP Runtime</p>
-          <h3 style="margin: 0;">MCP Detail</h3>
-          <p class="muted">You are testing MCP: <strong>{{ server.name }}</strong></p>
+          <p class="eyebrow">Local MCP State</p>
+          <h3 style="margin: 0;">Observed locally</h3>
+          <p class="muted">This block shows what your Nanobot instance currently knows and can execute for this MCP.</p>
         </div>
         <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
           {{ server.effective_status }}
         </span>
       </div>
 
-      <div class="highlight-panel">
-        <strong>{{ server.name }}</strong>
+      <div class="insight-panel local">
+        <h4>{{ server.name }}</h4>
         {% if server.summary %}
-          <p class="muted">{{ server.summary }}</p>
+          <p class="muted" style="margin-top: 8px;">{{ server.summary }}</p>
         {% endif %}
         <div class="badge-row">
           <span class="pill">transport {{ server.transport }}</span>
@@ -29,10 +62,6 @@
       </div>
 
       <div class="action-cluster" style="margin-top: 16px;">
-        <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}" data-testid="mcp-detail-test-form">
-          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
-          <button class="secondary" type="submit" data-testid="mcp-detail-test">Run MCP Test</button>
-        </form>
         <form class="inline-form" method="post" action="/mcp/repair/{{ server.name }}" data-testid="mcp-detail-repair-form">
           <input type="hidden" name="next" value="/mcp/{{ server.name }}">
           <button
@@ -44,13 +73,6 @@
           >
             {{ repair_action.label }}
           </button>
-        </form>
-        <form class="inline-form" method="post" action="/mcp/toggle/{{ server.name }}" data-testid="mcp-detail-toggle-form">
-          <input type="hidden" name="next" value="/mcp/{{ server.name }}">
-          <button class="secondary" type="submit" data-testid="mcp-detail-toggle">{{ "Disable for Chat" if server.enabled else "Enable for Chat" }}</button>
-        </form>
-        <form class="inline-form" method="post" action="/mcp/remove/{{ server.name }}" data-testid="mcp-detail-remove-form">
-          <button class="bad" type="submit" data-testid="mcp-detail-remove">Remove</button>
         </form>
       </div>
 
@@ -118,82 +140,6 @@
         </div>
       </div>
 
-      {% if community_item %}
-        <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-card">
-          <header><strong>Community Intelligence</strong></header>
-          <p class="muted">This MCP has a tracked community profile in the Nanobot Hub.</p>
-          <div class="details-grid compact">
-            <div class="meta-pair">
-              <strong>Marketplace entry</strong>
-              <span>{{ community_item.name }}</span>
-            </div>
-            <div class="meta-pair">
-              <strong>Community success rate</strong>
-              <span>{{ "%.0f"|format(community_item.success_rate * 100) }}%</span>
-            </div>
-            <div class="meta-pair">
-              <strong>Active instances</strong>
-              <span>{{ community_item.active_instances }}</span>
-            </div>
-            {% if community_item.recommended_config %}
-              <div class="meta-pair">
-                <strong>Recommended config</strong>
-                <span>{{ community_item.recommended_config.transport }} · timeout {{ community_item.recommended_config.timeout }} · retries {{ community_item.recommended_config.retries }}</span>
-              </div>
-            {% endif %}
-          </div>
-          <div class="actions" style="margin-top: 14px;">
-            <a class="button secondary" href="/community/mcp/{{ community_item.slug }}">Open Community Detail</a>
-          </div>
-        </div>
-      {% elif community_preferences.allow_public_mcp_submissions and community_write_enabled %}
-        <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-publish-card">
-          <header><strong>Publish to Community Hub</strong></header>
-          {% if server.repo_url %}
-            <p class="muted">This MCP is local-only right now. Publish its repository and metadata so other Nanobot instances can discover it.</p>
-            <form method="post" action="/mcp/publish/{{ server.name }}" data-testid="mcp-community-publish-form">
-              <div class="details-grid compact">
-                <label>
-                  Name
-                  <input type="text" name="name" value="{{ publish_form.name }}" data-testid="mcp-community-publish-name">
-                </label>
-                <label>
-                  Category
-                  <input type="text" name="category" value="{{ publish_form.category }}" data-testid="mcp-community-publish-category">
-                </label>
-              </div>
-              <label style="margin-top: 12px; display: block;">
-                Description
-                <textarea name="description" rows="3" data-testid="mcp-community-publish-description">{{ publish_form.description }}</textarea>
-              </label>
-              <label style="margin-top: 12px; display: block;">
-                Tags
-                <input type="text" name="tags" value="{{ publish_form.tags }}" data-testid="mcp-community-publish-tags">
-              </label>
-              <div class="actions" style="margin-top: 14px;">
-                <button type="submit" data-testid="mcp-community-publish-submit">Publish MCP to Hub</button>
-              </div>
-            </form>
-          {% else %}
-            <p class="muted">This MCP has no repository URL recorded yet, so it cannot be published to the hub.</p>
-          {% endif %}
-        </div>
-      {% else %}
-        <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-publish-disabled">
-          <header><strong>Community Publishing</strong></header>
-          <p class="muted">
-            {% if not community_preferences.allow_public_mcp_submissions %}
-              Enable MCP publishing in Settings if you want this GUI to publish locally installed MCP repositories to the community hub.
-            {% else %}
-              Hub write access is not configured for this GUI instance. Add the admin API token before publishing directly from the GUI.
-            {% endif %}
-          </p>
-          <div class="actions" style="margin-top: 14px;">
-            <a class="button secondary" href="/settings">Open Settings</a>
-          </div>
-        </div>
-      {% endif %}
-
       {% if mcp_last_error %}
         <div class="error-card" style="margin-top: 18px;" data-testid="mcp-error-card">
           <strong>{{ mcp_last_error.title }}</strong>
@@ -233,6 +179,113 @@
     </section>
 
     <section class="panel">
+      {% if community_item %}
+        <div class="split-header">
+        <div>
+          <p class="eyebrow">Community Intelligence</p>
+          <h3 style="margin: 0;">Community recommendation</h3>
+          <p class="muted">Compare what your instance sees locally with what the Community Hub recommends.</p>
+        </div>
+          <span class="pill {{ community_item.get('reliability', {}).get('tone', 'muted') }}">{{ community_item.get('reliability', {}).get('label', 'Tracked') }}</span>
+        </div>
+        <div class="insight-panel community" data-testid="mcp-community-card">
+          <h4>{{ community_item.name }}</h4>
+          <div class="reliability-stack" style="margin-top: 10px;">
+            <div class="split-header" style="margin-bottom: 0;">
+              <span class="muted">Community reliability</span>
+              <strong>{{ community_item.get("reliability", {}).get("percent", "%.0f"|format((community_item.get("success_rate", 0) or 0) * 100)) }}%</strong>
+            </div>
+            <div class="reliability-bar">
+              <div class="reliability-fill {{ community_item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ community_item.get('reliability', {}).get('bar_width', ((community_item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
+            </div>
+          </div>
+          <div class="details-grid compact" style="margin-top: 12px;">
+            <div class="meta-pair"><strong>Active instances</strong><span>{{ community_item.active_instances }}</span></div>
+            <div class="meta-pair"><strong>Best used with</strong><span>{{ community_item.get("best_for", [])|join(", ") if community_item.get("best_for", []) else "General workflows" }}</span></div>
+            <div class="meta-pair"><strong>Dependencies</strong><span>{{ community_item.get("dependencies", [])|join(", ") if community_item.get("dependencies", []) else "No dependency hint" }}</span></div>
+            {% if community_item.recommended_config %}
+              <div class="meta-pair"><strong>Recommended config</strong><span>{{ community_item.recommended_config.transport }} · timeout {{ community_item.recommended_config.timeout }} · retries {{ community_item.recommended_config.retries }}</span></div>
+            {% endif %}
+          </div>
+          <div class="actions" style="margin-top: 14px;">
+            <a class="button secondary" href="/community/mcp/{{ community_item.slug }}">Open Community Detail</a>
+          </div>
+        </div>
+
+        <div class="card compact-card" style="margin-top: 18px;" data-testid="mcp-community-fixes-card">
+          <header><strong>Community fixes</strong></header>
+          {% for fix in community_fixes %}
+            <div class="stat-line">
+              <div>
+                <strong>{{ fix.title }}</strong>
+                <div class="muted">{{ fix.summary }}</div>
+              </div>
+              <form method="post" action="/mcp/apply-community-fix/{{ server.name }}">
+                <input type="hidden" name="fix_id" value="{{ fix.id }}">
+                <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+                <button class="secondary" type="submit" data-testid="mcp-community-fix-{{ fix.id }}">
+                  {% if fix.action_type == "apply_recommended_config" %}
+                    Apply Fix
+                  {% elif fix.action_type == "repair_recipe" %}
+                    Queue Repair
+                  {% else %}
+                    Review
+                  {% endif %}
+                </button>
+              </form>
+            </div>
+          {% else %}
+            <p class="muted">No community fix suggestions are available for the current local state.</p>
+          {% endfor %}
+        </div>
+      {% elif community_preferences.allow_public_mcp_submissions and community_write_enabled %}
+        <div class="card compact-card" style="margin-bottom: 18px;" data-testid="mcp-community-publish-card">
+          <header><strong>Publish to Community Hub</strong></header>
+          {% if server.repo_url %}
+            <p class="muted">This MCP is local-only right now. Publish its repository and metadata so other Nanobot instances can discover it.</p>
+            <form method="post" action="/mcp/publish/{{ server.name }}" data-testid="mcp-community-publish-form">
+              <div class="details-grid compact">
+                <label>
+                  Name
+                  <input type="text" name="name" value="{{ publish_form.name }}" data-testid="mcp-community-publish-name">
+                </label>
+                <label>
+                  Category
+                  <input type="text" name="category" value="{{ publish_form.category }}" data-testid="mcp-community-publish-category">
+                </label>
+              </div>
+              <label style="margin-top: 12px; display: block;">
+                Description
+                <textarea name="description" rows="3" data-testid="mcp-community-publish-description">{{ publish_form.description }}</textarea>
+              </label>
+              <label style="margin-top: 12px; display: block;">
+                Tags
+                <input type="text" name="tags" value="{{ publish_form.tags }}" data-testid="mcp-community-publish-tags">
+              </label>
+              <div class="actions" style="margin-top: 14px;">
+                <button type="submit" data-testid="mcp-community-publish-submit">Publish MCP to Hub</button>
+              </div>
+            </form>
+          {% else %}
+            <p class="muted">This MCP has no repository URL recorded yet, so it cannot be published to the hub.</p>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="card compact-card" style="margin-bottom: 18px;" data-testid="mcp-community-publish-disabled">
+          <header><strong>Community Publishing</strong></header>
+          <p class="muted">
+            {% if not community_preferences.allow_public_mcp_submissions %}
+              Enable MCP publishing in Settings if you want this GUI to publish locally installed MCP repositories to the community hub.
+            {% else %}
+              Hub write access is not configured for this GUI instance. Add the admin API token before publishing directly from the GUI.
+            {% endif %}
+          </p>
+          <div class="actions" style="margin-top: 14px;">
+            <a class="button secondary" href="/settings">Open Settings</a>
+          </div>
+        </div>
+      {% endif %}
+
       <div class="section-intro">
         <p class="eyebrow">Configuration</p>
         <h3>Edit MCP Settings</h3>

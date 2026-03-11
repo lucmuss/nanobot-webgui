@@ -446,8 +446,11 @@ def _make_provider(config):
 
 def _display_content(content: Any) -> str:
     """Convert stored session payloads into plain text for the chat UI."""
+    def _strip_hidden_context(text: str) -> str:
+        return re.sub(r"\[nanobot_community_context\][\s\S]*?\[/nanobot_community_context\]\s*", "", text).strip()
+
     if isinstance(content, str):
-        return content.strip()
+        return _strip_hidden_context(content)
     if isinstance(content, list):
         parts: list[str] = []
         for item in content:
@@ -455,11 +458,11 @@ def _display_content(content: Any) -> str:
                 if item.get("type") == "text":
                     text = str(item.get("text", "")).strip()
                     if text:
-                        parts.append(text)
+                        parts.append(_strip_hidden_context(text))
                 elif item.get("type") == "image_url":
                     parts.append("[image]")
         return "\n".join(parts).strip()
-    return str(content).strip()
+    return _strip_hidden_context(str(content))
 
 
 def _utc_now() -> str:

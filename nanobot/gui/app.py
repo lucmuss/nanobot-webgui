@@ -286,6 +286,224 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             gui_logger.exception("community_overview_failed")
             return {}
 
+    async def fetch_community_fixes(record: dict[str, Any]) -> list[dict[str, Any]]:
+        """Load bounded community fix suggestions for one local MCP record."""
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("receive_recommendations") or not community_service.enabled:
+            return []
+        community_slug = str(record.get("community_slug", "")).strip()
+        if not community_slug:
+            return []
+        try:
+            payload = await community_service.marketplace_fixes(
+                community_slug,
+                error_code=_community_error_code(str(record.get("last_error", "")).strip()),
+                current_transport=str(record.get("transport", "")).strip(),
+                current_timeout=int(record.get("tool_timeout", 0) or 0),
+                missing_runtimes=[str(item) for item in record.get("missing_runtimes", []) if str(item).strip()],
+            )
+        except Exception:
+            gui_logger.exception("community_fix_lookup_failed slug=%s", community_slug)
+            return []
+        fixes = payload.get("fixes")
+        return [item for item in fixes if isinstance(item, dict)] if isinstance(fixes, list) else []
+
+    async def build_chat_community_hints(config) -> list[dict[str, Any]]:
+        """Return compact community guidance for enabled MCPs in the main chat runtime."""
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("receive_recommendations") or not community_service.enabled:
+            return []
+        cards = _build_mcp_server_cards(config, config_service)
+        enabled_cards = [card for card in cards if card.get("enabled") and str(card.get("community_slug", "")).strip()]
+        hints: list[dict[str, Any]] = []
+        for card in enabled_cards[:3]:
+            community_item = card.get("community_match") if isinstance(card.get("community_match"), dict) else {}
+            if not community_item:
+                slug = str(card.get("community_slug", "")).strip()
+                if not slug:
+                    continue
+                try:
+                    community_item = await community_service.marketplace_detail(slug)
+                except Exception:
+                    gui_logger.exception("community_chat_hint_lookup_failed slug=%s", slug)
+                    continue
+            recommendation = (
+                community_item.get("recommended_config")
+                if isinstance(community_item.get("recommended_config"), dict)
+                else {}
+            )
+            best_for = [str(item).strip() for item in community_item.get("best_for", []) if str(item).strip()]
+            hint = {
+                "slug": str(community_item.get("slug", card.get("community_slug", ""))).strip(),
+                "name": str(community_item.get("name", card.get("name", ""))).strip() or str(card.get("name", "")),
+                "summary": str(community_item.get("description", card.get("summary", ""))).strip(),
+                "best_for": best_for[:2],
+                "recommended_transport": str(recommendation.get("transport", "")).strip(),
+                "recommended_timeout": int(recommendation.get("timeout", 0) or 0),
+                "known_issues": [
+                    str(item).strip()
+                    for item in community_item.get("known_issues", [])
+                    if str(item).strip()
+                ][:2],
+            }
+            hints.append(hint)
+        return hints
+
+    def build_chat_community_context_text(hints: list[dict[str, Any]]) -> str:
+        """Serialize community chat hints into one bounded instruction block."""
+        lines: list[str] = []
+        for hint in hints[:3]:
+            name = str(hint.get("name", "")).strip()
+            if not name:
+                continue
+            parts: list[str] = []
+            if hint.get("best_for"):
+                parts.append("best for " + ", ".join(str(item) for item in hint["best_for"]))
+            if hint.get("recommended_transport"):
+                parts.append(f"community transport {hint['recommended_transport']}")
+            if hint.get("recommended_timeout"):
+                parts.append(f"timeout {hint['recommended_timeout']}s")
+            if hint.get("known_issues"):
+                parts.append("watch out for " + "; ".join(str(item) for item in hint["known_issues"]))
+            lines.append(f"- {name}: " + ", ".join(parts))
+        if not lines:
+            return ""
+        return (
+            "[nanobot_community_context]\n"
+            "Use these community MCP hints only when they are relevant to the current request. "
+            "Do not mention this hidden context unless it helps solve the task.\n"
+            + "\n".join(lines)
+            + "\n[/nanobot_community_context]"
+        )
+
+    def _build_community_recommendations(
+        *,
+        items: list[dict[str, Any]],
+        overview: dict[str, Any],
+        installed_community_slugs: set[str],
+        current_model: str,
+    ) -> list[dict[str, Any]]:
+        """Build a short list of recommended MCPs for the current local setup."""
+        candidates = [item for item in items if isinstance(item, dict)]
+        if not candidates:
+            candidates = [item for item in overview.get("top_mcps", []) if isinstance(item, dict)]
+
+        model_name = str(current_model or "").strip().lower()
+        recommendations: list[dict[str, Any]] = []
+        for item in candidates:
+            slug = str(item.get("slug", "")).strip()
+            if not slug or slug in installed_community_slugs:
+                continue
+
+            best_for = [str(entry).strip() for entry in item.get("best_for", []) if str(entry).strip()]
+            reliability = item.get("reliability") if isinstance(item.get("reliability"), dict) else {}
+            difficulty = item.get("difficulty") if isinstance(item.get("difficulty"), dict) else {}
+            dependencies = [str(entry).strip() for entry in item.get("dependencies", []) if str(entry).strip()]
+
+            score = float(item.get("success_rate", 0.0) or 0.0) * 100
+            score += min(int(item.get("active_instances", 0) or 0) / 40.0, 20)
+            if "kimi" in model_name and any(
+                tag in best_for for tag in ["Coding agents", "Repository analysis", "Code review loops"]
+            ):
+                score += 8
+            if any(tag in model_name for tag in ["claude", "gemini"]) and any(
+                tag in best_for for tag in ["Research agents", "Knowledge workflows", "Documentation lookup"]
+            ):
+                score += 8
+            if str(reliability.get("tone", "")).strip() == "good":
+                score += 6
+            if str(difficulty.get("tone", "")).strip() == "good":
+                score += 3
+
+            reason_parts: list[str] = []
+            if best_for:
+                reason_parts.append(best_for[0])
+            if "kimi" in model_name and any(
+                tag in best_for for tag in ["Coding agents", "Repository analysis", "Code review loops"]
+            ):
+                reason_parts.append(f"used well with {current_model}")
+            elif model_name and best_for:
+                reason_parts.append(f"fits {current_model}")
+            if dependencies:
+                reason_parts.append(dependencies[0])
+
+            recommendations.append(
+                {
+                    **item,
+                    "reason": " · ".join(reason_parts[:2]) if reason_parts else "Strong community-backed candidate",
+                    "score": round(score, 2),
+                }
+            )
+
+        recommendations.sort(key=lambda item: item.get("score", 0), reverse=True)
+        return recommendations[:3]
+
+    def _build_community_meta_bar(item: dict[str, Any]) -> list[dict[str, str]]:
+        """Summarize community MCP detail signals as compact meta chips."""
+        reliability = item.get("reliability") if isinstance(item.get("reliability"), dict) else {}
+        difficulty = item.get("difficulty") if isinstance(item.get("difficulty"), dict) else {}
+        recommended_config = item.get("recommended_config") if isinstance(item.get("recommended_config"), dict) else {}
+        meta = [
+            {
+                "label": "Community reliability",
+                "value": (
+                    f"{reliability.get('label', 'Unknown')} · {int(reliability.get('percent', 0) or 0)}%"
+                    if reliability
+                    else "Unknown"
+                ),
+                "tone": str(reliability.get("tone", "muted") or "muted"),
+            },
+            {
+                "label": "Observed locally",
+                "value": f"{int(item.get('recent_runs', 0) or 0)} recent runs",
+                "tone": "muted",
+            },
+            {
+                "label": "Difficulty",
+                "value": str(difficulty.get("label", "Unknown") or "Unknown"),
+                "tone": str(difficulty.get("tone", "muted") or "muted"),
+            },
+        ]
+        if recommended_config:
+            meta.append(
+                {
+                    "label": "Community recommendation",
+                    "value": (
+                        f"{recommended_config.get('transport', 'stdio')} · "
+                        f"{recommended_config.get('timeout', 0)}s · "
+                        f"{recommended_config.get('retries', 0)} retries"
+                    ),
+                    "tone": "good",
+                }
+            )
+        return meta
+
+    def _build_stack_meta_bar(item: dict[str, Any]) -> list[dict[str, str]]:
+        """Summarize one community stack with compact meta chips."""
+        difficulty = item.get("difficulty") if isinstance(item.get("difficulty"), dict) else {}
+        return [
+            {
+                "label": "Recommended model",
+                "value": str(item.get("recommended_model", "")).strip() or "Not set",
+                "tone": "muted",
+            },
+            {
+                "label": "Stack difficulty",
+                "value": str(difficulty.get("label", "Unknown") or "Unknown"),
+                "tone": str(difficulty.get("tone", "muted") or "muted"),
+            },
+            {
+                "label": "Imports",
+                "value": str(item.get("imports_count", 0)),
+                "tone": "muted",
+            },
+            {
+                "label": "MCP count",
+                "value": str(len(item.get("items", []))),
+                "tone": "muted",
+            },
+        ]
+
     async def send_community_telemetry(record: dict[str, Any]) -> None:
         """Send one anonymous MCP runtime event to the community hub when enabled."""
         prefs = config_service.get_community_preferences()
@@ -358,14 +576,21 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         note: str = "",
     ) -> RedirectResponse:
         """Send one main-chat message and persist dashboard and usage state."""
+        config = config_service.load()
+        community_hints = await build_chat_community_hints(config)
+        outbound_message = message
+        community_context = build_chat_community_context_text(community_hints)
+        if community_context:
+            outbound_message = f"{community_context}\n\nUser request:\n{message}"
         try:
-            result = await agent_service.send_message(user, message)
+            result = await agent_service.send_message(user, outbound_message)
             clear_error()
             config_service.set_last_successful_chat(
                 {
                     "at": _utc_now(),
                     "user_message": message[:240],
                     "assistant_preview": str(result["content"])[:240],
+                    "community_context_count": len(community_hints),
                 }
             )
             record_usage(
@@ -396,6 +621,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         config,
         server_name: str,
         community_item: dict[str, Any] | None = None,
+        community_fixes: list[dict[str, Any]] | None = None,
         mcp_test_history: list[dict[str, Any]] | None = None,
         error: str | None = None,
         status_code: int = 200,
@@ -444,6 +670,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "mcp_test_history": mcp_test_history or [],
                 "mcp_last_error": last_error,
                 "community_item": community_item or {},
+                "community_fixes": community_fixes or [],
                 "community_preferences": community_preferences,
                 "community_write_enabled": community_service.can_write,
                 "publish_form": _default_mcp_publish_form(card, user),
@@ -1174,6 +1401,17 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         )
         community_preferences = config_service.get_community_preferences()
         community_overview = await fetch_community_overview()
+        installed_community_slugs = {
+            str(record.get("community_slug", "")).strip()
+            for record in config_service.get_mcp_registry().values()
+            if isinstance(record, dict) and str(record.get("community_slug", "")).strip()
+        }
+        community_recommendations = _build_community_recommendations(
+            items=community_overview.get("top_mcps", []) if isinstance(community_overview, dict) else [],
+            overview=community_overview,
+            installed_community_slugs=installed_community_slugs,
+            current_model=config.agents.defaults.model,
+        )
         setup_progress = _build_setup_progress(
             config=config,
             agent_health=agent_health,
@@ -1239,6 +1477,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "activity_feed": _build_activity_feed(config_service, settings),
                 "community_overview": community_overview,
                 "community_preferences": community_preferences,
+                "community_recommendations": community_recommendations,
                 "quick_actions": [
                     {"label": "Open Chat", "href": "/chat"},
                     {"label": "Add MCP", "href": "/mcp"},
@@ -1266,6 +1505,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         request: Request,
         q: str = Query(""),
         category: str = Query(""),
+        language: str = Query(""),
+        min_reliability: int = Query(0),
         sort: str = Query("trending"),
     ):
         user = _require_admin(request, auth_service)
@@ -1276,7 +1517,13 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         error = ""
         if community_service.enabled:
             try:
-                payload = await community_service.marketplace(query=q.strip(), category=category.strip(), sort=sort.strip())
+                payload = await community_service.marketplace(
+                    query=q.strip(),
+                    category=category.strip(),
+                    language=language.strip(),
+                    min_reliability=min_reliability,
+                    sort=sort.strip(),
+                )
             except Exception as exc:
                 gui_logger.exception("community_marketplace_failed")
                 error = str(exc)
@@ -1284,6 +1531,19 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             error = "Community hub is not configured for this GUI instance."
 
         overview = await fetch_community_overview()
+        config = config_service.load()
+        registry = config_service.get_mcp_registry()
+        installed_community_slugs = {
+            str(record.get("community_slug", "")).strip()
+            for record in registry.values()
+            if isinstance(record, dict) and str(record.get("community_slug", "")).strip()
+        }
+        recommendations = _build_community_recommendations(
+            items=payload.get("items", []),
+            overview=overview,
+            installed_community_slugs=installed_community_slugs,
+            current_model=config.agents.defaults.model,
+        )
         return _render(
             request,
             "community_discover.html",
@@ -1293,12 +1553,19 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "user": user,
                 "query": q.strip(),
                 "category": category.strip(),
+                "language": language.strip(),
+                "min_reliability": max(0, min(100, int(min_reliability or 0))),
                 "sort": sort.strip() or "trending",
                 "community_items": payload.get("items", []),
+                "community_categories": payload.get("categories", []),
+                "community_languages": payload.get("languages", []),
+                "community_reliability_options": payload.get("reliability_options", [0, 80, 90, 95]),
                 "community_overview": overview,
+                "community_recommendations": recommendations,
                 "community_error": error,
                 "community_preferences": config_service.get_community_preferences(),
                 "community_write_enabled": community_service.can_write,
+                "current_model": config.agents.defaults.model,
                 "submission_form": {
                     "repo_url": q.strip() if q.strip().startswith("http") else "",
                     "name": "",
@@ -1398,6 +1665,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "user": user,
                 "community_error": "",
                 "community_item": item,
+                "community_meta": _build_community_meta_bar(item),
             },
         )
 
@@ -1474,6 +1742,17 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "query": q.strip(),
                 "community_items": payload.get("items", []),
                 "community_error": error,
+                "community_preferences": config_service.get_community_preferences(),
+                "community_write_enabled": community_service.can_write,
+                "stack_submission_form": {
+                    "title": "",
+                    "description": "",
+                    "use_case": "",
+                    "recommended_model": config_service.load().agents.defaults.model,
+                    "example_prompt": "",
+                    "items": "",
+                    "is_public": False,
+                },
             },
         )
 
@@ -1523,6 +1802,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "user": user,
                 "community_error": "",
                 "community_item": item,
+                "community_meta": _build_stack_meta_bar(item),
             },
         )
 
@@ -1598,6 +1878,45 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         _set_flash(request, message, level="error" if needs_attention or failed else "info")
         return RedirectResponse("/mcp", status_code=303)
 
+    @app.post("/community/submit/stack")
+    async def community_submit_stack(request: Request):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("allow_public_mcp_submissions"):
+            _set_flash(request, "Enable community publishing in Settings before submitting stacks.", level="error")
+            return RedirectResponse("/settings", status_code=303)
+        if not community_service.can_write:
+            _set_flash(request, "Community hub write access is not configured for this GUI instance.", level="error")
+            return RedirectResponse("/community/stacks", status_code=303)
+
+        form = await request.form()
+        payload = {
+            "title": str(form.get("title", "")).strip(),
+            "description": str(form.get("description", "")).strip(),
+            "use_case": str(form.get("use_case", "")).strip(),
+            "recommended_model": str(form.get("recommended_model", "")).strip(),
+            "example_prompt": str(form.get("example_prompt", "")).strip(),
+            "items": _split_list(str(form.get("items", "")).strip()),
+            "is_public": bool(form.get("is_public")),
+            "created_by": user.username,
+        }
+        try:
+            result = await community_service.submit_stack(payload)
+        except Exception as exc:
+            gui_logger.exception("community_submit_stack_failed title=%s", payload["title"])
+            _set_flash(request, f"Stack submission failed: {exc}", level="error")
+            return RedirectResponse("/community/stacks", status_code=303)
+
+        item = result.get("item") if isinstance(result.get("item"), dict) else {}
+        if item.get("slug"):
+            _set_flash(request, f"Saved stack '{item.get('title', item['slug'])}' to the Community Hub.")
+            return RedirectResponse(f"/community/stacks/{item['slug']}", status_code=303)
+        _set_flash(request, "Stack submission finished, but no stack entry was returned.", level="error")
+        return RedirectResponse("/community/stacks", status_code=303)
+
     @app.get("/community/showcase", response_class=HTMLResponse)
     async def community_showcase_page(
         request: Request,
@@ -1609,10 +1928,12 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             return RedirectResponse("/login", status_code=303)
 
         payload: dict[str, Any] = {}
+        stacks_payload: dict[str, Any] = {}
         error = ""
         if community_service.enabled:
             try:
                 payload = await community_service.showcase(query=q.strip(), category=category.strip())
+                stacks_payload = await community_service.stacks(query="")
             except Exception as exc:
                 gui_logger.exception("community_showcase_failed")
                 error = str(exc)
@@ -1630,8 +1951,88 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "category": category.strip(),
                 "community_items": payload.get("items", []),
                 "community_error": error,
+                "community_preferences": config_service.get_community_preferences(),
+                "community_write_enabled": community_service.can_write,
+                "community_stacks_catalog": stacks_payload.get("items", []),
+                "showcase_submission_form": {
+                    "title": "",
+                    "description": "",
+                    "use_case": "",
+                    "category": category.strip(),
+                    "example_prompt": "",
+                    "stack_slug": "",
+                    "is_public": False,
+                },
             },
         )
+
+    @app.post("/community/submit/showcase")
+    async def community_submit_showcase(request: Request):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        prefs = config_service.get_community_preferences()
+        if not prefs.get("allow_public_mcp_submissions"):
+            _set_flash(request, "Enable community publishing in Settings before submitting showcase entries.", level="error")
+            return RedirectResponse("/settings", status_code=303)
+        if not community_service.can_write:
+            _set_flash(request, "Community hub write access is not configured for this GUI instance.", level="error")
+            return RedirectResponse("/community/showcase", status_code=303)
+
+        form = await request.form()
+        payload = {
+            "title": str(form.get("title", "")).strip(),
+            "description": str(form.get("description", "")).strip(),
+            "use_case": str(form.get("use_case", "")).strip(),
+            "category": str(form.get("category", "")).strip(),
+            "example_prompt": str(form.get("example_prompt", "")).strip(),
+            "stack_slug": str(form.get("stack_slug", "")).strip(),
+            "is_public": bool(form.get("is_public")),
+            "created_by": user.username,
+        }
+        try:
+            result = await community_service.submit_showcase(payload)
+        except Exception as exc:
+            gui_logger.exception("community_submit_showcase_failed title=%s", payload["title"])
+            _set_flash(request, f"Showcase submission failed: {exc}", level="error")
+            return RedirectResponse("/community/showcase", status_code=303)
+
+        item = result.get("item") if isinstance(result.get("item"), dict) else {}
+        if item.get("slug"):
+            _set_flash(request, f"Saved showcase '{item.get('title', item['slug'])}' to the Community Hub.")
+            return RedirectResponse("/community/showcase", status_code=303)
+        _set_flash(request, "Showcase submission finished, but no showcase entry was returned.", level="error")
+        return RedirectResponse("/community/showcase", status_code=303)
+
+    @app.post("/community/import/showcase/{slug}")
+    async def community_import_showcase(request: Request, slug: str):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+        if not community_service.enabled:
+            _set_flash(request, "Community hub is not configured for this GUI instance.", level="error")
+            return RedirectResponse("/community/showcase", status_code=303)
+        try:
+            showcase = await community_service.showcase_detail(slug)
+        except Exception as exc:
+            gui_logger.exception("community_showcase_detail_failed slug=%s", slug)
+            _set_flash(request, f"Showcase import failed during lookup: {exc}", level="error")
+            return RedirectResponse("/community/showcase", status_code=303)
+
+        stack = showcase.get("stack") if isinstance(showcase.get("stack"), dict) else {}
+        stack_slug = str(stack.get("slug", "")).strip()
+        if not stack_slug:
+            _set_flash(request, "This showcase entry has no importable stack attached.", level="error")
+            return RedirectResponse("/community/showcase", status_code=303)
+
+        try:
+            await community_service.mark_showcase_import(slug)
+        except Exception:
+            gui_logger.exception("community_showcase_import_metric_failed slug=%s", slug)
+
+        _set_flash(request, f"Importing showcase '{showcase.get('title', slug)}' through its linked stack.")
+        return RedirectResponse(f"/community/import/stack/{stack_slug}", status_code=303)
 
     @app.get("/community/stats", response_class=HTMLResponse)
     async def community_stats_page(request: Request):
@@ -1989,18 +2390,21 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         history = await agent_service.get_mcp_test_history(user, server_name)
         record = config_service.get_mcp_record(server_name)
         community_item: dict[str, Any] = {}
+        community_fixes: list[dict[str, Any]] = []
         community_slug = str(record.get("community_slug", "")).strip()
         if community_slug and community_service.enabled:
             try:
                 community_item = await community_service.marketplace_detail(community_slug)
             except Exception:
                 gui_logger.exception("community_marketplace_detail_failed slug=%s", community_slug)
+            community_fixes = await fetch_community_fixes(record)
         return render_mcp_detail_page(
             request,
             user,
             config=config,
             server_name=server_name,
             community_item=community_item,
+            community_fixes=community_fixes,
             mcp_test_history=history,
         )
 
@@ -2032,18 +2436,21 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             history = await agent_service.get_mcp_test_history(user, server_name)
             record = config_service.get_mcp_record(server_name)
             community_item: dict[str, Any] = {}
+            community_fixes: list[dict[str, Any]] = []
             community_slug = str(record.get("community_slug", "")).strip()
             if community_slug and community_service.enabled:
                 try:
                     community_item = await community_service.marketplace_detail(community_slug)
                 except Exception:
                     gui_logger.exception("community_marketplace_detail_failed slug=%s", community_slug)
+                community_fixes = await fetch_community_fixes(record)
             return render_mcp_detail_page(
                 request,
                 user,
                 config=config,
                 server_name=server_name,
                 community_item=community_item,
+                community_fixes=community_fixes,
                 mcp_test_history=history,
                 error=str(exc),
                 status_code=400,
@@ -2146,6 +2553,119 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         else:
             _set_flash(request, "Community publish finished, but the hub did not return a marketplace entry.", level="error")
         return RedirectResponse(f"/mcp/{server_name}", status_code=303)
+
+    @app.post("/mcp/apply-community-fix/{server_name}")
+    async def mcp_apply_community_fix(request: Request, server_name: str, background_tasks: BackgroundTasks):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        record = config_service.get_mcp_record(server_name)
+        community_slug = str(record.get("community_slug", "")).strip()
+        if not community_slug or not community_service.enabled:
+            _set_flash(request, "No community-linked MCP data is available for this server.", level="error")
+            return RedirectResponse(f"/mcp/{server_name}", status_code=303)
+
+        form = await request.form()
+        next_url = str(form.get("next", f"/mcp/{server_name}")).strip() or f"/mcp/{server_name}"
+        fix_id = str(form.get("fix_id", "")).strip()
+        if not fix_id:
+            _set_flash(request, "No community fix was selected.", level="error")
+            return RedirectResponse(next_url, status_code=303)
+
+        fixes = await fetch_community_fixes(record)
+        selected_fix = next((item for item in fixes if str(item.get("id", "")).strip() == fix_id), None)
+        if not selected_fix:
+            _set_flash(request, "The selected community fix is no longer available.", level="error")
+            return RedirectResponse(next_url, status_code=303)
+
+        action_type = str(selected_fix.get("action_type", "")).strip()
+        if action_type == "apply_recommended_config":
+            config = config_service.load()
+            server = config.tools.mcp_servers.get(server_name)
+            if server is None:
+                _set_flash(request, f"MCP server '{server_name}' was not found.", level="error")
+                return RedirectResponse("/mcp", status_code=303)
+            config_changes = selected_fix.get("config_changes") if isinstance(selected_fix.get("config_changes"), dict) else {}
+            transport = str(config_changes.get("transport", "")).strip()
+            timeout = int(config_changes.get("tool_timeout", 0) or 0)
+            if transport:
+                server.type = transport
+            if timeout > 0:
+                server.tool_timeout = timeout
+            config.tools.mcp_servers[server_name] = server
+            config_service.save(config)
+            refreshed = mcp_service.refresh_runtime_requirements(server_name)
+            config_service.set_mcp_record(
+                server_name,
+                {
+                    **refreshed,
+                    "enabled": False,
+                    "status": "registered",
+                    "status_label": "Community recommendation applied",
+                    "last_test_status": "registered",
+                    "last_test_label": "Retest required",
+                    "last_error": "",
+                    "friendly_error": {},
+                    "next_action": "Run the MCP test again to validate the community recommendation before enabling this server for chat.",
+                },
+            )
+            agent_service.invalidate()
+            clear_error()
+            _set_flash(request, f"Applied the community recommendation for '{server_name}'. Run the MCP test again now.")
+            return RedirectResponse(next_url, status_code=303)
+
+        if action_type == "repair_recipe":
+            repair_recipe = str(selected_fix.get("repair_recipe", "")).strip()
+            if not repair_recipe:
+                _set_flash(request, "This community fix has no repair recipe attached.", level="error")
+                return RedirectResponse(next_url, status_code=303)
+            repair_plan = {
+                "server_name": server_name,
+                "missing_runtime": "",
+                "missing_runtimes": [str(item) for item in record.get("missing_runtimes", []) if str(item).strip()],
+                "required_env": [str(item) for item in record.get("missing_env", []) if str(item).strip()],
+                "recommended_recipe": repair_recipe,
+                "available_recipes": [repair_recipe],
+                "next_step": str(selected_fix.get("summary", "")).strip() or "Apply the suggested community repair.",
+                "confidence": float(selected_fix.get("confidence_score", 0.0) or 0.0),
+                "shell_command": "",
+                "source": "community",
+                "supported": True,
+            }
+            repair_action = _get_repair_action(settings, repair_plan)
+            if not repair_action["enabled"]:
+                _set_flash(request, repair_action["description"], level="error")
+                return RedirectResponse(next_url, status_code=303)
+            config_service.set_mcp_record(
+                server_name,
+                {
+                    **record,
+                    "repair_status": "queued",
+                    "repair_status_label": "Community repair queued",
+                    "repair_recipe": repair_recipe,
+                    "repair_requested_at": _utc_now(),
+                    "repair_available_recipes": [repair_recipe],
+                    "repair_log_tail": _append_log(
+                        str(record.get("repair_log_tail", "")).strip(),
+                        f"Queued community repair recipe: {repair_recipe}",
+                    ),
+                },
+            )
+            background_tasks.add_task(
+                _run_mcp_repair_command,
+                str(repair_action["command"]),
+                gui_logger,
+                config_service,
+                mcp_service,
+                server_name,
+                repair_plan,
+            )
+            _set_flash(request, f"Queued the community repair for '{server_name}'. Run the MCP test again after it finishes.")
+            return RedirectResponse(next_url, status_code=303)
+
+        _set_flash(request, "This community fix is advisory only and cannot be applied automatically.", level="error")
+        return RedirectResponse(next_url, status_code=303)
 
     @app.post("/mcp/repair/{server_name}")
     async def mcp_repair(request: Request, server_name: str, background_tasks: BackgroundTasks):
@@ -2268,7 +2788,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         return RedirectResponse(f"/mcp/{server_name}", status_code=303)
 
     @app.get("/chat", response_class=HTMLResponse)
-    async def chat_page(request: Request):
+    async def chat_page(request: Request, draft: str = Query("")):
         user = _require_admin(request, auth_service)
         if user is None:
             return RedirectResponse("/login", status_code=303)
@@ -2283,6 +2803,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         active_servers = [server for server in installed_servers if server["enabled"]]
         active_tool_names = sorted({tool for server in active_servers for tool in server.get("tool_names", [])})
         usage_summary = config_service.get_usage_summary()
+        community_chat_hints = await build_chat_community_hints(config)
         return _render(
             request,
             "chat.html",
@@ -2311,6 +2832,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "chat_templates": CHAT_TEMPLATE_DEFINITIONS,
                 "recent_uploads": config_service.recent_uploads(),
                 "usage_snapshot": usage_summary,
+                "chat_draft": draft.strip(),
+                "community_chat_hints": community_chat_hints,
             },
         )
 

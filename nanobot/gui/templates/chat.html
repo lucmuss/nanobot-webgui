@@ -44,7 +44,7 @@
       <form method="post" action="/chat/send" class="chat-composer" data-testid="chat-form">
         <label>
           Message
-          <textarea name="message" placeholder="Ask nanobot to inspect a repository, explain a file, or draft a change." data-testid="chat-message"></textarea>
+          <textarea name="message" placeholder="Ask nanobot to inspect a repository, explain a file, or draft a change." data-testid="chat-message">{{ chat_draft }}</textarea>
         </label>
         <div class="actions">
           <button type="submit" data-testid="chat-send">Send Message</button>
@@ -112,6 +112,27 @@
           </div>
         {% else %}
           <p class="muted">No tool call has been recorded in the current web chat session yet.</p>
+        {% endif %}
+      </div>
+
+      <div class="card compact-card" style="margin-top: 14px;" data-testid="chat-community-hints-card">
+        <header><strong>Community MCP Hints</strong></header>
+        {% if community_chat_hints %}
+          <div class="compact-list">
+            {% for hint in community_chat_hints %}
+              <div>
+                <strong>{{ hint.name }}</strong>
+                <p class="muted">
+                  {% if hint.best_for %}Best for {{ hint.best_for|join(", ") }}.{% endif %}
+                  {% if hint.recommended_transport %} Transport {{ hint.recommended_transport }}.{% endif %}
+                  {% if hint.recommended_timeout %} Timeout {{ hint.recommended_timeout }}s.{% endif %}
+                  {% if hint.known_issues %} Watch out for {{ hint.known_issues|join("; ") }}.{% endif %}
+                </p>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="muted">No active community-backed MCP hints are currently attached to the main chat runtime.</p>
         {% endif %}
       </div>
     </section>

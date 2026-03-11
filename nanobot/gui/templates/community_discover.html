@@ -2,15 +2,76 @@
 {% block body %}
 {% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
 
-  <section class="panel">
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">Community Marketplace</p>
+        <h3>Discover MCP</h3>
+        <p class="muted">Find stable MCP servers, compare community reliability, and jump straight into the local install flow with context.</p>
+      </div>
+      <div class="page-header-actions">
+        <a class="button secondary" href="/mcp">Open local MCP registry</a>
+        <a class="button secondary" href="#community-submit-card">Publish MCP</a>
+      </div>
+    </div>
+    <div class="page-meta-bar">
+      <span class="meta-chip"><strong>Current model</strong>{{ current_model or "Not configured" }}</span>
+      <span class="meta-chip {% if community_overview %}good{% else %}muted{% endif %}"><strong>Registry</strong>{{ community_overview.registry_count if community_overview else 0 }} MCPs</span>
+      <span class="meta-chip {% if community_preferences.receive_recommendations %}good{% else %}muted{% endif %}"><strong>Recommendations</strong>{{ "Enabled" if community_preferences.receive_recommendations else "Disabled" }}</span>
+      <span class="meta-chip {% if community_preferences.show_marketplace_stats %}good{% else %}muted{% endif %}"><strong>Stats</strong>{{ "Visible" if community_preferences.show_marketplace_stats else "Hidden" }}</span>
+    </div>
+  </section>
+
+  {% if community_recommendations %}
+    <section class="panel" style="margin-top: 22px;" data-testid="community-recommendations">
+      <div class="split-header">
+        <div>
+          <p class="eyebrow">Recommended for your setup</p>
+          <h3 style="margin: 0;">High-confidence MCPs to try next</h3>
+          <p class="muted">These entries are picked from community reliability plus how well they match your current model and already installed MCPs.</p>
+        </div>
+      </div>
+      <div class="card-grid three">
+        {% for item in community_recommendations %}
+          <article class="card compact-card">
+            <header>
+              <strong>{{ item.name }}</strong>
+              <span class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Recommended') }}</span>
+            </header>
+            <p class="muted">{{ item.reason }}</p>
+            <div class="reliability-stack">
+              <div class="split-header" style="margin-bottom: 0;">
+                <span class="muted">Reliability</span>
+                <strong>{{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}%</strong>
+              </div>
+              <div class="reliability-bar">
+                <div class="reliability-fill {{ item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ item.get('reliability', {}).get('bar_width', ((item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
+              </div>
+            </div>
+            <div class="badge-row" style="margin-top: 12px;">
+              <span class="pill {{ item.get('difficulty', {}).get('tone', 'muted') }}">{{ item.get('difficulty', {}).get('label', 'Unknown') }}</span>
+              {% for label in item.get('best_for', [])[:2] %}
+                <span class="pill">{{ label }}</span>
+              {% endfor %}
+            </div>
+            <div class="actions" style="margin-top: 14px;">
+              <a class="button secondary" href="/community/mcp/{{ item.slug }}">View Details</a>
+              <form method="post" action="/community/install/mcp/{{ item.slug }}">
+                <button type="submit" data-testid="community-recommend-install-{{ item.slug }}">Install</button>
+              </form>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <section class="panel" style="margin-top: 22px;">
     <div class="split-header">
       <div>
-        <p class="eyebrow">Marketplace</p>
-        <h3 style="margin: 0;">Discover MCP</h3>
-        <p class="muted">Browse community-tracked MCP servers, compare reliability, and jump into details before you install anything locally.</p>
-      </div>
-      <div class="pill {% if community_overview %}good{% else %}muted{% endif %}">
-        {{ community_overview.registry_count if community_overview else 0 }} tracked
+        <p class="eyebrow">Search MCP Servers</p>
+        <h3 style="margin: 0;">Marketplace search</h3>
+        <p class="muted">Search by MCP name, repository, or category and sort by reliability, installs, or recent activity.</p>
       </div>
     </div>
 
@@ -21,7 +82,31 @@
       </label>
       <label>
         Category
-        <input type="text" name="category" value="{{ category }}" placeholder="Coding, Research, Automation" data-testid="community-discover-category">
+        <select name="category" data-testid="community-discover-category">
+          <option value="">All categories</option>
+          {% for item in community_categories %}
+            <option value="{{ item }}" {% if category == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Language
+        <select name="language" data-testid="community-discover-language">
+          <option value="">All languages</option>
+          {% for item in community_languages %}
+            <option value="{{ item }}" {% if language == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Reliability
+        <select name="min_reliability" data-testid="community-discover-min-reliability">
+          {% for item in community_reliability_options %}
+            <option value="{{ item }}" {% if min_reliability == item %}selected{% endif %}>
+              {% if item == 0 %}Any reliability{% else %}>={{ item }}% reliability{% endif %}
+            </option>
+          {% endfor %}
+        </select>
       </label>
       <label>
         Sort
@@ -38,12 +123,37 @@
     </form>
   </section>
 
-  <section class="panel" style="margin-top: 22px;" data-testid="community-submit-card">
+  {% if community_overview %}
+    <section class="compact-kpi-grid" style="margin-top: 22px;">
+      <article class="compact-kpi">
+        <span class="muted">Registry</span>
+        <strong>{{ community_overview.registry_count }}</strong>
+        <small>{{ community_overview.verified_count }} verified</small>
+      </article>
+      <article class="compact-kpi">
+        <span class="muted">Active Instances</span>
+        <strong>{{ community_overview.active_instances }}</strong>
+        <small>community observed</small>
+      </article>
+      <article class="compact-kpi">
+        <span class="muted">Runs Today</span>
+        <strong>{{ community_overview.runs_today }}</strong>
+        <small>telemetry events</small>
+      </article>
+      <article class="compact-kpi">
+        <span class="muted">Top Category</span>
+        <strong>{{ community_overview.top_category or "Unknown" }}</strong>
+        <small>{{ community_overview.unique_categories or 0 }} categories</small>
+      </article>
+    </section>
+  {% endif %}
+
+  <section class="panel" style="margin-top: 22px;" data-testid="community-submit-card" id="community-submit-card">
     <div class="split-header">
       <div>
         <p class="eyebrow">Submit MCP</p>
         <h3 style="margin: 0;">Publish a repository to the hub</h3>
-        <p class="muted">Use this to add a GitHub MCP repository directly to the Community Hub. The hub will deduplicate known URLs and reject obvious secrets.</p>
+        <p class="muted">Add a GitHub MCP repository directly to the Community Hub. Known URLs are deduplicated automatically and obvious secret strings are rejected.</p>
       </div>
       <div class="pill {% if community_preferences.allow_public_mcp_submissions %}good{% else %}muted{% endif %}">
         {{ "Publishing enabled" if community_preferences.allow_public_mcp_submissions else "Publishing disabled" }}
@@ -89,44 +199,48 @@
     {% endif %}
   </section>
 
-  {% if community_overview %}
-    <section class="card-grid four" style="margin-top: 22px;">
-      <article class="card compact-card">
-        <strong>Registry</strong>
-        <div class="metric-value">{{ community_overview.registry_count }}</div>
-      </article>
-      <article class="card compact-card">
-        <strong>Verified</strong>
-        <div class="metric-value">{{ community_overview.verified_count }}</div>
-      </article>
-      <article class="card compact-card">
-        <strong>Active Instances</strong>
-        <div class="metric-value">{{ community_overview.active_instances }}</div>
-      </article>
-      <article class="card compact-card">
-        <strong>Runs Today</strong>
-        <div class="metric-value">{{ community_overview.runs_today }}</div>
-      </article>
-    </section>
-  {% endif %}
-
   <section class="card-list" style="margin-top: 22px;">
     {% for item in community_items %}
       <article class="card" data-testid="community-mcp-card-{{ item.slug }}">
-        <header>
-          <strong>{{ item.name }}</strong>
-          <span class="pill {% if item.success_rate >= 0.95 %}good{% elif item.success_rate >= 0.85 %}muted{% else %}bad{% endif %}">
-            {{ "%.0f"|format(item.success_rate * 100) }}% success
-          </span>
-        </header>
-        <p class="muted">{{ item.description }}</p>
-        <div class="badge-row">
-          <span class="pill">{{ item.category }}</span>
-          <span class="pill">{{ item.language }}</span>
-          <span class="pill">{{ item.install_method }}</span>
-          {% if item.verified %}<span class="pill good">Verified</span>{% endif %}
+        <div class="split-header">
+          <div>
+            <strong>{{ item.name }}</strong>
+            <p class="muted" style="margin: 8px 0 0;">{{ item.description }}</p>
+          </div>
+          <div class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Tracked') }}</div>
         </div>
-        <div class="details-grid compact" style="margin-top: 14px;">
+
+        <div class="page-meta-bar">
+          <span class="meta-chip"><strong>Category</strong>{{ item.category }}</span>
+          <span class="meta-chip"><strong>Language</strong>{{ item.language }}</span>
+          <span class="meta-chip"><strong>Install</strong>{{ item.install_method }}</span>
+          <span class="meta-chip {{ item.get('difficulty', {}).get('tone', 'muted') }}"><strong>Difficulty</strong>{{ item.get('difficulty', {}).get('label', 'Unknown') }}</span>
+          {% if item.verified %}<span class="meta-chip good"><strong>Trust</strong>Verified</span>{% endif %}
+        </div>
+
+        <div class="panel-grid two" style="margin-top: 16px;">
+          <div class="insight-panel community">
+            <h4>Community reliability</h4>
+            <div class="reliability-stack" style="margin-top: 10px;">
+              <div class="split-header" style="margin-bottom: 0;">
+                <span class="muted">{{ item.get('reliability', {}).get('label', 'Tracked') }}</span>
+                <strong>{{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}%</strong>
+              </div>
+              <div class="reliability-bar">
+                <div class="reliability-fill {{ item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ item.get('reliability', {}).get('bar_width', ((item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
+              </div>
+            </div>
+          </div>
+          <div class="insight-panel local">
+            <h4>Install preview</h4>
+            <div class="meta-list">
+              <div><strong>Dependencies</strong><div class="muted">{{ item.get("dependencies", [])|join(" · ") if item.get("dependencies", []) else "No dependency hint" }}</div></div>
+              <div><strong>Tools</strong><div class="muted">{{ item.tool_count }} tools</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="details-grid compact" style="margin-top: 16px;">
           <div class="meta-pair">
             <strong>Active Instances</strong>
             <span>{{ item.active_instances }}</span>
@@ -136,19 +250,27 @@
             <span>{{ item.avg_latency_ms }} ms</span>
           </div>
           <div class="meta-pair">
-            <strong>Tools</strong>
-            <span>{{ item.tool_count }}</span>
+            <strong>Best used with</strong>
+            <span>{{ item.get("best_for", [])|join(", ") if item.get("best_for", []) else "General MCP workflows" }}</span>
           </div>
           <div class="meta-pair">
-            <strong>Installs</strong>
-            <span>{{ item.installs }}</span>
+            <strong>Observed locally</strong>
+            <span>{{ item.recent_runs }} recent community runs</span>
           </div>
         </div>
+
         <div class="stack-list" style="margin-top: 14px;">
           {% for tool in item.tools[:4] %}
             <span class="pill">{{ tool }}</span>
           {% endfor %}
         </div>
+        {% if item.known_fixes %}
+          <div class="insight-panel community" style="margin-top: 14px;">
+            <h4>Known fix</h4>
+            <p class="muted" style="margin: 8px 0 0;">{{ item.known_fixes[0].title }}</p>
+            <p class="muted" style="margin: 6px 0 0;">{{ item.known_fixes[0].summary }}</p>
+          </div>
+        {% endif %}
         <div class="actions" style="margin-top: 16px;">
           <a class="button secondary" href="/community/mcp/{{ item.slug }}" data-testid="community-mcp-open-{{ item.slug }}">View Details</a>
           <form method="post" action="/community/install/mcp/{{ item.slug }}">

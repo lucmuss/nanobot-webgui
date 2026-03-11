@@ -1,12 +1,17 @@
 {% extends "base.html" %}
 {% block body %}
 {% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
-  <section class="panel">
-    <div class="section-intro">
-      <p class="eyebrow">Stacks</p>
-      <h3>Import proven MCP combinations</h3>
-      <p class="muted">These are working MCP bundles for concrete use cases such as coding reviews or research loops.</p>
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">Community Stacks</p>
+        <h3>MCP Stacks</h3>
+        <p class="muted">Import proven MCP combinations for concrete use cases instead of installing each server one by one.</p>
+      </div>
     </div>
+  </section>
+
+  <section class="panel" style="margin-top: 22px;">
     <form method="get" action="/community/stacks" class="form-columns" data-testid="community-stacks-form">
       <label>
         Search
@@ -18,22 +23,93 @@
     </form>
   </section>
 
+  <section class="panel" style="margin-top: 22px;" data-testid="community-stack-submit-card">
+    <div class="split-header">
+      <div>
+        <p class="eyebrow">Share a Stack</p>
+        <h3 style="margin: 0;">Publish a reusable MCP stack</h3>
+        <p class="muted">Turn a proven local MCP combination into a reusable community stack with one recommended model and one example prompt.</p>
+      </div>
+      <div class="pill {% if community_preferences.allow_public_mcp_submissions %}good{% else %}muted{% endif %}">
+        {{ "Publishing enabled" if community_preferences.allow_public_mcp_submissions else "Publishing disabled" }}
+      </div>
+    </div>
+    {% if community_preferences.allow_public_mcp_submissions and community_write_enabled %}
+      <form method="post" action="/community/submit/stack" class="form-columns" data-testid="community-stack-submit-form">
+        <label>
+          Title
+          <input type="text" name="title" value="{{ stack_submission_form.title }}" placeholder="GitHub Developer Stack" required data-testid="community-stack-submit-title">
+        </label>
+        <label>
+          Recommended model
+          <input type="text" name="recommended_model" value="{{ stack_submission_form.recommended_model }}" placeholder="moonshot/kimi-k2.5" required data-testid="community-stack-submit-model">
+        </label>
+        <label style="grid-column: 1 / -1;">
+          Description
+          <textarea name="description" rows="2" required data-testid="community-stack-submit-description">{{ stack_submission_form.description }}</textarea>
+        </label>
+        <label style="grid-column: 1 / -1;">
+          Use case
+          <textarea name="use_case" rows="2" required data-testid="community-stack-submit-use-case">{{ stack_submission_form.use_case }}</textarea>
+        </label>
+        <label style="grid-column: 1 / -1;">
+          Example prompt
+          <textarea name="example_prompt" rows="2" data-testid="community-stack-submit-prompt">{{ stack_submission_form.example_prompt }}</textarea>
+        </label>
+        <label style="grid-column: 1 / -1;">
+          MCP slugs or GitHub URLs
+          <textarea name="items" rows="3" placeholder="context7, chrome-devtools-mcp" required data-testid="community-stack-submit-items">{{ stack_submission_form.items }}</textarea>
+        </label>
+        <label class="checkbox" style="grid-column: 1 / -1;">
+          <input type="checkbox" name="is_public" {% if stack_submission_form.is_public %}checked{% endif %} data-testid="community-stack-submit-public">
+          <span>Publish immediately</span>
+        </label>
+        <div class="actions">
+          <button type="submit" data-testid="community-stack-submit-submit">Publish Stack</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="muted">
+        {% if not community_preferences.allow_public_mcp_submissions %}
+          Enable community publishing in Settings before submitting stacks.
+        {% else %}
+          Community hub write access is not configured for this GUI instance.
+        {% endif %}
+      </p>
+      <div class="actions" style="margin-top: 14px;">
+        <a class="button secondary" href="/settings">Open Settings</a>
+      </div>
+    {% endif %}
+  </section>
+
   <section class="card-list" style="margin-top: 22px;">
     {% for item in community_items %}
       <article class="card" data-testid="community-stack-card-{{ item.slug }}">
-        <header>
-          <strong>{{ item.title }}</strong>
-          <span class="pill good">{{ item.rating }}</span>
-        </header>
-        <p class="muted">{{ item.description }}</p>
-        <div class="details-grid compact">
-          <div class="meta-pair"><strong>Imports</strong><span>{{ item.imports_count }}</span></div>
-          <div class="meta-pair"><strong>Recommended Model</strong><span>{{ item.recommended_model }}</span></div>
+        <div class="split-header">
+          <div>
+            <strong>{{ item.title }}</strong>
+            <p class="muted" style="margin: 8px 0 0;">{{ item.description }}</p>
+          </div>
+          <div class="pill {{ item.get('difficulty', {}).get('tone', 'muted') }}">{{ item.get('difficulty', {}).get('label', 'Unknown') }}</div>
         </div>
-        <div class="stack-list" style="margin-top: 14px;">
-          {% for entry in item["items"] %}
-            <span class="pill">{{ entry.name }}</span>
-          {% endfor %}
+        <div class="page-meta-bar">
+          <span class="meta-chip"><strong>Imports</strong>{{ item.imports_count }}</span>
+          <span class="meta-chip"><strong>Model</strong>{{ item.recommended_model }}</span>
+          <span class="meta-chip"><strong>Rating</strong>{{ item.rating }}</span>
+          <span class="meta-chip {{ item.get('difficulty', {}).get('tone', 'muted') }}"><strong>Difficulty</strong>{{ item.get('difficulty', {}).get('label', 'Unknown') }}</span>
+        </div>
+        <div class="insight-panel community" style="margin-top: 14px;">
+          <h4>Stack diagram</h4>
+          <div class="flow-diagram" style="margin-top: 12px;">
+            {% for entry in item["items"] %}
+              <span class="flow-node">{{ entry.name }}</span>
+              {% if not loop.last %}<span class="flow-arrow">→</span>{% endif %}
+            {% endfor %}
+          </div>
+        </div>
+        <div class="meta-pair" style="margin-top: 14px;">
+          <strong>Use Case</strong>
+          <span>{{ item.use_case }}</span>
         </div>
         <div class="actions" style="margin-top: 16px;">
           <a class="button secondary" href="/community/stacks/{{ item.slug }}">View Stack</a>

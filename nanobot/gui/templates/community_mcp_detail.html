@@ -2,44 +2,84 @@
 {% block body %}
 {% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
 {% if community_item %}
-  <div class="panel-grid two">
-    <section class="panel">
-      <div class="section-intro">
-        <p class="eyebrow">Overview</p>
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">Community MCP Detail</p>
         <h3>{{ community_item.name }}</h3>
         <p class="muted">{{ community_item.description }}</p>
       </div>
-      <div class="details-grid compact">
-        <div class="meta-pair"><strong>Repository</strong><span class="mono">{{ community_item.repo_url }}</span></div>
-        <div class="meta-pair"><strong>Install Method</strong><span>{{ community_item.install_method }}</span></div>
-        <div class="meta-pair"><strong>Active Instances</strong><span>{{ community_item.active_instances }}</span></div>
-        <div class="meta-pair"><strong>Success Rate</strong><span>{{ "%.0f"|format(community_item.success_rate * 100) }}%</span></div>
-        <div class="meta-pair"><strong>Average Latency</strong><span>{{ community_item.avg_latency_ms }} ms</span></div>
-        <div class="meta-pair"><strong>Recent Runs</strong><span>{{ community_item.recent_runs }}</span></div>
-      </div>
-      <div class="actions" style="margin-top: 16px;">
+      <div class="page-header-actions">
         <form method="post" action="/community/install/mcp/{{ community_item.slug }}">
           <button type="submit" data-testid="community-detail-install">Install from Community</button>
         </form>
         <a class="button secondary" href="/mcp?q={{ community_item.repo_url }}">Open Local Install Flow</a>
       </div>
-    </section>
+    </div>
+    <div class="page-meta-bar">
+      {% for item in community_meta %}
+        <span class="meta-chip {{ item.tone }}"><strong>{{ item.label }}</strong>{{ item.value }}</span>
+      {% endfor %}
+      <span class="meta-chip"><strong>Repository</strong>{{ community_item.repo_url }}</span>
+    </div>
+  </section>
+
+  <div class="panel-grid two" style="margin-top: 22px;">
     <section class="panel">
-      <div class="section-intro">
-        <p class="eyebrow">Recommended Config</p>
-        <h3>Community-backed defaults</h3>
+      <div class="split-header">
+        <div>
+          <p class="eyebrow">Overview</p>
+          <h3 style="margin: 0;">Community signals</h3>
+        </div>
+        <span class="pill {{ community_item.get('reliability', {}).get('tone', 'muted') }}">{{ community_item.get('reliability', {}).get('label', 'Tracked') }}</span>
+      </div>
+      <div class="reliability-stack">
+        <div class="split-header" style="margin-bottom: 0;">
+          <span class="muted">Reliability score</span>
+          <strong>{{ community_item.get('reliability', {}).get('percent', ((community_item.get('success_rate', 0) or 0) * 100)|int) }}%</strong>
+        </div>
+        <div class="reliability-bar">
+          <div class="reliability-fill {{ community_item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ community_item.get('reliability', {}).get('bar_width', ((community_item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
+        </div>
+      </div>
+      <div class="details-grid compact" style="margin-top: 16px;">
+        <div class="meta-pair"><strong>Install Method</strong><span>{{ community_item.install_method }}</span></div>
+        <div class="meta-pair"><strong>Active Instances</strong><span>{{ community_item.active_instances }}</span></div>
+        <div class="meta-pair"><strong>Average Latency</strong><span>{{ community_item.avg_latency_ms }} ms</span></div>
+        <div class="meta-pair"><strong>Recent Runs</strong><span>{{ community_item.recent_runs }}</span></div>
+        <div class="meta-pair"><strong>Difficulty</strong><span>{{ community_item.get("difficulty", {}).get("label", "Unknown") }}</span></div>
+        <div class="meta-pair"><strong>Best used with</strong><span>{{ community_item.get("best_for", [])|join(", ") if community_item.get("best_for", []) else "General workflows" }}</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="split-header">
+        <div>
+          <p class="eyebrow">Recommended Config</p>
+          <h3 style="margin: 0;">Community-backed defaults</h3>
+        </div>
       </div>
       {% if community_item.recommended_config %}
-        <div class="details-grid compact">
-          <div class="meta-pair"><strong>Transport</strong><span>{{ community_item.recommended_config.transport }}</span></div>
-          <div class="meta-pair"><strong>Timeout</strong><span>{{ community_item.recommended_config.timeout }} seconds</span></div>
-          <div class="meta-pair"><strong>Retries</strong><span>{{ community_item.recommended_config.retries }}</span></div>
-          <div class="meta-pair"><strong>Confidence</strong><span>{{ "%.0f"|format(community_item.recommended_config.confidence_score * 100) }}%</span></div>
-          <div class="meta-pair"><strong>Evidence</strong><span>{{ community_item.recommended_config.based_on_instances }} instances</span></div>
+        <div class="insight-panel community">
+          <h4>Community recommendation</h4>
+          <div class="details-grid compact" style="margin-top: 12px;">
+            <div class="meta-pair"><strong>Transport</strong><span>{{ community_item.recommended_config.transport }}</span></div>
+            <div class="meta-pair"><strong>Timeout</strong><span>{{ community_item.recommended_config.timeout }} seconds</span></div>
+            <div class="meta-pair"><strong>Retries</strong><span>{{ community_item.recommended_config.retries }}</span></div>
+            <div class="meta-pair"><strong>Evidence</strong><span>{{ community_item.recommended_config.based_on_instances }} instances</span></div>
+          </div>
         </div>
       {% else %}
         <p class="muted">No recommended config is available yet.</p>
       {% endif %}
+
+      <div class="insight-panel local" style="margin-top: 16px;">
+        <h4>Install preview</h4>
+        <div class="meta-list">
+          <div><strong>Dependencies</strong><div class="muted">{{ community_item.get("dependencies", [])|join(" · ") if community_item.get("dependencies", []) else "No dependency hint" }}</div></div>
+          <div><strong>Repository</strong><div class="mono">{{ community_item.repo_url }}</div></div>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -47,7 +87,7 @@
     <section class="panel">
       <div class="section-intro">
         <p class="eyebrow">Tools</p>
-        <h3>Known capabilities</h3>
+        <h3>Capabilities</h3>
       </div>
       <div class="stack-list">
         {% for tool in community_item.tools %}
@@ -58,7 +98,7 @@
     <section class="panel">
       <div class="section-intro">
         <p class="eyebrow">Known Issues</p>
-        <h3>Common friction points</h3>
+        <h3>Community friction points</h3>
       </div>
       {% for issue in community_item.known_issues %}
         <div class="stat-line">
@@ -66,6 +106,46 @@
         </div>
       {% else %}
         <p class="muted">No common issues are tracked yet.</p>
+      {% endfor %}
+    </section>
+  </div>
+
+  <div class="panel-grid two" style="margin-top: 22px;">
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Community Fixes</p>
+        <h3>Most common recovery hints</h3>
+      </div>
+      {% for fix in community_item.get("known_fixes", []) %}
+        <div class="stat-line">
+          <div>
+            <strong>{{ fix.title }}</strong>
+            <div class="muted">{{ fix.summary }}</div>
+          </div>
+          {% if fix.evidence_count %}
+            <span class="pill">{{ fix.evidence_count }} signals</span>
+          {% endif %}
+        </div>
+      {% else %}
+        <p class="muted">No community fix hints are available yet.</p>
+      {% endfor %}
+    </section>
+
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Error Clusters</p>
+        <h3>Observed failure patterns</h3>
+      </div>
+      {% for cluster in community_item.get("error_clusters", []) %}
+        <div class="stat-line">
+          <div>
+            <strong>{{ cluster.error_code }}</strong>
+            <div class="muted">{{ cluster.summary }}</div>
+          </div>
+          <span class="pill warn">{{ cluster.event_count }} events</span>
+        </div>
+      {% else %}
+        <p class="muted">No clustered runtime failures are available yet.</p>
       {% endfor %}
     </section>
   </div>

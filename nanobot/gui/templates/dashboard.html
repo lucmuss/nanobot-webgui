@@ -1,263 +1,248 @@
 {% extends "base.html" %}
 {% block body %}
+{% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
+
   <div class="page-stack">
-  <section class="system-info" data-testid="dashboard-system-info">
-    <div class="split-header">
-      <div>
-        <p class="eyebrow">System Info</p>
-        <h3>Instance Overview</h3>
-      </div>
-      <span class="pill {% if setup_complete %}good{% else %}muted{% endif %}">
-        {{ "Setup complete" if setup_complete else "Setup in progress" }}
-      </span>
-    </div>
-    <div class="system-info-grid">
-      <div>
-        <strong>Workspace</strong>
-        <span class="mono">{{ workspace_path }}</span>
-      </div>
-      <div>
-        <strong>Config File</strong>
-        <span class="mono">{{ config_path }}</span>
-      </div>
-      <div>
-        <strong>Project</strong>
-        <a href="{{ upstream_repo_url }}" target="_blank" rel="noreferrer">HKUDS/nanobot</a>
-      </div>
-      <div>
-        <strong>WebGUI</strong>
-        <a href="{{ project_repo_url }}" target="_blank" rel="noreferrer">nanobot-webgui</a>
-      </div>
-      {% if public_url %}
-        <div>
-          <strong>Instance URL</strong>
-          <a href="{{ public_url }}" target="_blank" rel="noreferrer">{{ public_url }}</a>
+    <section class="page-header">
+      <div class="page-header-main">
+        <div class="page-header-copy">
+          <p class="eyebrow">Operations</p>
+          <h3>Dashboard</h3>
+          <p class="muted">Use the dashboard as the control center for local runtime readiness, MCP actions, and community-backed recommendations.</p>
         </div>
-      {% endif %}
-    </div>
-  </section>
-
-  <section>
-    <div class="section-intro">
-      <p class="eyebrow">Control Center</p>
-      <h3>Core Runtime Overview</h3>
-      <p class="muted">The first row keeps the primary system state visible: runtime, provider, agent, and MCP readiness.</p>
-    </div>
-    <section class="metrics priority-metrics">
-    {% for metric in metrics[:4] %}
-      {% if metric.href %}
-        <a class="metric-link" href="{{ metric.href }}" data-testid="dashboard-metric-link-{{ metric.label|lower|replace(' ', '-') }}">
-          <article class="metric interactive" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
-            <span class="muted">{{ metric.label }}</span>
-            <strong>{{ metric.value }}</strong>
-            {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
-          </article>
-        </a>
-      {% else %}
-        <article class="metric" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
-          <span class="muted">{{ metric.label }}</span>
-          <strong>{{ metric.value }}</strong>
-          {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
-        </article>
-      {% endif %}
-    {% endfor %}
-    </section>
-    {% if metrics|length > 4 %}
-      <section class="metrics secondary-metrics" style="margin-top: 14px;">
-        {% for metric in metrics[4:] %}
-          {% if metric.href %}
-            <a class="metric-link" href="{{ metric.href }}" data-testid="dashboard-metric-link-{{ metric.label|lower|replace(' ', '-') }}">
-              <article class="metric interactive" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
-                <span class="muted">{{ metric.label }}</span>
-                <strong>{{ metric.value }}</strong>
-                {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
-              </article>
-            </a>
-          {% else %}
-            <article class="metric" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
-              <span class="muted">{{ metric.label }}</span>
-              <strong>{{ metric.value }}</strong>
-              {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
-            </article>
-          {% endif %}
-        {% endfor %}
-      </section>
-    {% endif %}
-  </section>
-
-  <div class="panel-grid two" style="margin-top: 24px;">
-    <section class="panel">
-      <div class="split-header">
-        <div>
-          <h3 style="margin: 0;">Setup Progress</h3>
-          <p class="muted">The dashboard should always tell the admin what is done and what comes next.</p>
+        <div class="page-header-actions">
+          <a class="button secondary" href="/community/discover">Discover MCP</a>
+          <a class="button secondary" href="/chat">Open Chat</a>
         </div>
-        <span class="pill">{{ setup_progress | selectattr('done') | list | length }}/{{ setup_progress|length }} complete</span>
       </div>
-
-      <div class="progress-list" data-testid="dashboard-setup-progress">
-        {% for item in setup_progress %}
-          <article class="progress-item {% if item.done %}done{% else %}pending{% endif %}">
-            <div>
-              <strong>{{ item.label }}</strong>
-              <p class="muted">{{ item.detail }}</p>
-            </div>
-            <span class="state">{{ "Done" if item.done else "Pending" }}</span>
-          </article>
-        {% endfor %}
-      </div>
-
-      <div class="highlight-panel" style="margin-top: 16px;" data-testid="dashboard-next-step">
-        <strong>Next step: {{ next_step.label }}</strong>
-        <p class="muted">{{ next_step.description }}</p>
-        <a class="button secondary" href="{{ next_step.href }}" data-testid="dashboard-next-step-action">{{ next_step.action_label }}</a>
+      <div class="page-meta-bar">
+        <span class="meta-chip {% if setup_complete %}good{% else %}muted{% endif %}"><strong>Setup</strong>{{ "Complete" if setup_complete else "In progress" }}</span>
+        <span class="meta-chip"><strong>Workspace</strong>{{ workspace_path }}</span>
+        <span class="meta-chip"><strong>Config</strong>{{ config_path }}</span>
+        <span class="meta-chip"><strong>Project</strong>HKUDS/nanobot</span>
       </div>
     </section>
 
-    <section class="panel">
+    <section class="system-info" data-testid="dashboard-system-info">
       <div class="split-header">
         <div>
-          <h3 style="margin: 0;">System Health</h3>
-          <p class="muted">Readable setup validation with direct recovery actions.</p>
+          <p class="eyebrow">System Info</p>
+          <h3>Instance Overview</h3>
         </div>
-        <form class="inline-form" method="post" action="/settings/validate">
-          <button class="secondary" type="submit" data-testid="dashboard-validate-setup">Validate Setup</button>
-        </form>
+        <span class="pill {% if setup_complete %}good{% else %}muted{% endif %}">
+          {{ "Setup complete" if setup_complete else "Setup in progress" }}
+        </span>
       </div>
-
-      <div class="card-list">
-        {% for item in validation_results[:5] %}
-          <article class="card" data-testid="dashboard-validation-card-{{ item.label|lower|replace(' ', '-') }}">
-            <header>
-              <strong>{{ item.label }}</strong>
-              <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "OK" if item.ok else "Fix needed" }}</span>
-            </header>
-            <div class="mono">{{ item.detail }}</div>
-            <p class="muted">{{ item.hint }}</p>
-            {% if item.action_url %}
-              <a class="button secondary" href="{{ item.action_url }}" data-testid="dashboard-validation-action-{{ item.label|lower|replace(' ', '-') }}">{{ item.action_label or "Open" }}</a>
-            {% endif %}
-          </article>
-        {% endfor %}
-      </div>
-    </section>
-  </div>
-
-  <section class="panel" style="margin-top: 24px;">
-    <div class="split-header">
-      <div>
-        <h3 style="margin: 0;">Readiness</h3>
-        <p class="muted">The first thing an admin should see after login.</p>
-      </div>
-      <span class="pill {% if runtime_status.tone == 'good' %}good{% elif runtime_status.tone == 'bad' %}bad{% else %}muted{% endif %}">
-        {{ runtime_status.label }}
-      </span>
-    </div>
-
-    <div class="status-grid">
-      {% for item in config_status %}
-        <article class="card">
-          <header>
-            <strong>{{ item.label }}</strong>
-            <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "Ready" if item.ok else "Missing" }}</span>
-          </header>
-          <div class="mono">{{ item.value }}</div>
-        </article>
-      {% endfor %}
-    </div>
-  </section>
-
-  <div class="panel-grid two" style="margin-top: 24px;">
-    <section class="panel">
-      <div class="split-header">
+      <div class="system-info-grid">
         <div>
-          <h3 style="margin: 0;">Quick Actions</h3>
-          <p class="muted">Use this block for the most common admin actions, then glance at the runtime cards below.</p>
+          <strong>Workspace</strong>
+          <span class="mono">{{ workspace_path }}</span>
         </div>
-      </div>
-      <div class="quick-actions">
-        {% for action in quick_actions %}
-          <a class="button secondary" href="{{ action.href }}" data-testid="dashboard-quick-action-{{ action.label|lower|replace(' ', '-')|replace('/', '-') }}">{{ action.label }}</a>
-        {% endfor %}
-      </div>
-
-      <div class="card-list" style="margin-top: 16px;">
-        <article class="card">
-          <header><strong>Agent Runtime</strong></header>
-          {% if agent_health %}
-            <div>{{ "Healthy" if agent_health.ok else "Failed" }}</div>
-            <p class="muted">{{ agent_health.provider }} / {{ agent_health.model }}</p>
-            {% if agent_health.error %}
-              <div class="mono">{{ agent_health.error }}</div>
-            {% else %}
-              <div class="muted">{{ agent_health.latency_ms }} ms at {{ agent_health.checked_at }}</div>
-            {% endif %}
-          {% else %}
-            <p class="muted">Run the agent health check before using MCP automation.</p>
-          {% endif %}
-        </article>
-        <article class="card">
-          <header><strong>Active Memory Document</strong></header>
-          <div>{{ active_memory_document.label }}</div>
-          <p class="muted">{{ active_memory_document.description }}</p>
-          <a class="button secondary" href="/memory?doc={{ active_memory_document.key }}">Open Memory</a>
-        </article>
-        {% if community_preferences.show_marketplace_stats %}
-          <article class="card" data-testid="dashboard-community-card">
-            <header><strong>Community Hub</strong></header>
-            {% if community_overview %}
-              <div>{{ community_overview.registry_count }} tracked MCPs</div>
-              <p class="muted">{{ community_overview.active_instances }} active instances · {{ community_overview.runs_today }} runs today</p>
-              <a class="button secondary" href="/community/discover">Open Marketplace</a>
-            {% else %}
-              <p class="muted">Community stats are currently unavailable or disabled.</p>
-            {% endif %}
-          </article>
+        <div>
+          <strong>Config File</strong>
+          <span class="mono">{{ config_path }}</span>
+        </div>
+        <div>
+          <strong>Project</strong>
+          <a href="{{ upstream_repo_url }}" target="_blank" rel="noreferrer">HKUDS/nanobot</a>
+        </div>
+        <div>
+          <strong>WebGUI</strong>
+          <a href="{{ project_repo_url }}" target="_blank" rel="noreferrer">nanobot-webgui</a>
+        </div>
+        {% if public_url %}
+          <div>
+            <strong>Instance URL</strong>
+            <a href="{{ public_url }}" target="_blank" rel="noreferrer">{{ public_url }}</a>
+          </div>
         {% endif %}
       </div>
     </section>
 
-    <section class="panel">
-      <div class="section-intro">
-        <p class="eyebrow">Recent Signals</p>
-        <h3>Recent Activity</h3>
-        <p class="muted">Keep the last useful outcome, last MCP status, and most recent actionable error in one place.</p>
-      </div>
-      <div class="card-list">
-        <article class="card">
-          <header><strong>Last Successful Chat</strong></header>
-          {% if last_successful_chat %}
-            <div class="muted">{{ last_successful_chat.at }}</div>
-            <div class="mono">{{ last_successful_chat.user_message }}</div>
-            <p class="muted" style="margin-top: 10px;">{{ last_successful_chat.assistant_preview }}</p>
-          {% else %}
-            <p class="muted">No successful chat has been recorded yet.</p>
-          {% endif %}
-        </article>
-        <article class="card">
-          <header><strong>Last MCP Test</strong></header>
-          {% if last_mcp_test %}
-            <div>{{ last_mcp_test.server_name }}: {{ last_mcp_test.status_label }}</div>
-            <p class="muted">{{ last_mcp_test.checked_at }}</p>
-          {% else %}
-            <p class="muted">No MCP test has been run yet.</p>
-          {% endif %}
-        </article>
-        <article class="card">
-          <header><strong>Last Error</strong></header>
-          {% if last_error %}
-            <div class="mono">{{ last_error.raw }}</div>
-            <p class="muted">{{ last_error.explanation }}</p>
-            <p class="muted">{{ last_error.next_action }}</p>
-            <a class="button secondary" href="{{ last_error.action_url }}">{{ last_error.action_label }}</a>
-          {% else %}
-            <p class="muted">No active error is stored.</p>
-          {% endif %}
-        </article>
-      </div>
+    <section class="compact-kpi-grid">
+      {% for metric in metrics %}
+        {% if metric.href %}
+          <a class="metric-link" href="{{ metric.href }}" data-testid="dashboard-metric-link-{{ metric.label|lower|replace(' ', '-') }}">
+            <article class="compact-kpi" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
+              <span class="muted">{{ metric.label }}</span>
+              <strong>{{ metric.value }}</strong>
+              {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
+            </article>
+          </a>
+        {% else %}
+          <article class="compact-kpi" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
+            <span class="muted">{{ metric.label }}</span>
+            <strong>{{ metric.value }}</strong>
+            {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
+          </article>
+        {% endif %}
+      {% endfor %}
+    </section>
 
-      <div class="card" style="margin-top: 16px;">
-        <header><strong>Activity Feed</strong></header>
+    <div class="panel-grid two">
+      <section class="panel">
+        <div class="split-header">
+          <div>
+            <h3 style="margin: 0;">Setup Progress</h3>
+            <p class="muted">The dashboard should always tell the admin what is done and what comes next.</p>
+          </div>
+          <span class="pill">{{ setup_progress | selectattr('done') | list | length }}/{{ setup_progress|length }} complete</span>
+        </div>
+        <div class="progress-list" data-testid="dashboard-setup-progress">
+          {% for item in setup_progress %}
+            <article class="progress-item {% if item.done %}done{% else %}pending{% endif %}">
+              <div>
+                <strong>{{ item.label }}</strong>
+                <p class="muted">{{ item.detail }}</p>
+              </div>
+              <span class="state">{{ "Done" if item.done else "Pending" }}</span>
+            </article>
+          {% endfor %}
+        </div>
+        <div class="highlight-panel" style="margin-top: 16px;" data-testid="dashboard-next-step">
+          <strong>Recommended next step: {{ next_step.label }}</strong>
+          <p class="muted">{{ next_step.description }}</p>
+          <a class="button secondary" href="{{ next_step.href }}" data-testid="dashboard-next-step-action">{{ next_step.action_label }}</a>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="split-header">
+          <div>
+            <h3 style="margin: 0;">System Health</h3>
+            <p class="muted">Compact validation cards with direct recovery actions.</p>
+          </div>
+          <form class="inline-form" method="post" action="/settings/validate">
+            <button class="secondary" type="submit" data-testid="dashboard-validate-setup">Validate Setup</button>
+          </form>
+        </div>
+        <div class="compact-kpi-grid">
+          {% for item in validation_results[:6] %}
+            <article class="compact-kpi" data-testid="dashboard-validation-card-{{ item.label|lower|replace(' ', '-') }}">
+              <span class="muted">{{ item.label }}</span>
+              <strong>{{ "OK" if item.ok else "Fix needed" }}</strong>
+              <small>{{ item.detail }}</small>
+              {% if item.action_url %}
+                <div class="actions" style="margin-top: 10px;">
+                  <a class="button secondary" href="{{ item.action_url }}" data-testid="dashboard-validation-action-{{ item.label|lower|replace(' ', '-') }}">{{ item.action_label or "Open" }}</a>
+                </div>
+              {% endif %}
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+
+    <div class="panel-grid two">
+      <section class="panel">
+        <div class="section-intro">
+          <p class="eyebrow">Readiness</p>
+          <h3>Local runtime state</h3>
+          <p class="muted">Local config and runtime verification stay separate from community recommendations.</p>
+        </div>
+        <div class="status-grid">
+          {% for item in config_status %}
+            <article class="card compact-card">
+              <header>
+                <strong>{{ item.label }}</strong>
+                <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "Ready" if item.ok else "Missing" }}</span>
+              </header>
+              <div class="mono">{{ item.value }}</div>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-intro">
+          <p class="eyebrow">Quick Actions</p>
+          <h3>Fast admin actions</h3>
+        </div>
+        <div class="quick-actions">
+          {% for action in quick_actions %}
+            <a class="button secondary" href="{{ action.href }}" data-testid="dashboard-quick-action-{{ action.label|lower|replace(' ', '-')|replace('/', '-') }}">{{ action.label }}</a>
+          {% endfor %}
+        </div>
+
+        {% if community_preferences.show_marketplace_stats and community_recommendations %}
+          <div class="insight-panel community" style="margin-top: 16px;" data-testid="dashboard-community-recommendations">
+            <h4>Community Insights</h4>
+            <div class="divider-list" style="margin-top: 12px;">
+              {% for item in community_recommendations[:2] %}
+                <div>
+                  <strong>{{ item.name }}</strong>
+                  <p class="muted">{{ item.reason }}</p>
+                  <div class="actions" style="margin-top: 8px;">
+                    <a class="button secondary" href="/community/mcp/{{ item.slug }}">View</a>
+                    <form method="post" action="/community/install/mcp/{{ item.slug }}">
+                      <button type="submit" data-testid="dashboard-community-install-{{ item.slug }}">Install</button>
+                    </form>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          </div>
+        {% elif community_preferences.show_marketplace_stats %}
+          <div class="insight-panel community" style="margin-top: 16px;" data-testid="dashboard-community-card">
+            <h4>Community Hub</h4>
+            {% if community_overview %}
+              <p class="muted">{{ community_overview.registry_count }} tracked MCPs · {{ community_overview.active_instances }} active instances · {{ community_overview.runs_today }} runs today</p>
+              <div class="actions" style="margin-top: 10px;">
+                <a class="button secondary" href="/community/discover">Open Marketplace</a>
+              </div>
+            {% else %}
+              <p class="muted">Community stats are currently unavailable or disabled.</p>
+            {% endif %}
+          </div>
+        {% endif %}
+      </section>
+    </div>
+
+    <div class="panel-grid two">
+      <section class="panel">
+        <div class="section-intro">
+          <p class="eyebrow">Recent Signals</p>
+          <h3>Latest outcomes</h3>
+        </div>
+        <div class="card-list">
+          <article class="card compact-card">
+            <header><strong>Last Successful Chat</strong></header>
+            {% if last_successful_chat %}
+              <div class="muted">{{ last_successful_chat.at }}</div>
+              <div class="mono">{{ last_successful_chat.user_message }}</div>
+              <p class="muted" style="margin-top: 10px;">{{ last_successful_chat.assistant_preview }}</p>
+            {% else %}
+              <p class="muted">No successful chat has been recorded yet.</p>
+            {% endif %}
+          </article>
+          <article class="card compact-card">
+            <header><strong>Last MCP Test</strong></header>
+            {% if last_mcp_test %}
+              <div>{{ last_mcp_test.server_name }}: {{ last_mcp_test.status_label }}</div>
+              <p class="muted">{{ last_mcp_test.checked_at }}</p>
+            {% else %}
+              <p class="muted">No MCP test has been run yet.</p>
+            {% endif %}
+          </article>
+          <article class="card compact-card">
+            <header><strong>Last Error</strong></header>
+            {% if last_error %}
+              <div class="mono">{{ last_error.raw }}</div>
+              <p class="muted">{{ last_error.explanation }}</p>
+              <p class="muted">{{ last_error.next_action }}</p>
+              <a class="button secondary" href="{{ last_error.action_url }}">{{ last_error.action_label }}</a>
+            {% else %}
+              <p class="muted">No active error is stored.</p>
+            {% endif %}
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-intro">
+          <p class="eyebrow">Activity Feed</p>
+          <h3>Recent activity</h3>
+        </div>
         <div class="activity-feed">
           {% for item in activity_feed %}
             <div>
@@ -269,66 +254,65 @@
             <p class="muted">No recent activity has been captured yet.</p>
           {% endfor %}
         </div>
-      </div>
-    </section>
-  </div>
+      </section>
+    </div>
 
-  <div class="panel-grid two" style="margin-top: 24px;">
-    <section class="panel">
-      <div class="split-header">
-        <div>
-          <h3 style="margin: 0;">MCP Discovery</h3>
-          <p class="muted">Paste a GitHub repository and let Nanobot inspect the repository before installation. This is the main automation entry point.</p>
+    <div class="panel-grid two">
+      <section class="panel">
+        <div class="split-header">
+          <div>
+            <h3 style="margin: 0;">MCP Discovery</h3>
+            <p class="muted">Paste a GitHub repository and let Nanobot inspect the repository before installation.</p>
+          </div>
+          <a class="button secondary" href="/mcp">Open MCP Page</a>
         </div>
-        <a class="button secondary" href="/mcp">Open MCP Page</a>
-      </div>
-      <form method="post" action="/mcp/analyze" data-testid="dashboard-mcp-discovery-form">
-        <label>
-          GitHub repository URL
-          <input type="text" name="source" placeholder="https://github.com/Garoth/dalle-mcp" data-testid="dashboard-mcp-source">
-        </label>
-        <div class="actions">
-          <button type="submit" data-testid="dashboard-mcp-inspect">Inspect Repository</button>
-          <button class="secondary" type="submit" formaction="/mcp/install" data-testid="dashboard-mcp-install">Install MCP Server</button>
-        </div>
-      </form>
-    </section>
+        <form method="post" action="/mcp/analyze" data-testid="dashboard-mcp-discovery-form">
+          <label>
+            GitHub repository URL
+            <input type="text" name="source" placeholder="https://github.com/Garoth/dalle-mcp" data-testid="dashboard-mcp-source">
+          </label>
+          <div class="actions">
+            <button type="submit" data-testid="dashboard-mcp-inspect">Inspect Repository</button>
+            <button class="secondary" type="submit" formaction="/mcp/install" data-testid="dashboard-mcp-install">Install MCP Server</button>
+          </div>
+        </form>
+      </section>
 
-    <section class="panel">
-      <div class="section-intro">
-        <p class="eyebrow">Registry</p>
-        <h3>MCP Registry</h3>
-        <p class="muted">Installed servers stay visible here so the dashboard doubles as an overview, not only a wizard landing page.</p>
-      </div>
-      <div class="card-list">
-        {% for server in installed_servers %}
-          <article class="card" data-testid="dashboard-mcp-card-{{ server.name }}">
-            <header>
-              <strong>{{ server.name }}</strong>
-              <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
-                {{ server.effective_status }}
-              </span>
-            </header>
-            {% if server.summary %}
-              <p class="muted">{{ server.summary }}</p>
-            {% endif %}
-            <div class="badge-row">
-              <span class="pill">transport {{ server.type }}</span>
-              <span class="pill {% if server.enabled %}good{% else %}muted{% endif %}">{{ "enabled" if server.enabled else "disabled" }}</span>
-              <span class="pill">{{ server.status_label }}</span>
-              <span class="pill">{{ server.tool_names|length }} tool(s)</span>
-            </div>
-            <div class="actions" style="margin-top: 12px;">
-              <a class="button secondary" href="/mcp/{{ server.name }}" data-testid="dashboard-mcp-open-{{ server.name }}">Open MCP Details</a>
-            </div>
-          </article>
-        {% else %}
-          <article class="card">
-            <p class="muted">No MCP servers are registered yet.</p>
-          </article>
-        {% endfor %}
-      </div>
-    </section>
-  </div>
+      <section class="panel">
+        <div class="section-intro">
+          <p class="eyebrow">Registry</p>
+          <h3>MCP Registry</h3>
+          <p class="muted">Installed servers stay visible here so the dashboard doubles as an overview, not only a wizard landing page.</p>
+        </div>
+        <div class="card-list">
+          {% for server in installed_servers %}
+            <article class="card compact-card" data-testid="dashboard-mcp-card-{{ server.name }}">
+              <header>
+                <strong>{{ server.name }}</strong>
+                <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
+                  {{ server.effective_status }}
+                </span>
+              </header>
+              {% if server.summary %}
+                <p class="muted">{{ server.summary }}</p>
+              {% endif %}
+              <div class="badge-row">
+                <span class="pill">transport {{ server.type }}</span>
+                <span class="pill {% if server.enabled %}good{% else %}muted{% endif %}">{{ "enabled" if server.enabled else "disabled" }}</span>
+                <span class="pill">{{ server.status_label }}</span>
+                <span class="pill">{{ server.tool_names|length }} tool(s)</span>
+              </div>
+              <div class="actions" style="margin-top: 12px;">
+                <a class="button secondary" href="/mcp/{{ server.name }}" data-testid="dashboard-mcp-open-{{ server.name }}">Open MCP Details</a>
+              </div>
+            </article>
+          {% else %}
+            <article class="card">
+              <p class="muted">No MCP servers are registered yet.</p>
+            </article>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
   </div>
 {% endblock %}

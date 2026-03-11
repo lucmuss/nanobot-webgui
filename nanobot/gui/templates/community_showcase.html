@@ -1,12 +1,17 @@
 {% extends "base.html" %}
 {% block body %}
 {% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
-  <section class="panel">
-    <div class="section-intro">
-      <p class="eyebrow">Showcase</p>
-      <h3>See real Nanobot use cases</h3>
-      <p class="muted">The showcase stays practical: which stack, which prompt, and why the setup is useful.</p>
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">Showcase</p>
+        <h3>Real Nanobot setups</h3>
+        <p class="muted">The showcase stays practical: use case, recommended stack, and a prompt you can try immediately in the local chat.</p>
+      </div>
     </div>
+  </section>
+
+  <section class="panel" style="margin-top: 22px;">
     <form method="get" action="/community/showcase" class="form-columns" data-testid="community-showcase-form">
       <label>
         Search
@@ -22,34 +27,121 @@
     </form>
   </section>
 
+  <section class="panel" style="margin-top: 22px;" data-testid="community-showcase-submit-card">
+    <div class="split-header">
+      <div>
+        <p class="eyebrow">Publish Setup</p>
+        <h3 style="margin: 0;">Share a real Nanobot setup</h3>
+        <p class="muted">Submit a practical setup story with one stack, one use case, and one prompt people can import or try immediately.</p>
+      </div>
+      <div class="pill {% if community_preferences.allow_public_mcp_submissions %}good{% else %}muted{% endif %}">
+        {{ "Publishing enabled" if community_preferences.allow_public_mcp_submissions else "Publishing disabled" }}
+      </div>
+    </div>
+    {% if community_preferences.allow_public_mcp_submissions and community_write_enabled %}
+      <form method="post" action="/community/submit/showcase" class="form-columns" data-testid="community-showcase-submit-form">
+        <label>
+          Title
+          <input type="text" name="title" value="{{ showcase_submission_form.title }}" placeholder="AI Research Assistant" required data-testid="community-showcase-submit-title">
+        </label>
+        <label>
+          Category
+          <input type="text" name="category" value="{{ showcase_submission_form.category }}" placeholder="Research" required data-testid="community-showcase-submit-category">
+        </label>
+        <label style="grid-column: 1 / -1;">
+          Description
+          <textarea name="description" rows="2" required data-testid="community-showcase-submit-description">{{ showcase_submission_form.description }}</textarea>
+        </label>
+        <label style="grid-column: 1 / -1;">
+          Use case
+          <textarea name="use_case" rows="2" required data-testid="community-showcase-submit-use-case">{{ showcase_submission_form.use_case }}</textarea>
+        </label>
+        <label style="grid-column: 1 / -1;">
+          Example prompt
+          <textarea name="example_prompt" rows="2" required data-testid="community-showcase-submit-prompt">{{ showcase_submission_form.example_prompt }}</textarea>
+        </label>
+        <label>
+          Stack
+          <select name="stack_slug" required data-testid="community-showcase-submit-stack">
+            <option value="">Select a stack</option>
+            {% for item in community_stacks_catalog %}
+              <option value="{{ item.slug }}" {% if showcase_submission_form.stack_slug == item.slug %}selected{% endif %}>{{ item.title }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="checkbox">
+          <input type="checkbox" name="is_public" {% if showcase_submission_form.is_public %}checked{% endif %} data-testid="community-showcase-submit-public">
+          <span>Publish immediately</span>
+        </label>
+        <div class="actions">
+          <button type="submit" data-testid="community-showcase-submit-submit">Publish Setup</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="muted">
+        {% if not community_preferences.allow_public_mcp_submissions %}
+          Enable community publishing in Settings before submitting showcase entries.
+        {% else %}
+          Community hub write access is not configured for this GUI instance.
+        {% endif %}
+      </p>
+      <div class="actions" style="margin-top: 14px;">
+        <a class="button secondary" href="/settings">Open Settings</a>
+      </div>
+    {% endif %}
+  </section>
+
   <section class="card-list" style="margin-top: 22px;">
     {% for item in community_items %}
       <article class="card" data-testid="community-showcase-card-{{ item.slug }}">
         <p class="eyebrow">{{ item.category }}</p>
-        <h3 style="margin-top: 0;">{{ item.title }}</h3>
-        <p class="muted">{{ item.description }}</p>
-        {% if item.stack %}
+        <div class="split-header">
+          <div>
+            <h3 style="margin: 0;">{{ item.title }}</h3>
+            <p class="muted" style="margin: 8px 0 0;">{{ item.description }}</p>
+          </div>
+          <span class="pill">{{ item.imports_count }} imports</span>
+        </div>
+
+        <div class="details-grid compact" style="margin-top: 14px;">
           <div class="meta-pair">
-            <strong>Stack</strong>
-            <span>{{ item.stack.title }}</span>
+            <strong>Use Case</strong>
+            <span>{{ item.use_case }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Recommended Model</strong>
+            <span>{{ item.stack.recommended_model if item.stack else "Not set" }}</span>
+          </div>
+        </div>
+
+        {% if item.stack_items %}
+          <div class="insight-panel community" style="margin-top: 14px;">
+            <h4>Stack</h4>
+            <div class="flow-diagram" style="margin-top: 12px;">
+              {% for entry in item.stack_items %}
+                <span class="flow-node">{{ entry.name }}</span>
+                {% if not loop.last %}<span class="flow-arrow">→</span>{% endif %}
+              {% endfor %}
+            </div>
           </div>
         {% endif %}
-        <div class="details-grid compact" style="margin-top: 14px;">
-          <div class="meta-pair"><strong>Imports</strong><span>{{ item.imports_count }}</span></div>
-          <div class="meta-pair"><strong>Upvotes</strong><span>{{ item.upvotes_count }}</span></div>
-        </div>
+
         <div class="meta-pair" style="margin-top: 14px;">
           <strong>Example Prompt</strong>
           <span>{{ item.example_prompt }}</span>
         </div>
-        {% if item.stack %}
-          <div class="actions" style="margin-top: 16px;">
+        <div class="actions" style="margin-top: 16px;">
+          <form method="get" action="/chat">
+            <input type="hidden" name="draft" value="{{ item.example_prompt }}">
+            <button class="secondary" type="submit" data-testid="community-showcase-try-{{ item.slug }}">Try Prompt in Chat</button>
+          </form>
+          {% if item.stack %}
             <a class="button secondary" href="/community/stacks/{{ item.stack.slug }}">Open Stack</a>
-            <form method="post" action="/community/import/stack/{{ item.stack.slug }}">
+            <form method="post" action="/community/import/showcase/{{ item.slug }}">
               <button type="submit" data-testid="community-showcase-import-{{ item.slug }}">Import Setup</button>
             </form>
-          </div>
-        {% endif %}
+          {% endif %}
+        </div>
       </article>
     {% else %}
       <article class="card">

@@ -2,12 +2,31 @@
 {% block body %}
 {% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
 {% if community_item %}
-  <div class="panel-grid two">
-    <section class="panel">
-      <div class="section-intro">
-        <p class="eyebrow">Stack</p>
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">Community Stack</p>
         <h3>{{ community_item.title }}</h3>
         <p class="muted">{{ community_item.description }}</p>
+      </div>
+      <div class="page-header-actions">
+        <form method="post" action="/community/import/stack/{{ community_item.slug }}">
+          <button type="submit" data-testid="community-stack-detail-import">Import Stack</button>
+        </form>
+      </div>
+    </div>
+    <div class="page-meta-bar">
+      {% for item in community_meta %}
+        <span class="meta-chip {{ item.tone }}"><strong>{{ item.label }}</strong>{{ item.value }}</span>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="panel-grid two" style="margin-top: 22px;">
+    <section class="panel">
+      <div class="section-intro">
+        <p class="eyebrow">Overview</p>
+        <h3>Use case and prompt</h3>
       </div>
       <div class="details-grid compact">
         <div class="meta-pair"><strong>Use Case</strong><span>{{ community_item.use_case }}</span></div>
@@ -15,20 +34,21 @@
         <div class="meta-pair"><strong>Imports</strong><span>{{ community_item.imports_count }}</span></div>
         <div class="meta-pair"><strong>Rating</strong><span>{{ community_item.rating }}</span></div>
       </div>
+      <div class="insight-panel local" style="margin-top: 16px;">
+        <h4>Example Prompt</h4>
+        <p class="muted" style="margin-top: 10px;">{{ community_item.example_prompt }}</p>
+      </div>
     </section>
     <section class="panel">
       <div class="section-intro">
-        <p class="eyebrow">Prompt</p>
-        <h3>Example workflow</h3>
+        <p class="eyebrow">Stack Diagram</p>
+        <h3>How the MCPs fit together</h3>
       </div>
-      <div class="meta-pair">
-        <strong>Example Prompt</strong>
-        <span>{{ community_item.example_prompt }}</span>
-      </div>
-      <div class="actions" style="margin-top: 16px;">
-        <form method="post" action="/community/import/stack/{{ community_item.slug }}">
-          <button type="submit" data-testid="community-stack-detail-import">Import Stack</button>
-        </form>
+      <div class="flow-diagram">
+        {% for entry in community_item["items"] %}
+          <span class="flow-node">{{ entry.name }}</span>
+          {% if not loop.last %}<span class="flow-arrow">→</span>{% endif %}
+        {% endfor %}
       </div>
     </section>
   </div>
