@@ -193,14 +193,14 @@
           <div class="reliability-stack" style="margin-top: 10px;">
             <div class="split-header" style="margin-bottom: 0;">
               <span class="muted">Community reliability</span>
-              <strong>{{ community_item.get("reliability", {}).get("percent", "%.0f"|format((community_item.get("success_rate", 0) or 0) * 100)) }}%</strong>
+              <strong>{% if community_item.get("has_live_telemetry") %}{{ community_item.get("reliability", {}).get("percent", "%.0f"|format((community_item.get("success_rate", 0) or 0) * 100)) }}%{% else %}No live data{% endif %}</strong>
             </div>
             <div class="reliability-bar">
               <div class="reliability-fill {{ community_item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ community_item.get('reliability', {}).get('bar_width', ((community_item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
             </div>
           </div>
           <div class="details-grid compact" style="margin-top: 12px;">
-            <div class="meta-pair"><strong>Active instances</strong><span>{{ community_item.active_instances }}</span></div>
+            <div class="meta-pair"><strong>Observed instances (30d)</strong><span>{{ community_item.active_instances }}</span></div>
             <div class="meta-pair"><strong>Best used with</strong><span>{{ community_item.get("best_for", [])|join(", ") if community_item.get("best_for", []) else "General workflows" }}</span></div>
             <div class="meta-pair"><strong>Dependencies</strong><span>{{ community_item.get("dependencies", [])|join(", ") if community_item.get("dependencies", []) else "No dependency hint" }}</span></div>
             {% if community_item.recommended_config %}

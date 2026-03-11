@@ -14,10 +14,10 @@
       </div>
     </div>
     <div class="page-meta-bar">
-      <span class="meta-chip"><strong>Network</strong>{{ community_overview.active_instances }} active instances</span>
+      <span class="meta-chip"><strong>Network</strong>{{ community_overview.active_instances }} observed instances</span>
       <span class="meta-chip"><strong>Unique MCPs</strong>{{ community_overview.registry_count }}</span>
-      <span class="meta-chip"><strong>Top Category</strong>{{ community_overview.top_category or "Unknown" }}</span>
-      <span class="meta-chip {% if community_overview.telemetry_active %}good{% else %}muted{% endif %}"><strong>Telemetry</strong>{{ "Active" if community_overview.telemetry_active else "Seed-only" }}</span>
+      <span class="meta-chip"><strong>Top Category</strong>{{ community_overview.top_category or "No live telemetry" }}</span>
+      <span class="meta-chip {% if community_overview.telemetry_active %}good{% else %}muted{% endif %}"><strong>Telemetry</strong>{{ "Active" if community_overview.telemetry_active else "No live telemetry" }}</span>
     </div>
   </section>
 
@@ -25,17 +25,17 @@
     <article class="compact-kpi">
       <span class="muted">Registry</span>
       <strong>{{ community_overview.registry_count }}</strong>
-      <small>tracked MCP servers</small>
+      <small>catalog MCP servers</small>
     </article>
     <article class="compact-kpi">
       <span class="muted">Verified</span>
       <strong>{{ community_overview.verified_count }}</strong>
-      <small>trusted entries</small>
+      <small>verified entries</small>
     </article>
     <article class="compact-kpi">
       <span class="muted">Active Instances</span>
       <strong>{{ community_overview.active_instances }}</strong>
-      <small>community observed</small>
+      <small>observed in last 30 days</small>
     </article>
     <article class="compact-kpi">
       <span class="muted">Runs Today</span>
@@ -45,12 +45,12 @@
     <article class="compact-kpi">
       <span class="muted">Avg Success</span>
       <strong>{{ (community_overview.average_success_rate * 100)|round(1) }}%</strong>
-      <small>network health</small>
+      <small>from live telemetry</small>
     </article>
     <article class="compact-kpi">
       <span class="muted">Avg Latency</span>
       <strong>{{ community_overview.average_latency_ms }} ms</strong>
-      <small>across tracked MCPs</small>
+      <small>from live telemetry</small>
     </article>
   </section>
 
@@ -64,7 +64,7 @@
         <div class="list-row">
           <div class="list-row-copy">
             <strong class="list-row-title">{{ loop.index }}. {{ item.name }}</strong>
-            <div class="muted">{{ item.recent_runs }} recent runs · {{ item.active_instances }} active instances</div>
+            <div class="muted">{{ item.recent_runs }} recent runs · {{ item.active_instances }} observed instances</div>
           </div>
           <div class="list-row-actions">
             <a class="button secondary" href="/community/mcp/{{ item.slug }}">Open</a>
@@ -87,7 +87,10 @@
         <div class="list-row">
           <div class="list-row-copy">
             <strong class="list-row-title">{{ item.name }}</strong>
-            <div class="muted">{{ item.get('reliability', {}).get('label', 'Tracked') }} · {{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}% · {{ item.avg_latency_ms }} ms</div>
+            <div class="muted">
+              {{ item.get('reliability', {}).get('label', 'Tracked') }}
+              {% if item.get('has_live_telemetry') %} · {{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}% · {{ item.avg_latency_ms }} ms{% else %} · no live telemetry yet{% endif %}
+            </div>
           </div>
           <div class="list-row-actions">
             <span class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Tracked') }}</span>
@@ -109,7 +112,7 @@
       <div class="list-row">
         <div class="list-row-copy">
           <strong class="list-row-title">{{ item.name }}</strong>
-          <div class="muted">{{ item.active_instances }} active instances · {{ item.installs }} installs · {{ item.category }}</div>
+          <div class="muted">{{ item.active_instances }} observed instances · {{ item.installs }} observed installs · {{ item.category }}</div>
         </div>
         <div class="list-row-actions">
           <a class="button secondary" href="/community/mcp/{{ item.slug }}">Open</a>
@@ -134,7 +137,7 @@
         </div>
       </div>
     {% else %}
-      <p class="muted">No category signals are available yet.</p>
+      <p class="muted">No live telemetry category signals are available yet.</p>
     {% endfor %}
   </section>
 {% endif %}

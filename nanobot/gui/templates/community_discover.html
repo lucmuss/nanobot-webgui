@@ -79,6 +79,7 @@
         <p class="eyebrow">Search MCP Servers</p>
         <h3 style="margin: 0;">Marketplace search</h3>
         <p class="muted">Search by MCP name, repository, or category and sort by reliability, installs, or recent activity.</p>
+        <p class="muted">Reliability filters use live telemetry when available and otherwise fall back to curated catalog baselines for discovery only.</p>
       </div>
     </div>
 
@@ -153,7 +154,7 @@
       <article class="compact-kpi">
         <span class="muted">Active Instances</span>
         <strong>{{ community_overview.active_instances }}</strong>
-        <small>community observed</small>
+        <small>observed in last 30 days</small>
       </article>
       <article class="compact-kpi">
         <span class="muted">Runs Today</span>
@@ -162,8 +163,8 @@
       </article>
       <article class="compact-kpi">
         <span class="muted">Top Category</span>
-        <strong>{{ community_overview.top_category or "Unknown" }}</strong>
-        <small>{{ community_overview.unique_categories or 0 }} categories</small>
+        <strong>{{ community_overview.top_category or "No live telemetry" }}</strong>
+        <small>{{ community_overview.unique_categories or 0 }} telemetry categories</small>
       </article>
     </section>
   {% endif %}
@@ -245,7 +246,7 @@
             <div class="reliability-stack" style="margin-top: 10px;">
               <div class="split-header" style="margin-bottom: 0;">
                 <span class="muted" title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully.">{{ item.get('reliability', {}).get('label', 'Tracked') }}</span>
-                <strong title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully.">{{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}%</strong>
+                <strong title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully.">{% if item.get('has_live_telemetry') %}{{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}%{% else %}No live data{% endif %}</strong>
               </div>
               <div class="reliability-bar">
                 <div class="reliability-fill {{ item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ item.get('reliability', {}).get('bar_width', ((item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
@@ -281,12 +282,12 @@
 
         <div class="details-grid compact" style="margin-top: 16px;">
           <div class="meta-pair">
-            <strong>Active Instances</strong>
+            <strong>Observed Instances (30d)</strong>
             <span>{{ item.active_instances }}</span>
           </div>
           <div class="meta-pair">
             <strong>Average Latency</strong>
-            <span>{{ item.avg_latency_ms }} ms</span>
+            <span>{% if item.avg_latency_ms is not none %}{{ item.avg_latency_ms }} ms{% else %}No live telemetry{% endif %}</span>
           </div>
           <div class="meta-pair">
             <strong>Best used with</strong>

@@ -40,7 +40,7 @@
       <div class="reliability-stack">
         <div class="split-header" style="margin-bottom: 0;">
           <span class="muted">Reliability score</span>
-          <strong>{{ community_item.get('reliability', {}).get('percent', ((community_item.get('success_rate', 0) or 0) * 100)|int) }}%</strong>
+          <strong>{% if community_item.get('has_live_telemetry') %}{{ community_item.get('reliability', {}).get('percent', ((community_item.get('success_rate', 0) or 0) * 100)|int) }}%{% else %}No live data{% endif %}</strong>
         </div>
         <div class="reliability-bar">
           <div class="reliability-fill {{ community_item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ community_item.get('reliability', {}).get('bar_width', ((community_item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
@@ -49,8 +49,8 @@
       <div class="details-grid compact" style="margin-top: 16px;">
         <div class="meta-pair"><strong>Install Method</strong><span>{{ community_item.install_method }}</span></div>
         <div class="meta-pair"><strong>Runtime</strong><span>{{ community_item.get("runtime_engine", {}).get("label", "Other") }}</span></div>
-        <div class="meta-pair"><strong>Active Instances</strong><span>{{ community_item.active_instances }}</span></div>
-        <div class="meta-pair"><strong>Average Latency</strong><span>{{ community_item.avg_latency_ms }} ms</span></div>
+        <div class="meta-pair"><strong>Observed Instances (30d)</strong><span>{{ community_item.active_instances }}</span></div>
+        <div class="meta-pair"><strong>Average Latency</strong><span>{% if community_item.avg_latency_ms is not none %}{{ community_item.avg_latency_ms }} ms{% else %}No live telemetry{% endif %}</span></div>
         <div class="meta-pair"><strong>Recent Runs</strong><span>{{ community_item.recent_runs }}</span></div>
         <div class="meta-pair"><strong>Confidence</strong><span>{{ community_item.get("install_confidence", {}).get("score", "n/a") }}/10</span></div>
         <div class="meta-pair"><strong>Signals</strong><span>{{ community_item.get("install_confidence", {}).get("based_on_instances", 0) }}</span></div>
@@ -62,6 +62,12 @@
         <div class="meta-pair"><strong>Runs in 7d</strong><span>{{ community_item.get("usage_trend", {}).get("runs_7d", 0) }}</span></div>
         <div class="meta-pair"><strong>Config consensus</strong><span>{{ (community_item.get("trust_score", {}).get("config_consensus", 0) * 100)|round(1) }}%</span></div>
         <div class="meta-pair"><strong>Repair rate</strong><span>{{ (community_item.get("trust_score", {}).get("repair_rate", 0) * 100)|round(1) }}%</span></div>
+      </div>
+      <div class="details-grid compact" style="margin-top: 14px;">
+        <div class="meta-pair"><strong>Catalog baseline</strong><span>{{ community_item.catalog_active_instances }} seeded instances</span></div>
+        <div class="meta-pair"><strong>Observed installs</strong><span>{{ community_item.installs }}</span></div>
+        <div class="meta-pair"><strong>Catalog installs</strong><span>{{ community_item.catalog_installs }}</span></div>
+        <div class="meta-pair"><strong>Catalog latency</strong><span>{{ community_item.catalog_avg_latency_ms }} ms</span></div>
       </div>
     </section>
 

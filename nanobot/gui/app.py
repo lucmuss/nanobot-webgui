@@ -408,8 +408,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             difficulty = item.get("difficulty") if isinstance(item.get("difficulty"), dict) else {}
             dependencies = [str(entry).strip() for entry in item.get("dependencies", []) if str(entry).strip()]
 
-            score = float(item.get("success_rate", 0.0) or 0.0) * 100
-            score += min(int(item.get("active_instances", 0) or 0) / 40.0, 20)
+            trust_score = float(item.get("trust_score", {}).get("score", 0.0) or 0.0)
+            confidence_score = float(item.get("install_confidence", {}).get("score", 0.0) or 0.0)
+            score = trust_score * 8.0
+            score += confidence_score * 3.0
+            score += min(int(item.get("active_instances", 0) or 0) / 40.0, 12)
             if "kimi" in model_name and any(
                 tag in best_for for tag in ["Coding agents", "Repository analysis", "Code review loops"]
             ):
@@ -426,6 +429,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             reason_parts: list[str] = []
             if best_for:
                 reason_parts.append(best_for[0])
+            if not item.get("has_live_telemetry"):
+                reason_parts.append("waiting for live telemetry")
             if "kimi" in model_name and any(
                 tag in best_for for tag in ["Coding agents", "Repository analysis", "Code review loops"]
             ):
@@ -456,8 +461,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "label": "Community reliability",
                 "value": (
                     f"{reliability.get('label', 'Unknown')} · {int(reliability.get('percent', 0) or 0)}%"
-                    if reliability
-                    else "Unknown"
+                    if reliability and item.get("has_live_telemetry")
+                    else str(reliability.get("label", "No live telemetry") or "No live telemetry")
                 ),
                 "tone": str(reliability.get("tone", "muted") or "muted"),
             },
@@ -501,7 +506,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "tone": str(difficulty.get("tone", "muted") or "muted"),
             },
             {
-                "label": "Imports",
+                "label": "Observed imports",
                 "value": str(item.get("imports_count", 0)),
                 "tone": "muted",
             },
