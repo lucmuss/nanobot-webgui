@@ -433,6 +433,22 @@ def test_gui_community_detail_and_install_flow_persist_recommendations(tmp_path:
                 "confidence_score": 0.93,
                 "based_on_instances": 20,
             },
+            "install_confidence": {
+                "score": 9.4,
+                "label": "High confidence",
+                "tone": "good",
+                "based_on_instances": 42,
+            },
+            "permission_hints": [
+                "Runs local runtime processes",
+                "Needs secrets or API credentials",
+            ],
+            "usage_trend": {
+                "runs_24h": 8,
+                "runs_7d": 21,
+                "label": "Growing",
+                "tone": "good",
+            },
             "known_fixes": [
                 {
                     "title": "Increase timeout to the community default",
@@ -464,6 +480,9 @@ def test_gui_community_detail_and_install_flow_persist_recommendations(tmp_path:
     assert "Install from Community" in detail.text
     assert "Community Fixes" in detail.text
     assert "Error Clusters" in detail.text
+    assert "Runs in 24h" in detail.text
+    assert "Confidence" in detail.text
+    assert "Security and permissions" in detail.text
 
     install = client.post("/community/install/mcp/echo-mcp", follow_redirects=True)
     assert install.status_code == 200
@@ -494,6 +513,7 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
         query: str = "",
         category: str = "",
         language: str = "",
+        runtime: str = "",
         min_reliability: int = 0,
         sort: str = "trending",
     ):
@@ -502,6 +522,7 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
                 "query": query,
                 "category": category,
                 "language": language,
+                "runtime": runtime,
                 "min_reliability": min_reliability,
                 "sort": sort,
             }
@@ -515,6 +536,7 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
                     "category": "Research",
                     "language": "Remote",
                     "install_method": "remote",
+                    "runtime_engine": {"label": "Remote/API", "tone": "community"},
                     "verified": True,
                     "active_instances": 1200,
                     "installs": 9800,
@@ -524,9 +546,22 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
                     "tools": ["fetch_doc", "search_context"],
                     "tool_count": 2,
                     "dependencies": ["Remote MCP endpoint"],
+                    "permission_hints": ["Makes outbound network requests"],
                     "best_for": ["Research agents"],
                     "difficulty": {"label": "Beginner", "tone": "good"},
                     "reliability": {"label": "Stable", "tone": "good", "percent": 97, "bar_width": 97},
+                    "install_confidence": {
+                        "score": 9.7,
+                        "label": "High confidence",
+                        "tone": "good",
+                        "based_on_instances": 1200,
+                    },
+                    "usage_trend": {
+                        "runs_24h": 12,
+                        "runs_7d": 44,
+                        "label": "Growing",
+                        "tone": "good",
+                    },
                     "known_fixes": [
                         {
                             "title": "Review required environment variables",
@@ -538,6 +573,7 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
             ],
             "categories": ["Coding", "Research"],
             "languages": ["Node.js", "Remote"],
+            "runtime_options": ["Node", "Python", "Docker", "Remote/API"],
             "reliability_options": [0, 80, 90, 95],
         }
 
@@ -549,6 +585,7 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
             "q": "context",
             "category": "Research",
             "language": "Remote",
+            "runtime": "Remote/API",
             "min_reliability": 95,
             "sort": "reliable",
         },
@@ -556,15 +593,149 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
     assert response.status_code == 200
     body = response.text
     assert "All languages" in body
+    assert "Any runtime" in body
     assert "95% reliability" in body
     assert "Known fix" in body
+    assert "Confidence" in body
+    assert "Usage trend" in body
+    assert "Makes outbound network requests" in body
     assert captured == {
         "query": "context",
         "category": "Research",
         "language": "Remote",
+        "runtime": "Remote/API",
         "min_reliability": 95,
         "sort": "reliable",
     }
+
+
+def test_gui_community_stats_page_renders_network_health_insights(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    async def fake_overview():
+        return {
+            "registry_count": 6,
+            "verified_count": 5,
+            "active_instances": 3200,
+            "runs_today": 540,
+            "top_category": "Research",
+            "telemetry_active": True,
+            "average_success_rate": 0.945,
+            "average_latency_ms": 1840.0,
+            "top_categories": [{"name": "Research", "count": 3}, {"name": "Coding", "count": 2}],
+            "trending_mcps": [{"slug": "context7", "name": "Context7", "recent_runs": 44, "active_instances": 1200}],
+            "most_reliable_mcps": [
+                {
+                    "slug": "context7",
+                    "name": "Context7",
+                    "avg_latency_ms": 1800,
+                    "reliability": {"label": "Stable", "tone": "good", "percent": 97},
+                }
+            ],
+            "top_mcps": [{"slug": "context7", "name": "Context7", "active_instances": 1200, "installs": 9800, "category": "Research"}],
+        }
+
+    app.state.community_service.overview = fake_overview  # type: ignore[method-assign]
+
+    response = client.get("/community/stats")
+    assert response.status_code == 200
+    assert "Avg Success" in response.text
+    assert "Top Categories" in response.text
+
+
+def test_gui_memory_page_shows_filenames_and_extended_markdown_help(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    response = client.get("/memory?doc=heartbeat")
+    assert response.status_code == 200
+    assert "/ HEARTBEAT.md" in response.text
+    assert "heartbeat steps or recurring routines." in response.text
+    assert "Store API keys in config or environment variables" in response.text
+
+
+def test_gui_community_discover_renders_tool_preview_and_compact_install_meta(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    async def fake_marketplace(
+        *,
+        query: str = "",
+        category: str = "",
+        language: str = "",
+        runtime: str = "",
+        min_reliability: int = 0,
+        sort: str = "trending",
+    ):
+        return {
+            "items": [
+                {
+                    "slug": "context7",
+                    "name": "Context7",
+                    "description": "Research context MCP.",
+                    "category": "Research",
+                    "language": "Remote",
+                    "install_method": "remote",
+                    "runtime_engine": {"label": "Remote/API", "tone": "community"},
+                    "verified": True,
+                    "active_instances": 1200,
+                    "installs": 9800,
+                    "success_rate": 0.97,
+                    "avg_latency_ms": 1800,
+                    "recent_runs": 44,
+                    "tools": ["fetch_doc", "search_context"],
+                    "tool_count": 2,
+                    "dependencies": ["Remote MCP endpoint"],
+                    "permission_hints": ["Makes outbound network requests"],
+                    "best_for": ["Research agents"],
+                    "difficulty": {"label": "Beginner", "tone": "good"},
+                    "reliability": {"label": "Stable", "tone": "good", "percent": 97, "bar_width": 97},
+                    "install_confidence": {
+                        "score": 9.7,
+                        "label": "High confidence",
+                        "tone": "good",
+                        "based_on_instances": 1200,
+                    },
+                    "usage_trend": {
+                        "runs_24h": 12,
+                        "runs_7d": 44,
+                        "label": "Growing",
+                        "tone": "good",
+                    },
+                    "known_fixes": [],
+                }
+            ],
+            "categories": ["Coding", "Research"],
+            "languages": ["Node.js", "Remote"],
+            "runtime_options": ["Node", "Python", "Docker", "Remote/API"],
+            "reliability_options": [0, 80, 90, 95],
+        }
+
+    app.state.community_service.marketplace = fake_marketplace  # type: ignore[method-assign]
+
+    response = client.get("/community/discover")
+    assert response.status_code == 200
+    assert "Tool preview (2 total)" in response.text
+    assert "The hub currently tracks tool names." in response.text
+    assert "Dependencies" in response.text
+    assert "Tools" in response.text
+    assert "Security and permissions" in response.text
+    assert "Remote/API" in response.text
 
 
 def test_gui_community_stack_import_installs_and_enables_active_mcps(tmp_path: Path):
@@ -693,6 +864,7 @@ def test_gui_community_apply_fix_updates_local_mcp_config(tmp_path: Path):
             "reliability": {"label": "Stable", "tone": "good", "percent": 98, "bar_width": 98},
             "best_for": ["Automation agents"],
             "dependencies": ["Python 3.11+"],
+            "permission_hints": ["Runs local runtime processes"],
             "known_issues": ["Increase timeout on slower systems."],
             "active_instances": 42,
         }
@@ -717,6 +889,11 @@ def test_gui_community_apply_fix_updates_local_mcp_config(tmp_path: Path):
     app.state.community_service.marketplace_detail = fake_marketplace_detail  # type: ignore[method-assign]
     app.state.community_service.marketplace_fixes = fake_marketplace_fixes  # type: ignore[method-assign]
 
+    detail = client.get("/mcp/echo")
+    assert detail.status_code == 200
+    assert "Apply Recommended Config" in detail.text
+    assert "Security and permissions" in detail.text
+
     response = client.post(
         "/mcp/apply-community-fix/echo",
         data={"fix_id": "apply-recommended-config", "next": "/mcp/echo"},
@@ -731,6 +908,55 @@ def test_gui_community_apply_fix_updates_local_mcp_config(tmp_path: Path):
     assert updated_config.tools.mcp_servers["echo"].tool_timeout == 60
     assert updated_record["status"] == "registered"
     assert updated_record["enabled"] is False
+
+
+def test_gui_chat_error_links_to_local_mcp_detail_for_community_backed_servers(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    _install_fixture_mcp_backend(app)
+
+    install = client.post(
+        "/mcp/install",
+        data={"source": "https://github.com/example/echo-mcp"},
+        follow_redirects=True,
+    )
+    assert install.status_code == 200
+
+    config = app.state.config_service.load()
+    config.tools.mcp_servers["echo"].type = "stdio"
+    app.state.config_service.save(config)
+    app.state.config_service.set_mcp_record(
+        "echo",
+        {
+            **app.state.config_service.get_mcp_record("echo"),
+            "enabled": True,
+            "status": "error",
+            "status_label": "Probe failed",
+            "community_slug": "echo-mcp",
+            "last_error": "Timeout while probing the MCP server.",
+        },
+    )
+    app.state.config_service.set_last_error(
+        {
+            "title": "Chat runtime failed",
+            "raw": "Timeout while probing the MCP server.",
+            "explanation": "The active MCP failed while the chat runtime was using it.",
+            "next_action": "Review the MCP detail page and compare the community-backed recommendation.",
+            "action_label": "Open MCP registry",
+            "action_url": "/mcp",
+        }
+    )
+
+    response = client.get("/chat")
+    assert response.status_code == 200
+    assert "Why did this fail?" in response.text
+    assert "/mcp/echo" in response.text
 
 
 def test_gui_community_submit_stack_and_showcase_routes(tmp_path: Path):
@@ -1004,11 +1230,11 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
     def fake_fetch(repo: str) -> dict[str, str]:
         calls.append(repo)
         return {
-            "tag_name": "v0.2.1",
-            "latest_version": "0.2.1",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
-            "release_name": "v0.2.1",
+            "tag_name": "v0.3.1",
+            "latest_version": "0.3.1",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
+            "release_name": "v0.3.1",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         }
@@ -1021,14 +1247,14 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
         follow_redirects=True,
     )
     assert login_response.status_code == 200
-    assert "New version available: v0.2.1" in login_response.text
+    assert "New version available: v0.3.1" in login_response.text
     assert "View release notes" in login_response.text
     assert "Update now" in login_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     dashboard_response = client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert "New version available: v0.2.1" in dashboard_response.text
+    assert "New version available: v0.3.1" in dashboard_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     status = app.state.config_service.get_update_status()
@@ -1051,14 +1277,14 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     app.state.config_service.set_update_status(
         {
             "enabled": True,
-            "current_version": "0.2.0",
-            "latest_version": "0.2.1",
-            "tag_name": "v0.2.1",
+            "current_version": "0.3.0",
+            "latest_version": "0.3.1",
+            "tag_name": "v0.3.1",
             "available": True,
             "checked_at": "2026-03-10T00:00:00+00:00",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
-            "release_name": "v0.2.1",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
+            "release_name": "v0.3.1",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
             "repo": "lucmuss/nanobot-webgui",
@@ -1078,11 +1304,11 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     monkeypatch.setattr(
         "nanobot.gui.app._fetch_latest_release_info",
         lambda _repo: {
-            "tag_name": "v0.2.1",
-            "latest_version": "0.2.1",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.2.1",
-            "release_name": "v0.2.1",
+            "tag_name": "v0.3.1",
+            "latest_version": "0.3.1",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
+            "release_name": "v0.3.1",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         },
@@ -1098,5 +1324,5 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     update_response = client.post("/actions/update")
     assert update_response.status_code == 202
     assert "Updating GUI" in update_response.text
-    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.2.1")]
+    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.3.1")]
     assert app.state.config_service.get_update_status()["updating"] is True

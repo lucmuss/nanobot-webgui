@@ -28,6 +28,7 @@ test('password changes and avatar replacement persist across logout and relogin'
   expect(fs.existsSync(path.join(paths.mediaDir, firstAvatarPath))).toBe(true);
 
   await page.goto('/profile');
+  await page.getByTestId('profile-password-toggle').click();
   await page.getByTestId('profile-password').fill('NanobotGuiTest!456');
   await page.getByTestId('profile-password-confirm').fill('NanobotGuiTest!456');
   await page.setInputFiles('[data-testid="profile-avatar"]', ensureAvatarFixture('avatar-replacement.png'));

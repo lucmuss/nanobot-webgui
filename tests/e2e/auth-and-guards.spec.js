@@ -45,7 +45,7 @@ test('logout clears the session and relogin restores dashboard access', async ({
 
   await login(page);
   await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByTestId('dashboard-system-info')).toBeVisible();
 });
 
 test('setup validation failure shows fix guidance for invalid provider, missing model, and missing API key', async ({ page, request }) => {

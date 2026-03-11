@@ -42,6 +42,16 @@
       <strong>{{ community_overview.runs_today }}</strong>
       <small>telemetry events</small>
     </article>
+    <article class="compact-kpi">
+      <span class="muted">Avg Success</span>
+      <strong>{{ (community_overview.average_success_rate * 100)|round(1) }}%</strong>
+      <small>network health</small>
+    </article>
+    <article class="compact-kpi">
+      <span class="muted">Avg Latency</span>
+      <strong>{{ community_overview.average_latency_ms }} ms</strong>
+      <small>across tracked MCPs</small>
+    </article>
   </section>
 
   <div class="panel-grid two" style="margin-top: 22px;">
@@ -51,12 +61,17 @@
         <h3>Current momentum</h3>
       </div>
       {% for item in community_overview.trending_mcps %}
-        <div class="stat-line">
-          <div>
-            <strong>{{ loop.index }}. {{ item.name }}</strong>
+        <div class="list-row">
+          <div class="list-row-copy">
+            <strong class="list-row-title">{{ loop.index }}. {{ item.name }}</strong>
             <div class="muted">{{ item.recent_runs }} recent runs · {{ item.active_instances }} active instances</div>
           </div>
-          <a class="button secondary" href="/community/mcp/{{ item.slug }}">Open</a>
+          <div class="list-row-actions">
+            <a class="button secondary" href="/community/mcp/{{ item.slug }}">Open</a>
+            <form method="post" action="/community/install/mcp/{{ item.slug }}">
+              <button class="secondary" type="submit" data-testid="community-stats-trending-install-{{ item.slug }}">Install</button>
+            </form>
+          </div>
         </div>
       {% else %}
         <p class="muted">Trending signals are not available yet.</p>
@@ -69,12 +84,15 @@
         <h3>Highest confidence entries</h3>
       </div>
       {% for item in community_overview.most_reliable_mcps %}
-        <div class="stat-line">
-          <div>
-            <strong>{{ item.name }}</strong>
+        <div class="list-row">
+          <div class="list-row-copy">
+            <strong class="list-row-title">{{ item.name }}</strong>
             <div class="muted">{{ item.get('reliability', {}).get('label', 'Tracked') }} · {{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}% · {{ item.avg_latency_ms }} ms</div>
           </div>
-          <span class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Tracked') }}</span>
+          <div class="list-row-actions">
+            <span class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Tracked') }}</span>
+            <a class="button secondary" href="/community/mcp/{{ item.slug }}">Open</a>
+          </div>
         </div>
       {% else %}
         <p class="muted">No reliability data is available yet.</p>
@@ -88,13 +106,35 @@
       <h3>Highest activity right now</h3>
     </div>
     {% for item in community_overview.top_mcps %}
+      <div class="list-row">
+        <div class="list-row-copy">
+          <strong class="list-row-title">{{ item.name }}</strong>
+          <div class="muted">{{ item.active_instances }} active instances · {{ item.installs }} installs · {{ item.category }}</div>
+        </div>
+        <div class="list-row-actions">
+          <a class="button secondary" href="/community/mcp/{{ item.slug }}">Open</a>
+          <form method="post" action="/community/install/mcp/{{ item.slug }}">
+            <button class="secondary" type="submit" data-testid="community-stats-top-install-{{ item.slug }}">Install</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </section>
+
+  <section class="panel" style="margin-top: 22px;">
+    <div class="section-intro">
+      <p class="eyebrow">Top Categories</p>
+      <h3>Where the network spends most time</h3>
+    </div>
+    {% for item in community_overview.top_categories %}
       <div class="stat-line">
         <div>
           <strong>{{ item.name }}</strong>
-          <div class="muted">{{ item.active_instances }} active instances · {{ item.installs }} installs · {{ item.category }}</div>
+          <div class="muted">{{ item.count }} tracked MCPs</div>
         </div>
-        <a class="button secondary" href="/community/mcp/{{ item.slug }}">Open</a>
       </div>
+    {% else %}
+      <p class="muted">No category signals are available yet.</p>
     {% endfor %}
   </section>
 {% endif %}

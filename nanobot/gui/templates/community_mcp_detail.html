@@ -18,7 +18,11 @@
     </div>
     <div class="page-meta-bar">
       {% for item in community_meta %}
-        <span class="meta-chip {{ item.tone }}"><strong>{{ item.label }}</strong>{{ item.value }}</span>
+        <span class="meta-chip {{ item.tone }}"
+          {% if item.label == "Community reliability" %}title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully."{% endif %}
+          {% if item.label == "Confidence" %}title="Confidence measures how strong the community evidence is. It grows with 30-day run volume and the number of independent instances."{% endif %}
+          {% if item.label == "Trust Score" %}title="Trust Score is the overall quality index. It combines performance, config consensus, repair success, and verification signals."{% endif %}
+        ><strong>{{ item.label }}</strong>{{ item.value }}</span>
       {% endfor %}
       <span class="meta-chip"><strong>Repository</strong>{{ community_item.repo_url }}</span>
     </div>
@@ -44,11 +48,20 @@
       </div>
       <div class="details-grid compact" style="margin-top: 16px;">
         <div class="meta-pair"><strong>Install Method</strong><span>{{ community_item.install_method }}</span></div>
+        <div class="meta-pair"><strong>Runtime</strong><span>{{ community_item.get("runtime_engine", {}).get("label", "Other") }}</span></div>
         <div class="meta-pair"><strong>Active Instances</strong><span>{{ community_item.active_instances }}</span></div>
         <div class="meta-pair"><strong>Average Latency</strong><span>{{ community_item.avg_latency_ms }} ms</span></div>
         <div class="meta-pair"><strong>Recent Runs</strong><span>{{ community_item.recent_runs }}</span></div>
+        <div class="meta-pair"><strong>Confidence</strong><span>{{ community_item.get("install_confidence", {}).get("score", "n/a") }}/10</span></div>
+        <div class="meta-pair"><strong>Signals</strong><span>{{ community_item.get("install_confidence", {}).get("based_on_instances", 0) }}</span></div>
+        <div class="meta-pair"><strong>30d runs</strong><span>{{ community_item.get("install_confidence", {}).get("runs_30d", 0) }}</span></div>
+        <div class="meta-pair"><strong>30d instances</strong><span>{{ community_item.get("install_confidence", {}).get("instances_30d", 0) }}</span></div>
         <div class="meta-pair"><strong>Difficulty</strong><span>{{ community_item.get("difficulty", {}).get("label", "Unknown") }}</span></div>
         <div class="meta-pair"><strong>Best used with</strong><span>{{ community_item.get("best_for", [])|join(", ") if community_item.get("best_for", []) else "General workflows" }}</span></div>
+        <div class="meta-pair"><strong>Runs in 24h</strong><span>{{ community_item.get("usage_trend", {}).get("runs_24h", 0) }}</span></div>
+        <div class="meta-pair"><strong>Runs in 7d</strong><span>{{ community_item.get("usage_trend", {}).get("runs_7d", 0) }}</span></div>
+        <div class="meta-pair"><strong>Config consensus</strong><span>{{ (community_item.get("trust_score", {}).get("config_consensus", 0) * 100)|round(1) }}%</span></div>
+        <div class="meta-pair"><strong>Repair rate</strong><span>{{ (community_item.get("trust_score", {}).get("repair_rate", 0) * 100)|round(1) }}%</span></div>
       </div>
     </section>
 
@@ -67,6 +80,8 @@
             <div class="meta-pair"><strong>Timeout</strong><span>{{ community_item.recommended_config.timeout }} seconds</span></div>
             <div class="meta-pair"><strong>Retries</strong><span>{{ community_item.recommended_config.retries }}</span></div>
             <div class="meta-pair"><strong>Evidence</strong><span>{{ community_item.recommended_config.based_on_instances }} instances</span></div>
+            <div class="meta-pair"><strong>Confidence</strong><span>{{ (community_item.recommended_config.confidence_score * 10)|round(1) }}/10</span></div>
+            <div class="meta-pair"><strong>Trend</strong><span>{{ community_item.get("usage_trend", {}).get("label", "Quiet") }}</span></div>
           </div>
         </div>
       {% else %}
@@ -77,6 +92,9 @@
         <h4>Install preview</h4>
         <div class="meta-list">
           <div><strong>Dependencies</strong><div class="muted">{{ community_item.get("dependencies", [])|join(" · ") if community_item.get("dependencies", []) else "No dependency hint" }}</div></div>
+          {% if community_item.get("permission_hints") %}
+            <div><strong>Security and permissions</strong><div class="muted">{{ community_item.get("permission_hints", [])|join(" · ") }}</div></div>
+          {% endif %}
           <div><strong>Repository</strong><div class="mono">{{ community_item.repo_url }}</div></div>
         </div>
       </div>

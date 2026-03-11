@@ -1,7 +1,14 @@
 {% extends "base.html" %}
 {% block body %}
-  <div class="panel-grid two">
-    <section class="panel">
+  <div class="section-tabs" data-tab-group="memory-sections" data-default-tab="editor" data-testid="memory-mobile-tabs">
+    <button class="section-tab" type="button" data-tab-target="documents">Documents</button>
+    <button class="section-tab" type="button" data-tab-target="editor">Editor</button>
+    <button class="section-tab" type="button" data-tab-target="preview">Preview</button>
+    <button class="section-tab" type="button" data-tab-target="help">Markdown Help</button>
+  </div>
+
+  <div class="tabbed-grid" data-testid="memory-sections-grid">
+    <section class="panel" data-tab-panel-group="memory-sections" data-tab-panel="documents">
       <div class="section-intro">
         <p class="eyebrow">Memory Workspace</p>
         <h3>Document Switcher</h3>
@@ -15,8 +22,11 @@
             <strong>{{ group.label }}</strong>
             {% for document in group.documents %}
               <a class="doc-chip {% if document.key == active_document.key %}active{% endif %}" href="/memory?doc={{ document.key }}" data-testid="memory-doc-chip-{{ document.key }}">
-                <span>{{ document.label }}</span>
-                <span class="muted">{{ document.key }}</span>
+                <span class="doc-chip-copy">
+                  <span class="primary">{{ document.label }}</span>
+                  <span class="secondary">/ {{ document.filename }}</span>
+                </span>
+                <span class="pill muted">{{ document.group }}</span>
               </a>
             {% endfor %}
           </section>
@@ -32,7 +42,7 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" data-tab-panel-group="memory-sections" data-tab-panel="editor">
       <div class="section-intro">
         <p class="eyebrow">Editing</p>
         <h3>Editor</h3>
@@ -59,10 +69,8 @@
         </form>
       {% endif %}
     </section>
-  </div>
 
-  <div class="panel-grid two" style="margin-top: 22px;">
-    <section class="panel" data-testid="memory-preview-panel">
+    <section class="panel" data-tab-panel-group="memory-sections" data-tab-panel="preview" data-testid="memory-preview-panel">
       <div class="section-intro">
         <p class="eyebrow">Rendered Output</p>
         <h3>Preview</h3>
@@ -72,7 +80,7 @@
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel" data-tab-panel-group="memory-sections" data-tab-panel="help">
       <div class="section-intro">
         <p class="eyebrow">Syntax Guide</p>
         <h3>Markdown Help</h3>
@@ -82,6 +90,12 @@
         <li>Use <span class="mono">- item</span> for lists and <span class="mono">`inline code`</span> for commands or paths.</li>
         <li>Use fenced code blocks with <span class="mono">```</span> for prompts, JSON, or shell snippets.</li>
         <li>Use <span class="mono">**bold**</span> for emphasis where the instruction must stand out.</li>
+        <li>Use <span class="mono">1. step</span> lists when the agent should follow a sequence.</li>
+        <li>Use <span class="mono">- [ ] task</span> checklists for heartbeat steps or recurring routines.</li>
+        <li>Use block quotes like <span class="mono">&gt; note</span> for warnings, assumptions, or handover notes.</li>
+        <li>Prefer short sections with clear headings such as <span class="mono">Goal</span>, <span class="mono">Constraints</span>, <span class="mono">Workflow</span>, and <span class="mono">Do not</span>.</li>
+        <li>Use links like <span class="mono">[Docs](https://...)</span> when the agent should reference a stable source.</li>
+        <li>Keep secrets out of these files. Store API keys in config or environment variables, not Markdown memory.</li>
       </ul>
     </section>
   </div>

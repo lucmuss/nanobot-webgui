@@ -38,7 +38,10 @@
               <strong>{{ item.name }}</strong>
               <span class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Recommended') }}</span>
             </header>
-            <p class="muted">{{ item.reason }}</p>
+            <div class="insight-panel community" style="margin-top: 12px;">
+              <h4>Why recommended</h4>
+              <p class="muted" style="margin: 8px 0 0;">{{ item.reason }}</p>
+            </div>
             <div class="reliability-stack">
               <div class="split-header" style="margin-bottom: 0;">
                 <span class="muted">Reliability</span>
@@ -47,6 +50,10 @@
               <div class="reliability-bar">
                 <div class="reliability-fill {{ item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ item.get('reliability', {}).get('bar_width', ((item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
               </div>
+            </div>
+            <div class="details-grid compact" style="margin-top: 12px;">
+              <div class="meta-pair"><strong>Confidence</strong><span>{{ item.get('install_confidence', {}).get('score', 'n/a') }}/10</span></div>
+              <div class="meta-pair"><strong>Signals</strong><span>{{ item.get('install_confidence', {}).get('based_on_instances', 0) }}</span></div>
             </div>
             <div class="badge-row" style="margin-top: 12px;">
               <span class="pill {{ item.get('difficulty', {}).get('tone', 'muted') }}">{{ item.get('difficulty', {}).get('label', 'Unknown') }}</span>
@@ -80,43 +87,56 @@
         Search
         <input type="text" name="q" value="{{ query }}" placeholder="Search MCP name or repository" data-testid="community-discover-query">
       </label>
-      <label>
-        Category
-        <select name="category" data-testid="community-discover-category">
-          <option value="">All categories</option>
-          {% for item in community_categories %}
-            <option value="{{ item }}" {% if category == item %}selected{% endif %}>{{ item }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        Language
-        <select name="language" data-testid="community-discover-language">
-          <option value="">All languages</option>
-          {% for item in community_languages %}
-            <option value="{{ item }}" {% if language == item %}selected{% endif %}>{{ item }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        Reliability
-        <select name="min_reliability" data-testid="community-discover-min-reliability">
-          {% for item in community_reliability_options %}
-            <option value="{{ item }}" {% if min_reliability == item %}selected{% endif %}>
-              {% if item == 0 %}Any reliability{% else %}>={{ item }}% reliability{% endif %}
-            </option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        Sort
-        <select name="sort" data-testid="community-discover-sort">
-          <option value="trending" {% if sort == "trending" %}selected{% endif %}>Trending</option>
-          <option value="reliable" {% if sort == "reliable" %}selected{% endif %}>Most Reliable</option>
-          <option value="installed" {% if sort == "installed" %}selected{% endif %}>Most Installed</option>
-          <option value="new" {% if sort == "new" %}selected{% endif %}>New</option>
-        </select>
-      </label>
+      <div class="form-row">
+        <label>
+          Category
+          <select name="category" data-testid="community-discover-category">
+            <option value="">All categories</option>
+            {% for item in community_categories %}
+              <option value="{{ item }}" {% if category == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Language
+          <select name="language" data-testid="community-discover-language">
+            <option value="">All languages</option>
+            {% for item in community_languages %}
+              <option value="{{ item }}" {% if language == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>
+          Runtime
+          <select name="runtime" data-testid="community-discover-runtime">
+            <option value="">Any runtime</option>
+            {% for item in community_runtime_options %}
+              <option value="{{ item }}" {% if runtime == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Reliability
+          <select name="min_reliability" data-testid="community-discover-min-reliability">
+            {% for item in community_reliability_options %}
+              <option value="{{ item }}" {% if min_reliability == item %}selected{% endif %}>
+                {% if item == 0 %}Any reliability{% else %}>={{ item }}% reliability{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Sort
+          <select name="sort" data-testid="community-discover-sort">
+            <option value="trending" {% if sort == "trending" %}selected{% endif %}>Trending</option>
+            <option value="reliable" {% if sort == "reliable" %}selected{% endif %}>Most Reliable</option>
+            <option value="installed" {% if sort == "installed" %}selected{% endif %}>Most Installed</option>
+            <option value="new" {% if sort == "new" %}selected{% endif %}>New</option>
+          </select>
+        </label>
+      </div>
       <div class="actions" style="align-self: end;">
         <button type="submit" data-testid="community-discover-submit">Search</button>
       </div>
@@ -204,7 +224,7 @@
       <article class="card" data-testid="community-mcp-card-{{ item.slug }}">
         <div class="split-header">
           <div>
-            <strong>{{ item.name }}</strong>
+            <h3 class="community-card-title">{{ item.name }}</h3>
             <p class="muted" style="margin: 8px 0 0;">{{ item.description }}</p>
           </div>
           <div class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Tracked') }}</div>
@@ -213,6 +233,7 @@
         <div class="page-meta-bar">
           <span class="meta-chip"><strong>Category</strong>{{ item.category }}</span>
           <span class="meta-chip"><strong>Language</strong>{{ item.language }}</span>
+          <span class="meta-chip {{ item.get('runtime_engine', {}).get('tone', 'muted') }}"><strong>Runtime</strong>{{ item.get("runtime_engine", {}).get("label", "Other") }}</span>
           <span class="meta-chip"><strong>Install</strong>{{ item.install_method }}</span>
           <span class="meta-chip {{ item.get('difficulty', {}).get('tone', 'muted') }}"><strong>Difficulty</strong>{{ item.get('difficulty', {}).get('label', 'Unknown') }}</span>
           {% if item.verified %}<span class="meta-chip good"><strong>Trust</strong>Verified</span>{% endif %}
@@ -223,8 +244,8 @@
             <h4>Community reliability</h4>
             <div class="reliability-stack" style="margin-top: 10px;">
               <div class="split-header" style="margin-bottom: 0;">
-                <span class="muted">{{ item.get('reliability', {}).get('label', 'Tracked') }}</span>
-                <strong>{{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}%</strong>
+                <span class="muted" title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully.">{{ item.get('reliability', {}).get('label', 'Tracked') }}</span>
+                <strong title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully.">{{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}%</strong>
               </div>
               <div class="reliability-bar">
                 <div class="reliability-fill {{ item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ item.get('reliability', {}).get('bar_width', ((item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
@@ -233,10 +254,28 @@
           </div>
           <div class="insight-panel local">
             <h4>Install preview</h4>
-            <div class="meta-list">
-              <div><strong>Dependencies</strong><div class="muted">{{ item.get("dependencies", [])|join(" · ") if item.get("dependencies", []) else "No dependency hint" }}</div></div>
-              <div><strong>Tools</strong><div class="muted">{{ item.tool_count }} tools</div></div>
+            <div class="compact-multi-meta" style="margin-top: 12px;">
+              <div class="compact-meta-row">
+                <div class="compact-meta-card">
+                  <strong>Dependencies</strong>
+                  <span class="muted">{{ item.get("dependencies", [])|join(" · ") if item.get("dependencies", []) else "No dependency hint" }}</span>
+                </div>
+                <div class="compact-meta-card">
+                  <strong>Tools</strong>
+                  <span class="muted">{{ item.tool_count }} tools</span>
+                </div>
+              </div>
             </div>
+            {% if item.get("permission_hints") %}
+              <div class="compact-multi-meta" style="margin-top: 12px;">
+                <div class="compact-meta-row">
+                  <div class="compact-meta-card" style="grid-column: 1 / -1;">
+                    <strong>Security and permissions</strong>
+                    <span class="muted">{{ item.get("permission_hints", [])|join(" · ") }}</span>
+                  </div>
+                </div>
+              </div>
+            {% endif %}
           </div>
         </div>
 
@@ -254,16 +293,24 @@
             <span>{{ item.get("best_for", [])|join(", ") if item.get("best_for", []) else "General MCP workflows" }}</span>
           </div>
           <div class="meta-pair">
-            <strong>Observed locally</strong>
-            <span>{{ item.recent_runs }} recent community runs</span>
+            <strong>Confidence</strong>
+            <span title="Confidence measures how strong the community evidence is. It grows with 30-day run volume and the number of independent instances.">{{ item.get("install_confidence", {}).get("score", "n/a") }}/10 · {{ item.get("install_confidence", {}).get("label", "Tracked") }}</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Usage trend</strong>
+            <span>{{ item.get("usage_trend", {}).get("label", "Quiet") }} · {{ item.get("usage_trend", {}).get("runs_24h", 0) }} in 24h</span>
           </div>
         </div>
 
-        <div class="stack-list" style="margin-top: 14px;">
-          {% for tool in item.tools[:4] %}
-            <span class="pill">{{ tool }}</span>
-          {% endfor %}
-        </div>
+        <details class="tool-disclosure">
+          <summary>Tool preview ({{ item.tool_count }} total)</summary>
+          <div class="tool-pills" style="margin-top: 12px;">
+            {% for tool in item.tools %}
+              <span class="pill">{{ tool }}</span>
+            {% endfor %}
+          </div>
+          <p class="muted" style="margin-top: 10px;">The hub currently tracks tool names. Detailed tool descriptions will appear here once they are available from the registry.</p>
+        </details>
         {% if item.known_fixes %}
           <div class="insight-panel community" style="margin-top: 14px;">
             <h4>Known fix</h4>

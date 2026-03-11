@@ -1,6 +1,6 @@
 # WebGUI Deployment Guide
 
-Current release target: `0.2.0`
+Current release target: `0.3.0`
 
 This guide is for running the `nanobot` WebGUI as a stable self-hosted service.
 

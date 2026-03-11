@@ -11,101 +11,107 @@
       </div>
 
       <form method="post" action="/settings" data-testid="settings-form">
-        <div class="highlight-panel">
-          <strong>Primary instance settings</strong>
-          <p class="muted">These values affect the day-to-day runtime behavior immediately and should remain easy to find.</p>
-        </div>
-
-        <div class="meta-grid" style="margin-top: 16px;">
-          <div class="meta-pair">
-            <strong>Workspace path</strong>
-            <span class="mono">{{ settings_form.workspace }}</span>
+        <details open data-testid="settings-runtime-section">
+          <summary>Runtime</summary>
+          <div class="highlight-panel" style="margin-top: 14px;">
+            <strong>Primary instance settings</strong>
+            <p class="muted">These values affect the day-to-day runtime behavior immediately and should remain easy to find.</p>
           </div>
-          <div class="meta-pair">
-            <strong>Workspace mode</strong>
-            <span>{{ "Container-locked" if workspace_locked else "Editable" }}</span>
-          </div>
-        </div>
 
-        <div class="details-grid compact">
-          <label>
-            Exec timeout (seconds)
-            <input type="number" name="exec_timeout" min="1" value="{{ settings_form.exec_timeout }}" data-testid="settings-exec-timeout">
-          </label>
-          <label>
-            PATH append
-            <input type="text" name="path_append" value="{{ settings_form.path_append }}" data-testid="settings-path-append">
-          </label>
-        </div>
-
-        <div class="card compact-card">
-          <header><strong>Core toggles</strong></header>
-          <div class="compact-list">
-            <label class="checkbox">
-              <input type="checkbox" name="tools_enabled" {% if settings_form.tools_enabled %}checked{% endif %} data-testid="settings-tools-enabled">
-              <span>Enable tools in the main runtime</span>
-            </label>
-
-            <label class="checkbox">
-              <input type="checkbox" name="restrict_to_workspace" {% if settings_form.restrict_to_workspace %}checked{% endif %} data-testid="settings-restrict-workspace">
-              <span>Restrict tool execution to the workspace</span>
-            </label>
-
-            <label class="checkbox">
-              <input type="checkbox" name="send_progress" {% if settings_form.send_progress %}checked{% endif %} data-testid="settings-send-progress">
-              <span>Send progress updates to channels</span>
-            </label>
-
-            <label class="checkbox">
-              <input type="checkbox" name="send_tool_hints" {% if settings_form.send_tool_hints %}checked{% endif %} data-testid="settings-send-tool-hints">
-              <span>Send tool hints to channels</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="card compact-card" style="margin-top: 16px;">
-          <header><strong>Community Integration</strong></header>
-          <p class="muted">These toggles control how this Nanobot instance talks to the external community hub.</p>
-          <div class="meta-grid" style="margin-top: 12px; margin-bottom: 12px;">
+          <div class="meta-grid" style="margin-top: 16px;">
             <div class="meta-pair">
-              <strong>Community API</strong>
-              <span class="mono">{{ settings_meta.community_api_url or "Not configured" }}</span>
+              <strong>Workspace path</strong>
+              <span class="mono">{{ settings_form.workspace }}</span>
             </div>
             <div class="meta-pair">
-              <strong>Public Hub URL</strong>
-              <span class="mono">{{ settings_meta.community_public_url or "Not configured" }}</span>
-            </div>
-            <div class="meta-pair">
-              <strong>Read Access</strong>
-              <span>{{ "Configured" if settings_meta.community_enabled else "Disabled" }}</span>
-            </div>
-            <div class="meta-pair">
-              <strong>Write Access</strong>
-              <span>{{ "Configured" if settings_meta.community_write_enabled else "Disabled" }}</span>
+              <strong>Workspace mode</strong>
+              <span>{{ "Container-locked" if workspace_locked else "Editable" }}</span>
             </div>
           </div>
-          <div class="compact-list">
-            <label class="checkbox">
-              <input type="checkbox" name="receive_recommendations" {% if settings_form.receive_recommendations %}checked{% endif %} data-testid="settings-community-recommendations">
-              <span>Receive community recommendations and MCP metadata</span>
+
+          <div class="details-grid compact" style="margin-top: 14px;">
+            <label>
+              Exec timeout (seconds)
+              <input type="number" name="exec_timeout" min="1" value="{{ settings_form.exec_timeout }}" data-testid="settings-exec-timeout">
             </label>
-            <label class="checkbox">
-              <input type="checkbox" name="show_marketplace_stats" {% if settings_form.show_marketplace_stats %}checked{% endif %} data-testid="settings-community-stats">
-              <span>Show community marketplace stats in the dashboard and community pages</span>
-            </label>
-            <label class="checkbox">
-              <input type="checkbox" name="share_anonymous_metrics" {% if settings_form.share_anonymous_metrics %}checked{% endif %} data-testid="settings-community-telemetry">
-              <span>Share anonymous MCP runtime metrics with the community hub</span>
-            </label>
-            <label class="checkbox">
-              <input type="checkbox" name="allow_public_mcp_submissions" {% if settings_form.allow_public_mcp_submissions %}checked{% endif %} data-testid="settings-community-submit">
-              <span>Allow this GUI to publish MCP repository entries to the community hub</span>
+            <label>
+              PATH append
+              <input type="text" name="path_append" value="{{ settings_form.path_append }}" data-testid="settings-path-append">
             </label>
           </div>
-        </div>
+
+          <div class="card compact-card" style="margin-top: 16px;">
+            <header><strong>Core toggles</strong></header>
+            <div class="compact-list">
+              <label class="checkbox">
+                <input type="checkbox" name="tools_enabled" {% if settings_form.tools_enabled %}checked{% endif %} data-testid="settings-tools-enabled">
+                <span>Enable tools in the main runtime</span>
+              </label>
+
+              <label class="checkbox">
+                <input type="checkbox" name="restrict_to_workspace" {% if settings_form.restrict_to_workspace %}checked{% endif %} data-testid="settings-restrict-workspace">
+                <span>Restrict tool execution to the workspace</span>
+              </label>
+
+              <label class="checkbox">
+                <input type="checkbox" name="send_progress" {% if settings_form.send_progress %}checked{% endif %} data-testid="settings-send-progress">
+                <span>Send progress updates to channels</span>
+              </label>
+
+              <label class="checkbox">
+                <input type="checkbox" name="send_tool_hints" {% if settings_form.send_tool_hints %}checked{% endif %} data-testid="settings-send-tool-hints">
+                <span>Send tool hints to channels</span>
+              </label>
+            </div>
+          </div>
+        </details>
+
+        <details open data-testid="settings-community-section">
+          <summary>Community</summary>
+          <div class="card compact-card" style="margin-top: 14px;">
+            <header><strong>Community Integration</strong></header>
+            <p class="muted">These toggles control how this Nanobot instance talks to the external community hub.</p>
+            <div class="meta-grid" style="margin-top: 12px; margin-bottom: 12px;">
+              <div class="meta-pair">
+                <strong>Community API</strong>
+                <span class="mono">{{ settings_meta.community_api_url or "Not configured" }}</span>
+              </div>
+              <div class="meta-pair">
+                <strong>Public Hub URL</strong>
+                <span class="mono">{{ settings_meta.community_public_url or "Not configured" }}</span>
+              </div>
+              <div class="meta-pair">
+                <strong>Read Access</strong>
+                <span>{{ "Configured" if settings_meta.community_enabled else "Disabled" }}</span>
+              </div>
+              <div class="meta-pair">
+                <strong>Write Access</strong>
+                <span>{{ "Configured" if settings_meta.community_write_enabled else "Disabled" }}</span>
+              </div>
+            </div>
+            <div class="compact-list">
+              <label class="checkbox">
+                <input type="checkbox" name="receive_recommendations" {% if settings_form.receive_recommendations %}checked{% endif %} data-testid="settings-community-recommendations">
+                <span>Receive community recommendations and MCP metadata</span>
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" name="show_marketplace_stats" {% if settings_form.show_marketplace_stats %}checked{% endif %} data-testid="settings-community-stats">
+                <span>Show community marketplace stats in the dashboard and community pages</span>
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" name="share_anonymous_metrics" {% if settings_form.share_anonymous_metrics %}checked{% endif %} data-testid="settings-community-telemetry">
+                <span>Share anonymous MCP runtime metrics with the community hub</span>
+              </label>
+              <label class="checkbox">
+                <input type="checkbox" name="allow_public_mcp_submissions" {% if settings_form.allow_public_mcp_submissions %}checked{% endif %} data-testid="settings-community-submit">
+                <span>Allow this GUI to publish MCP repository entries to the community hub</span>
+              </label>
+            </div>
+          </div>
+        </details>
 
         <details data-testid="settings-danger-zone" {% if not safe_mode and settings_form.dangerous_repair_mode %}open{% endif %}>
-          <summary>Risky controls</summary>
+          <summary>Advanced and risky controls</summary>
           <div class="danger-callout" style="margin-top: 14px;">
             <strong>Danger Zone</strong>
             <p class="muted">Unrestricted Agent + Shell allows MCP repair fallback plans to propose and execute arbitrary shell commands through the configured repair worker. Leave this off unless you fully trust the repositories and your deployment boundary.</p>

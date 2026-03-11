@@ -47,6 +47,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev]
+          pip install build
 
       - name: Install Node dependencies
         run: npm ci
@@ -58,7 +59,10 @@ jobs:
         run: python -m compileall nanobot/gui nanobot/cli tests
 
       - name: Run GUI backend integration tests
-        run: python -m pytest tests/test_gui_backend_integration.py tests/test_gui_mcp_service.py -q
+        run: python -m pytest tests -q
+
+      - name: Build release artifacts
+        run: python -m build
 
       - name: Run critical GUI E2E tests on Chromium
         env:
@@ -115,6 +119,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e .[dev]
+          pip install build
 
       - name: Install Node dependencies
         run: npm ci
@@ -126,7 +131,10 @@ jobs:
         run: python -m compileall nanobot/gui nanobot/cli tests
 
       - name: Run GUI backend integration tests
-        run: python -m pytest tests/test_gui_backend_integration.py tests/test_gui_mcp_service.py -q
+        run: python -m pytest tests -q
+
+      - name: Build release artifacts
+        run: python -m build
 
       - name: Run GUI E2E tests
         env:

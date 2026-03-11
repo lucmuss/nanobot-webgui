@@ -1,6 +1,6 @@
 [project]
 name = "nanobot-ai"
-version = "0.2.0"
+version = "0.3.0"
 description = "Nanobot with a production-focused web GUI for setup, MCP management, chat, and memory"
 requires-python = ">=3.11"
 license = {text = "MIT"}
@@ -89,6 +89,7 @@ packages = ["nanobot"]
 include = [
     "nanobot/**/*.py",
     "nanobot/gui/assets/**/*",
+    "nanobot/gui/static/**/*",
     "nanobot/gui/templates/**/*.html",
     "nanobot/templates/**/*.md",
     "nanobot/skills/**/*.md",

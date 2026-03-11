@@ -207,7 +207,26 @@
               <div class="meta-pair"><strong>Recommended config</strong><span>{{ community_item.recommended_config.transport }} · timeout {{ community_item.recommended_config.timeout }} · retries {{ community_item.recommended_config.retries }}</span></div>
             {% endif %}
           </div>
+          {% if community_item.get("permission_hints") %}
+            <div class="meta-list" style="margin-top: 14px;">
+              <div>
+                <strong>Security and permissions</strong>
+                <div class="tool-pills" style="margin-top: 8px;">
+                  {% for hint in community_item.get("permission_hints", []) %}
+                    <span class="pill">{{ hint }}</span>
+                  {% endfor %}
+                </div>
+              </div>
+            </div>
+          {% endif %}
           <div class="actions" style="margin-top: 14px;">
+            {% if community_recommended_fix %}
+              <form class="inline-form" method="post" action="/mcp/apply-community-fix/{{ server.name }}">
+                <input type="hidden" name="fix_id" value="{{ community_recommended_fix.id }}">
+                <input type="hidden" name="next" value="/mcp/{{ server.name }}">
+                <button type="submit" data-testid="mcp-apply-recommended-config">Apply Recommended Config</button>
+              </form>
+            {% endif %}
             <a class="button secondary" href="/community/mcp/{{ community_item.slug }}">Open Community Detail</a>
           </div>
         </div>

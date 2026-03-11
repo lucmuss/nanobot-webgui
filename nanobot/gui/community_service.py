@@ -46,6 +46,7 @@ class GUICommunityService:
         query: str = "",
         category: str = "",
         language: str = "",
+        runtime: str = "",
         min_reliability: int = 0,
         sort: str = "trending",
     ) -> dict[str, Any]:
@@ -56,6 +57,7 @@ class GUICommunityService:
                 "q": query.strip(),
                 "category": category.strip(),
                 "language": language.strip(),
+                "runtime": runtime.strip(),
                 "min_reliability": max(0, int(min_reliability or 0)),
                 "sort": sort.strip() or "trending",
             },

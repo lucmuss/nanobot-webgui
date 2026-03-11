@@ -20,7 +20,7 @@ from typing import Any
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -197,6 +197,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         same_site="lax",
         https_only=settings.https_only_cookies,
     )
+    app.mount("/static", StaticFiles(directory=str(Path(__file__).resolve().parent / "static")), name="static")
     app.mount("/media", StaticFiles(directory=str(config_service.media_dir)), name="media")
 
     app.state.settings = settings
@@ -345,6 +346,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     for item in community_item.get("known_issues", [])
                     if str(item).strip()
                 ][:2],
+                "common_fixes": [
+                    str(item.get("title", "")).strip()
+                    for item in community_item.get("known_fixes", [])
+                    if isinstance(item, dict) and str(item.get("title", "")).strip()
+                ][:2],
             }
             hints.append(hint)
         return hints
@@ -365,6 +371,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 parts.append(f"timeout {hint['recommended_timeout']}s")
             if hint.get("known_issues"):
                 parts.append("watch out for " + "; ".join(str(item) for item in hint["known_issues"]))
+            if hint.get("common_fixes"):
+                parts.append("common fixes include " + "; ".join(str(item) for item in hint["common_fixes"]))
             lines.append(f"- {name}: " + ", ".join(parts))
         if not lines:
             return ""
@@ -574,7 +582,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         source: str,
         success_flash: str,
         note: str = "",
-    ) -> RedirectResponse:
+    ) -> Response:
         """Send one main-chat message and persist dashboard and usage state."""
         config = config_service.load()
         community_hints = await build_chat_community_hints(config)
@@ -604,15 +612,110 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             gui_logger.exception("chat_send_failed user=%s", user.username)
             friendly = store_error(str(exc), context="provider")
             _set_flash(request, friendly["title"] + ": " + friendly["next_action"], level="error")
+            if _is_htmx_request(request):
+                return await render_chat_page(request, user, draft=message, partial=True)
             return RedirectResponse("/chat", status_code=303)
         except Exception as exc:
             gui_logger.exception("chat_send_failed user=%s", user.username)
             friendly = store_error(str(exc), context="general")
             _set_flash(request, friendly["title"] + ": " + friendly["next_action"], level="error")
+            if _is_htmx_request(request):
+                return await render_chat_page(request, user, draft=message, partial=True)
             return RedirectResponse("/chat", status_code=303)
 
         _set_flash(request, success_flash)
+        if _is_htmx_request(request):
+            return await render_chat_page(request, user, partial=True)
         return RedirectResponse("/chat", status_code=303)
+
+    async def _build_chat_view_context(
+        request: Request,
+        user: AdminUser,
+        *,
+        draft: str = "",
+        partial: bool = False,
+    ) -> dict[str, Any]:
+        """Collect the chat page state for full-page and HTMX partial renders."""
+        config = config_service.load()
+        history = await agent_service.get_chat_history(user)
+        recent_tool_activity = await agent_service.get_recent_tool_activity(user)
+        agent_health = config_service.get_agent_health()
+        installed_servers = _build_mcp_server_cards(config, config_service)
+        active_servers = [server for server in installed_servers if server["enabled"]]
+        active_tool_names = sorted({tool for server in active_servers for tool in server.get("tool_names", [])})
+        usage_summary = config_service.get_usage_summary()
+        community_chat_hints = await build_chat_community_hints(config)
+        chat_failure_target = next(
+            (
+                {
+                    "server_name": str(server.get("name", "")).strip(),
+                    "slug": str(server.get("community_slug", "")).strip(),
+                }
+                for server in active_servers
+                if str(server.get("community_slug", "")).strip()
+            ),
+            None,
+        )
+        if not chat_failure_target:
+            chat_failure_target = next(
+                (
+                    {
+                        "server_name": str(server.get("name", "")).strip(),
+                        "slug": str(server.get("community_slug", "")).strip(),
+                    }
+                    for server in installed_servers
+                    if str(server.get("community_slug", "")).strip()
+                ),
+                None,
+            )
+        return {
+            "title": "Chat",
+            "nav_active": "chat",
+            "user": user,
+            "chat_history": history,
+            "agent_health": agent_health,
+            "runtime_status": _build_runtime_status(
+                agent_health=agent_health,
+                gateway_status=await _probe_gateway(settings.gateway_health_url),
+                last_restart_at=config_service.get_last_restart_at(),
+            ),
+            "model_name": config.agents.defaults.model,
+            "provider_name": config.get_provider_name() or config.agents.defaults.provider,
+            "active_mcp_servers": active_servers,
+            "active_tool_names": active_tool_names,
+            "recent_tool_activity": recent_tool_activity,
+            "chat_error": config_service.get_last_error(),
+            "chat_quick_prompts": [
+                "Check the current setup and tell me if anything is missing.",
+                "List the active MCP servers and the tools they provide.",
+                "Explain the current workspace structure in simple language.",
+            ],
+            "chat_templates": CHAT_TEMPLATE_DEFINITIONS,
+            "recent_uploads": config_service.recent_uploads(),
+            "usage_snapshot": usage_summary,
+            "chat_draft": draft.strip(),
+            "community_chat_hints": community_chat_hints,
+            "chat_failure_target": chat_failure_target or {},
+            "chat_partial_mode": partial,
+        }
+
+    async def render_chat_page(
+        request: Request,
+        user: AdminUser,
+        *,
+        draft: str = "",
+        partial: bool = False,
+        status_code: int = 200,
+    ) -> HTMLResponse:
+        """Render the chat view either as a full page or an HTMX partial."""
+        context = await _build_chat_view_context(request, user, draft=draft, partial=partial)
+        template_name = "partials/chat_content.html" if partial else "chat.html"
+        return _render(
+            request,
+            template_name,
+            context,
+            status_code=status_code,
+        )
 
     def render_mcp_detail_page(
         request: Request,
@@ -641,6 +744,14 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             or (card.get("repair_available_recipes") or ["unrestricted_agent_shell" if unrestricted_enabled and card.get("last_error") else ""])[0],
         }
         community_preferences = config_service.get_community_preferences()
+        recommended_config_fix = next(
+            (
+                item
+                for item in (community_fixes or [])
+                if str(item.get("action_type", "")).strip() == "apply_recommended_config"
+            ),
+            None,
+        )
         return _render(
             request,
             "mcp_detail.html",
@@ -671,6 +782,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "mcp_last_error": last_error,
                 "community_item": community_item or {},
                 "community_fixes": community_fixes or [],
+                "community_recommended_fix": recommended_config_fix or {},
                 "community_preferences": community_preferences,
                 "community_write_enabled": community_service.can_write,
                 "publish_form": _default_mcp_publish_form(card, user),
@@ -1506,6 +1618,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         q: str = Query(""),
         category: str = Query(""),
         language: str = Query(""),
+        runtime: str = Query(""),
         min_reliability: int = Query(0),
         sort: str = Query("trending"),
     ):
@@ -1521,6 +1634,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     query=q.strip(),
                     category=category.strip(),
                     language=language.strip(),
+                    runtime=runtime.strip(),
                     min_reliability=min_reliability,
                     sort=sort.strip(),
                 )
@@ -1554,11 +1668,13 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "query": q.strip(),
                 "category": category.strip(),
                 "language": language.strip(),
+                "runtime": runtime.strip(),
                 "min_reliability": max(0, min(100, int(min_reliability or 0))),
                 "sort": sort.strip() or "trending",
                 "community_items": payload.get("items", []),
                 "community_categories": payload.get("categories", []),
                 "community_languages": payload.get("languages", []),
+                "community_runtime_options": payload.get("runtime_options", []),
                 "community_reliability_options": payload.get("reliability_options", [0, 80, 90, 95]),
                 "community_overview": overview,
                 "community_recommendations": recommendations,
@@ -2794,48 +2910,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             return RedirectResponse("/login", status_code=303)
         if not config_service.is_setup_complete():
             return RedirectResponse("/setup/provider", status_code=303)
-
-        config = config_service.load()
-        history = await agent_service.get_chat_history(user)
-        recent_tool_activity = await agent_service.get_recent_tool_activity(user)
-        agent_health = config_service.get_agent_health()
-        installed_servers = _build_mcp_server_cards(config, config_service)
-        active_servers = [server for server in installed_servers if server["enabled"]]
-        active_tool_names = sorted({tool for server in active_servers for tool in server.get("tool_names", [])})
-        usage_summary = config_service.get_usage_summary()
-        community_chat_hints = await build_chat_community_hints(config)
-        return _render(
-            request,
-            "chat.html",
-            {
-                "title": "Chat",
-                "nav_active": "chat",
-                "user": user,
-                "chat_history": history,
-                "agent_health": agent_health,
-                "runtime_status": _build_runtime_status(
-                    agent_health=agent_health,
-                    gateway_status=await _probe_gateway(settings.gateway_health_url),
-                    last_restart_at=config_service.get_last_restart_at(),
-                ),
-                "model_name": config.agents.defaults.model,
-                "provider_name": config.get_provider_name() or config.agents.defaults.provider,
-                "active_mcp_servers": active_servers,
-                "active_tool_names": active_tool_names,
-                "recent_tool_activity": recent_tool_activity,
-                "chat_error": config_service.get_last_error(),
-                "chat_quick_prompts": [
-                    "Check the current setup and tell me if anything is missing.",
-                    "List the active MCP servers and the tools they provide.",
-                    "Explain the current workspace structure in simple language.",
-                ],
-                "chat_templates": CHAT_TEMPLATE_DEFINITIONS,
-                "recent_uploads": config_service.recent_uploads(),
-                "usage_snapshot": usage_summary,
-                "chat_draft": draft.strip(),
-                "community_chat_hints": community_chat_hints,
-            },
-        )
+        return await render_chat_page(request, user, draft=draft.strip())
 
     @app.post("/chat/send", response_class=HTMLResponse)
     async def chat_send(request: Request):
@@ -2847,6 +2922,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         message = str(form.get("message", "")).strip()
         if not message:
             _set_flash(request, "Write a message before sending.", level="error")
+            if _is_htmx_request(request):
+                return await render_chat_page(request, user, partial=True)
             return RedirectResponse("/chat", status_code=303)
 
         return await dispatch_chat_message(
@@ -2868,15 +2945,21 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         value = str(form.get("value", "")).strip()
         if not template_key:
             _set_flash(request, "Select a prompt template first.", level="error")
+            if _is_htmx_request(request):
+                return await render_chat_page(request, user, partial=True)
             return RedirectResponse("/chat", status_code=303)
         if not value:
             _set_flash(request, "Fill in the template field before sending.", level="error")
+            if _is_htmx_request(request):
+                return await render_chat_page(request, user, partial=True)
             return RedirectResponse("/chat", status_code=303)
 
         try:
             message = _build_chat_template_message(template_key, value)
         except ValueError as exc:
             _set_flash(request, str(exc), level="error")
+            if _is_htmx_request(request):
+                return await render_chat_page(request, user, partial=True)
             return RedirectResponse("/chat", status_code=303)
 
         return await dispatch_chat_message(
@@ -2903,6 +2986,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             or not str(getattr(upload, "filename", "")).strip()
         ):
             _set_flash(request, "Choose a file before uploading.", level="error")
+            if _is_htmx_request(request):
+                return await render_chat_page(request, user, partial=True)
             return RedirectResponse("/chat", status_code=303)
 
         instruction = str(form.get("message", "")).strip()
@@ -2910,6 +2995,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             uploaded = _store_chat_upload(upload, config_service.uploads_dir, config_service.default_workspace)
         except ValueError as exc:
             _set_flash(request, str(exc), level="error")
+            if _is_htmx_request(request):
+                return await render_chat_page(request, user, draft=instruction, partial=True)
             return RedirectResponse("/chat", status_code=303)
 
         base_message = instruction or f"Inspect the uploaded file at `{uploaded['relative_path']}` and summarize what matters."
@@ -2935,6 +3022,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         await agent_service.clear_chat(user)
         _set_flash(request, "Chat history cleared.")
+        if _is_htmx_request(request):
+            return await render_chat_page(request, user, partial=True)
         return RedirectResponse("/chat", status_code=303)
 
     @app.get("/memory", response_class=HTMLResponse)
@@ -3338,6 +3427,11 @@ def _render(
     )
 
 
+def _is_htmx_request(request: Request) -> bool:
+    """Return whether the current request originated from HTMX."""
+    return str(request.headers.get("HX-Request", "")).lower() == "true"
+
+
 def _current_admin(request: Request, auth_service: AuthService) -> AdminUser | None:
     """Read the current session user."""
     session_admin_id = request.session.get("admin_id")
@@ -3497,6 +3591,7 @@ def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_ser
         "name": server_name,
         "summary": _display_summary_text(record.get("summary", "")),
         "repo_url": str(record.get("repo_url", "")).strip(),
+        "community_slug": str(record.get("community_slug", "")).strip(),
         "transport": str(record.get("transport", "")).strip() or server.type or "auto",
         "status": test_status,
         "status_label": test_label,

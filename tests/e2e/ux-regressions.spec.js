@@ -75,8 +75,11 @@ test('mobile viewport keeps dashboard, chat, and setup pages usable', async ({ p
   await bootstrapAdmin(page);
 
   await page.goto('/setup/provider');
-  await expect(page.getByRole('heading', { name: 'nanobot-e2e' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Provider', exact: true })).toBeVisible();
+  await expect(page.getByText('nanobot-e2e')).toBeVisible();
   await expect(page.getByTestId('provider-model')).toBeVisible();
+  await expect(page.getByTestId('topbar-mobile-toolbar')).toBeVisible();
+  await expect(page.getByTestId('topbar-desktop-toolbar')).toBeHidden();
 
   await page.goto('/dashboard');
   await expect(page).toHaveURL(/\/setup\/provider/);
@@ -93,6 +96,9 @@ test('mobile viewport keeps dashboard, chat, and setup pages usable', async ({ p
     form.appendChild(action);
     form.submit();
   });
+  await expect(page.getByTestId('topbar-mobile-toolbar')).toBeVisible();
+  await page.locator('.topbar-mobile-system summary').click();
+  await expect(page.getByRole('button', { name: /Turn Safe Mode/i })).toBeVisible();
   await page.goto('/chat');
   await expect(page).toHaveURL(/\/setup\/provider/);
 });

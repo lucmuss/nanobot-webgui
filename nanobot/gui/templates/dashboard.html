@@ -29,7 +29,7 @@
           <p class="eyebrow">System Info</p>
           <h3>Instance Overview</h3>
         </div>
-        <span class="pill {% if setup_complete %}good{% else %}muted{% endif %}">
+        <span class="pill status-pill {% if setup_complete %}good{% else %}muted{% endif %}">
           {{ "Setup complete" if setup_complete else "Setup in progress" }}
         </span>
       </div>
@@ -82,20 +82,20 @@
     <div class="panel-grid two">
       <section class="panel">
         <div class="split-header">
-          <div>
-            <h3 style="margin: 0;">Setup Progress</h3>
-            <p class="muted">The dashboard should always tell the admin what is done and what comes next.</p>
-          </div>
-          <span class="pill">{{ setup_progress | selectattr('done') | list | length }}/{{ setup_progress|length }} complete</span>
+        <div>
+          <h3 style="margin: 0;">Setup Progress</h3>
+          <p class="muted">The dashboard should always tell the admin what is done and what comes next.</p>
         </div>
+        <span class="pill status-pill">{{ setup_progress | selectattr('done') | list | length }}/{{ setup_progress|length }} complete</span>
+      </div>
         <div class="progress-list" data-testid="dashboard-setup-progress">
           {% for item in setup_progress %}
             <article class="progress-item {% if item.done %}done{% else %}pending{% endif %}">
               <div>
-                <strong>{{ item.label }}</strong>
+                <strong class="metric-heading">{{ item.label }}</strong>
                 <p class="muted">{{ item.detail }}</p>
               </div>
-              <span class="state">{{ "Done" if item.done else "Pending" }}</span>
+              <span class="state status-callout">{{ "Done" if item.done else "Pending" }}</span>
             </article>
           {% endfor %}
         </div>
@@ -118,12 +118,12 @@
         </div>
         <div class="compact-kpi-grid">
           {% for item in validation_results[:6] %}
-            <article class="compact-kpi" data-testid="dashboard-validation-card-{{ item.label|lower|replace(' ', '-') }}">
-              <span class="muted">{{ item.label }}</span>
-              <strong>{{ "OK" if item.ok else "Fix needed" }}</strong>
+            <article class="compact-kpi metric-card" data-testid="dashboard-validation-card-{{ item.label|lower|replace(' ', '-') }}">
+              <span class="muted metric-heading">{{ item.label }}</span>
+              <strong class="status-callout">{{ "OK" if item.ok else "Fix needed" }}</strong>
               <small>{{ item.detail }}</small>
               {% if item.action_url %}
-                <div class="actions" style="margin-top: 10px;">
+                <div class="actions">
                   <a class="button secondary" href="{{ item.action_url }}" data-testid="dashboard-validation-action-{{ item.label|lower|replace(' ', '-') }}">{{ item.action_label or "Open" }}</a>
                 </div>
               {% endif %}

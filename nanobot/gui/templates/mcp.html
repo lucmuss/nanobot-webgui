@@ -24,14 +24,33 @@
         <p class="muted">This is the main automation path for non-technical users: inspect, install, test, then enable.</p>
       </div>
 
+      <div class="progress-list" style="margin-bottom: 16px;" data-testid="mcp-primary-flow">
+        <div class="progress-item done">
+          <span>1. Inspect the repository to detect the MCP type, runtime, and config.</span>
+          <span class="state">Inspect</span>
+        </div>
+        <div class="progress-item pending">
+          <span>2. Install the MCP with the detected plan.</span>
+          <span class="state">Install</span>
+        </div>
+        <div class="progress-item pending">
+          <span>3. Run an MCP test to validate the runtime and secrets.</span>
+          <span class="state">Test</span>
+        </div>
+        <div class="progress-item pending">
+          <span>4. Enable the MCP for the main chat runtime.</span>
+          <span class="state">Enable</span>
+        </div>
+      </div>
+
       <form method="post" action="/mcp/analyze" data-testid="mcp-search-form">
         <label>
           GitHub repository URL
           <input type="text" name="source" value="{{ query }}" placeholder="https://github.com/Garoth/dalle-mcp" data-testid="mcp-source">
         </label>
         <div class="actions">
-          <button type="submit" data-testid="mcp-inspect">Inspect Repository</button>
-          <button class="secondary" type="submit" formaction="/mcp/install" data-testid="mcp-install">Install MCP Server</button>
+          <button type="submit" data-testid="mcp-inspect">1. Inspect Repository</button>
+          <button class="secondary" type="submit" formaction="/mcp/install" data-testid="mcp-install">2. Install MCP</button>
         </div>
       </form>
 

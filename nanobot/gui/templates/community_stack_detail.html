@@ -34,6 +34,13 @@
         <div class="meta-pair"><strong>Imports</strong><span>{{ community_item.imports_count }}</span></div>
         <div class="meta-pair"><strong>Rating</strong><span>{{ community_item.rating }}</span></div>
       </div>
+      {% if community_item.best_for %}
+        <div class="stack-list" style="margin-top: 14px;">
+          {% for entry in community_item.best_for %}
+            <span class="pill">{{ entry }}</span>
+          {% endfor %}
+        </div>
+      {% endif %}
       <div class="insight-panel local" style="margin-top: 16px;">
         <h4>Example Prompt</h4>
         <p class="muted" style="margin-top: 10px;">{{ community_item.example_prompt }}</p>
@@ -45,8 +52,8 @@
         <h3>How the MCPs fit together</h3>
       </div>
       <div class="flow-diagram">
-        {% for entry in community_item["items"] %}
-          <span class="flow-node">{{ entry.name }}</span>
+        {% for entry in community_item.diagram_nodes %}
+          <span class="flow-node">{{ entry }}</span>
           {% if not loop.last %}<span class="flow-arrow">→</span>{% endif %}
         {% endfor %}
       </div>
@@ -59,9 +66,14 @@
       <h3>Stack contents</h3>
     </div>
     {% for entry in community_item["items"] %}
-      <div class="stat-line">
-        <span>{{ entry.name }}</span>
-        <div class="actions">
+      <div class="list-row">
+        <div class="list-row-copy">
+          <span class="list-row-title">{{ entry.name }}</span>
+          {% if entry.repo_url %}
+            <span class="muted">{{ entry.repo_url }}</span>
+          {% endif %}
+        </div>
+        <div class="list-row-actions">
           <a class="button secondary" href="/community/mcp/{{ entry.slug }}">Open</a>
           <form method="post" action="/community/install/mcp/{{ entry.slug }}">
             <button class="secondary" type="submit" data-testid="community-stack-install-{{ entry.slug }}">Install</button>

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title }} | {{ instance_name }}</title>
-    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <script src="/static/htmx.min.js"></script>
     <style>
       :root {
         --background-main: #fafafa;
@@ -142,6 +142,10 @@
         color: var(--text-secondary);
       }
 
+      .sidebar-status-row strong {
+        white-space: nowrap;
+      }
+
       .nav a {
         display: flex;
         align-items: center;
@@ -189,7 +193,7 @@
         display: flex;
         justify-content: space-between;
         gap: 20px;
-        align-items: center;
+        align-items: flex-start;
         margin-bottom: 32px;
         padding: 0;
         border: none;
@@ -204,16 +208,36 @@
         font-size: 1.625rem;
       }
 
-      .topbar-toolbar {
+      .topbar-titlecopy {
         display: flex;
-        flex-wrap: wrap;
         align-items: center;
         gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .topbar-toolbar {
+        display: flex;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 12px;
+        justify-content: flex-end;
+        flex-shrink: 0;
+      }
+
+      .topbar-desktop-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: nowrap;
+      }
+
+      .topbar-mobile-toolbar {
+        display: none;
       }
 
       .topbar-actions {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 8px;
         align-items: center;
         padding: 8px;
@@ -225,9 +249,171 @@
 
       .topbar-utility {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 8px;
         align-items: center;
+      }
+
+      .topbar-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .topbar-group.system {
+        padding: 8px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .topbar-group.user {
+        justify-content: flex-end;
+      }
+
+      .topbar-actions .button,
+      .topbar-actions button,
+      .topbar-group.system .button,
+      .topbar-group.system button,
+      .topbar-group.user .button,
+      .topbar-group.user button {
+        white-space: nowrap;
+      }
+
+      .topbar-menu {
+        position: relative;
+        border: none;
+        background: transparent;
+        padding: 0;
+      }
+
+      .topbar-menu summary {
+        list-style: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        min-height: 42px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text-primary);
+        font: inherit;
+        font-weight: 600;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .topbar-menu summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .topbar-menu[open] summary {
+        border-color: rgba(249, 115, 22, 0.24);
+        box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08);
+      }
+
+      .topbar-menu-panel {
+        display: grid;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 12px;
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.96);
+        box-shadow: var(--shadow-md);
+      }
+
+      .topbar-menu-section {
+        display: grid;
+        gap: 8px;
+      }
+
+      .topbar-menu-label {
+        color: var(--text-secondary);
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .topbar-menu-panel .inline-form {
+        display: grid;
+      }
+
+      .topbar-menu-panel .button,
+      .topbar-menu-panel button {
+        width: 100%;
+      }
+
+      .topbar-mobile-primary {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        width: 100%;
+      }
+
+      .topbar-mobile-primary .full-span {
+        grid-column: 1 / -1;
+      }
+
+      .topbar-mobile-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .topbar-mobile-system {
+        width: 100%;
+      }
+
+      .topbar-mobile-user {
+        width: 100%;
+      }
+
+      .topbar-mobile-user summary {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .topbar-mobile-user .profile-chip {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .section-tabs {
+        display: none;
+      }
+
+      .section-tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 42px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--text-secondary);
+        font: inherit;
+        font-weight: 600;
+        white-space: nowrap;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .section-tab.is-active {
+        border-color: rgba(249, 115, 22, 0.22);
+        background: var(--primary-soft);
+        color: var(--text-primary);
+      }
+
+      .tabbed-grid {
+        display: grid;
+        gap: 22px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       .pill {
@@ -242,6 +428,7 @@
         font-size: 0.75rem;
         font-weight: 500;
         line-height: 1;
+        white-space: nowrap;
       }
 
       .pill.good {
@@ -648,6 +835,20 @@
         justify-content: flex-end;
       }
 
+      .mobile-nav-toggle {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .mobile-nav-button {
+        display: none;
+      }
+
+      .mobile-sidebar-backdrop {
+        display: none;
+      }
+
       .page-meta-bar {
         display: flex;
         flex-wrap: wrap;
@@ -664,6 +865,8 @@
         background: var(--surface-muted);
         font-size: 0.78rem;
         color: var(--text-secondary);
+        white-space: nowrap;
+        min-width: 0;
       }
 
       .meta-chip strong {
@@ -698,6 +901,9 @@
       }
 
       .compact-kpi {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
         padding: 14px 16px;
         border-radius: 12px;
         border: 1px solid var(--border);
@@ -705,16 +911,32 @@
         box-shadow: var(--shadow-sm);
       }
 
+      .compact-kpi.metric-card {
+        min-height: 148px;
+      }
+
       .compact-kpi strong {
         display: block;
         margin-top: 6px;
         font-size: 1.1rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .compact-kpi > .muted:first-child,
+      .compact-kpi > span:first-child {
+        white-space: nowrap;
       }
 
       .compact-kpi small {
         display: block;
         margin-top: 4px;
         color: var(--text-secondary);
+      }
+
+      .compact-kpi .actions {
+        margin-top: auto;
+        padding-top: 12px;
       }
 
       .insight-panel {
@@ -793,6 +1015,12 @@
         display: grid;
         gap: 14px;
         margin-bottom: 18px;
+        max-height: min(56vh, 720px);
+        overflow-y: auto;
+        padding-right: 4px;
+        scrollbar-gutter: stable;
+        scroll-behavior: smooth;
+        overscroll-behavior: contain;
       }
 
       .chat-message {
@@ -904,6 +1132,7 @@
 
       .progress-item .state {
         font-weight: 600;
+        white-space: nowrap;
       }
 
       .progress-item.done .state {
@@ -955,6 +1184,42 @@
         border-radius: var(--radius-card);
         border: 1px solid rgba(153, 27, 27, 0.14);
         background: var(--danger-soft);
+      }
+
+      .chat-live-shell {
+        display: grid;
+        gap: 22px;
+      }
+
+      .chat-live-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--text-secondary);
+        font-size: 0.82rem;
+        box-shadow: var(--shadow-sm);
+      }
+
+      .chat-live-status[data-state="busy"] {
+        border-color: rgba(217, 119, 6, 0.22);
+        background: rgba(255, 247, 237, 0.98);
+        color: #9a3412;
+      }
+
+      .chat-live-status[data-state="success"] {
+        border-color: rgba(5, 150, 105, 0.2);
+        background: rgba(236, 253, 245, 0.98);
+        color: #065f46;
+      }
+
+      .chat-live-status[data-state="error"] {
+        border-color: rgba(220, 38, 38, 0.18);
+        background: rgba(254, 242, 242, 0.98);
+        color: #991b1b;
       }
 
       .details-grid {
@@ -1022,6 +1287,24 @@
         background: var(--surface);
       }
 
+      .doc-chip-copy {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .doc-chip-copy .primary {
+        font-weight: 600;
+      }
+
+      .doc-chip-copy .secondary {
+        color: var(--text-secondary);
+        font-size: 0.82rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
       .doc-chip.active {
         border-color: rgba(249, 115, 22, 0.24);
         background: var(--primary-soft);
@@ -1061,6 +1344,12 @@
         gap: 18px;
       }
 
+      .form-row {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .page-stack {
         display: grid;
         gap: 22px;
@@ -1088,6 +1377,100 @@
         border-radius: var(--radius-card);
         border: 1px solid var(--border);
         background: #fafafa;
+      }
+
+      .status-pill {
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .status-callout {
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .compact-multi-meta {
+        display: grid;
+        gap: 12px;
+      }
+
+      .compact-meta-row {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .compact-meta-card {
+        display: grid;
+        gap: 6px;
+        padding: 12px 14px;
+        border-radius: var(--radius-control);
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .compact-meta-card strong {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+      }
+
+      .community-card-title {
+        margin: 0;
+        font-size: 1.35rem;
+        line-height: 1.2;
+      }
+
+      .tool-pills {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .tool-disclosure {
+        margin-top: 12px;
+      }
+
+      .tool-disclosure summary {
+        font-size: 0.9rem;
+      }
+
+      .list-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+        padding: 12px 0;
+        border-top: 1px solid var(--border);
+      }
+
+      .list-row:first-child {
+        border-top: none;
+        padding-top: 0;
+      }
+
+      .list-row-copy {
+        display: grid;
+        gap: 4px;
+        min-width: 0;
+      }
+
+      .list-row-title {
+        font-weight: 600;
+      }
+
+      .list-row-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        justify-content: flex-end;
+        flex-shrink: 0;
+      }
+
+      .metric-heading {
+        font-weight: 700;
+        white-space: nowrap;
       }
 
       .card-grid {
@@ -1205,16 +1588,41 @@
         grid-template-columns: repeat(4, minmax(0, 1fr));
       }
 
+      @media (max-width: 1080px) {
+        .topbar {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .topbar-desktop-toolbar {
+          display: none;
+        }
+
+      .topbar-mobile-toolbar {
+        display: grid;
+        gap: 12px;
+        width: 100%;
+      }
+      }
+
       @media (max-width: 980px) {
         .app-shell {
           grid-template-columns: 1fr;
         }
 
         .sidebar {
-          position: static;
-          height: auto;
-          border-right: none;
-          border-bottom: 1px solid var(--border);
+          position: fixed;
+          top: 0;
+          left: 0;
+          bottom: 0;
+          width: min(280px, calc(100vw - 40px));
+          height: 100vh;
+          border-right: 1px solid var(--border);
+          border-bottom: none;
+          transform: translateX(-108%);
+          transition: transform 180ms ease;
+          z-index: 40;
+          box-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
         }
 
         .content {
@@ -1235,12 +1643,95 @@
         }
 
         .topbar {
-          flex-direction: column;
-          align-items: flex-start;
+          gap: 14px;
+          margin-bottom: 18px;
         }
 
-        .topbar-actions {
-          justify-content: flex-start;
+        .topbar-titlecopy {
+          justify-content: space-between;
+          align-items: center;
+          width: 100%;
+        }
+
+        .topbar-titlecopy h2 {
+          flex: 1 1 auto;
+          min-width: 0;
+          font-size: 1.25rem;
+        }
+
+        .topbar-titlecopy .muted {
+          display: none;
+        }
+
+        .topbar-mobile-toolbar {
+          display: flex;
+          align-items: stretch;
+          gap: 8px;
+          width: 100%;
+        }
+
+        .topbar-mobile-toolbar > .button,
+        .topbar-mobile-toolbar > .topbar-menu {
+          flex: 1 1 0;
+          min-width: 0;
+        }
+
+        .topbar-mobile-toolbar > .topbar-mobile-user {
+          flex: 0 0 auto;
+        }
+
+        .topbar-mobile-toolbar .button,
+        .topbar-mobile-toolbar .topbar-menu summary {
+          width: 100%;
+        }
+
+        .mobile-nav-button {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 42px;
+          height: 42px;
+          padding: 0;
+          border-radius: 12px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          color: var(--text-primary);
+          box-shadow: var(--shadow-sm);
+          cursor: pointer;
+        }
+
+        .mobile-nav-button span {
+          display: block;
+          width: 18px;
+          height: 2px;
+          border-radius: 999px;
+          background: currentColor;
+          box-shadow: 0 -6px 0 currentColor, 0 6px 0 currentColor;
+        }
+
+        .mobile-sidebar-backdrop {
+          display: block;
+          position: fixed;
+          inset: 0;
+          background: rgba(15, 23, 42, 0.35);
+          opacity: 0;
+          pointer-events: none;
+          transition: opacity 180ms ease;
+          z-index: 35;
+        }
+
+        .mobile-nav-toggle:checked + .mobile-sidebar-backdrop {
+          opacity: 1;
+          pointer-events: auto;
+        }
+
+        .mobile-nav-toggle:checked + .mobile-sidebar-backdrop + .app-shell .sidebar {
+          transform: translateX(0);
+        }
+
+        .form-row,
+        .compact-meta-row {
+          grid-template-columns: 1fr;
         }
       }
 
@@ -1250,6 +1741,67 @@
         .progress-item {
           flex-direction: column;
           align-items: flex-start;
+        }
+
+        .chat-stack {
+          max-height: min(48vh, 520px);
+        }
+
+        .topbar-mobile-toolbar {
+          gap: 8px;
+        }
+
+        .topbar-mobile-toolbar > .button,
+        .topbar-mobile-toolbar > .topbar-menu {
+          flex: 1 1 auto;
+        }
+
+        .topbar-mobile-toolbar > .topbar-mobile-user {
+          flex: 0 0 auto;
+        }
+
+        .list-row {
+          flex-direction: column;
+        }
+
+        .list-row-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
+        .flow-diagram {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .flow-arrow {
+          align-self: center;
+          transform: rotate(90deg);
+        }
+
+        .section-tabs {
+          display: flex;
+          gap: 8px;
+          overflow-x: auto;
+          padding: 2px 2px 6px;
+          margin-bottom: 14px;
+          scrollbar-width: none;
+        }
+
+        .section-tabs::-webkit-scrollbar {
+          display: none;
+        }
+
+        .tabbed-grid {
+          display: block;
+        }
+
+        .tabbed-grid > [data-tab-panel-group] {
+          display: none;
+        }
+
+        .tabbed-grid > [data-tab-panel-group].is-active {
+          display: block;
         }
       }
     </style>
@@ -1272,6 +1824,8 @@
         </section>
       </main>
     {% else %}
+      <input id="mobile-nav-toggle" class="mobile-nav-toggle" type="checkbox" aria-hidden="true">
+      <label for="mobile-nav-toggle" class="mobile-sidebar-backdrop" aria-hidden="true"></label>
       <div class="app-shell">
         <aside class="sidebar">
           <div class="sidebar-inner">
@@ -1319,49 +1873,111 @@
           <div class="content-inner">
             <div class="topbar">
               <div class="topbar-titlecopy">
+                <label for="mobile-nav-toggle" class="mobile-nav-button" data-testid="mobile-nav-toggle" aria-label="Open navigation">
+                  <span aria-hidden="true"></span>
+                </label>
                 <h2>{{ title }}</h2>
                 <p class="muted">{{ instance_name }}</p>
               </div>
               <div class="topbar-toolbar">
-                <div class="topbar-actions">
-                  <a class="button secondary" href="/chat" data-testid="topbar-chat-link">Chat</a>
-                  <a class="button secondary" href="/settings" data-testid="topbar-validate-link">Validate Setup</a>
-                  <form class="inline-form" method="post" action="/actions/test-agent" data-testid="topbar-test-agent-form">
-                    <input type="hidden" name="next" value="{{ request_path }}">
-                    <button class="secondary" type="submit" data-testid="topbar-test-agent">Run Agent Health Check</button>
-                  </form>
-                </div>
-                <div class="topbar-utility">
-                  <form class="inline-form" method="post" action="/actions/toggle-safe-mode" data-testid="topbar-safe-mode-form">
-                    <input type="hidden" name="next" value="{{ request_path }}">
-                    <button class="secondary" type="submit" data-testid="topbar-safe-mode">{{ "Turn Safe Mode Off" if safe_mode else "Turn Safe Mode On" }}</button>
-                  </form>
-                  <form class="inline-form" method="post" action="/actions/restart" data-testid="topbar-restart-form">
-                    <input type="hidden" name="next" value="{{ request_path }}">
-                    <button
-                      class="secondary"
-                      type="submit"
-                      data-testid="topbar-restart"
-                      title="{{ restart_action.description }}"
-                      {% if not restart_action.enabled %}disabled aria-disabled="true"{% endif %}
-                    >
-                      {{ restart_action.label }}
-                    </button>
-                  </form>
-                  {% if user %}
-                    <a class="profile-chip" href="/profile" data-testid="topbar-profile-chip">
-                      <span class="avatar">
-                        {% if user.avatar_url %}
-                          <img src="{{ user.avatar_url }}" alt="{{ user.label }}">
-                        {% else %}
-                          {{ user.initials }}
-                        {% endif %}
-                      </span>
-                      <span>{{ user.label }}</span>
-                    </a>
-                    <form class="inline-form" method="post" action="/logout" data-testid="topbar-logout-form">
-                      <button class="secondary" type="submit" data-testid="topbar-logout">Logout</button>
+                <div class="topbar-desktop-toolbar" data-testid="topbar-desktop-toolbar">
+                  <div class="topbar-actions topbar-group primary">
+                    <a class="button secondary" href="/chat" data-testid="topbar-chat-link">Chat</a>
+                    <a class="button secondary" href="/settings" data-testid="topbar-validate-link">Validate Setup</a>
+                    <form class="inline-form" method="post" action="/actions/test-agent" data-testid="topbar-test-agent-form">
+                      <input type="hidden" name="next" value="{{ request_path }}">
+                      <button class="secondary" type="submit" data-testid="topbar-test-agent">Run Agent Health Check</button>
                     </form>
+                  </div>
+                  <div class="topbar-group system topbar-utility">
+                    <form class="inline-form" method="post" action="/actions/toggle-safe-mode" data-testid="topbar-safe-mode-form">
+                      <input type="hidden" name="next" value="{{ request_path }}">
+                      <button class="secondary" type="submit" data-testid="topbar-safe-mode">{{ "Turn Safe Mode Off" if safe_mode else "Turn Safe Mode On" }}</button>
+                    </form>
+                    <form class="inline-form" method="post" action="/actions/restart" data-testid="topbar-restart-form">
+                      <input type="hidden" name="next" value="{{ request_path }}">
+                      <button
+                        class="secondary"
+                        type="submit"
+                        data-testid="topbar-restart"
+                        title="{{ restart_action.description }}"
+                        {% if not restart_action.enabled %}disabled aria-disabled="true"{% endif %}
+                      >
+                        {{ restart_action.label }}
+                      </button>
+                    </form>
+                  </div>
+                  {% if user %}
+                    <div class="topbar-group user">
+                      <a class="profile-chip" href="/profile" data-testid="topbar-profile-chip">
+                        <span class="avatar">
+                          {% if user.avatar_url %}
+                            <img src="{{ user.avatar_url }}" alt="{{ user.label }}">
+                          {% else %}
+                            {{ user.initials }}
+                          {% endif %}
+                        </span>
+                        <span>{{ user.label }}</span>
+                      </a>
+                      <form class="inline-form" method="post" action="/logout" data-testid="topbar-logout-form">
+                        <button class="secondary" type="submit" data-testid="topbar-logout">Logout</button>
+                      </form>
+                    </div>
+                  {% endif %}
+                </div>
+                <div class="topbar-mobile-toolbar" data-testid="topbar-mobile-toolbar">
+                  <a class="button secondary" href="/chat" data-testid="topbar-mobile-chat">Chat</a>
+                  <details class="topbar-menu topbar-mobile-system">
+                    <summary>Quick Actions</summary>
+                    <div class="topbar-menu-panel">
+                      <div class="topbar-menu-section">
+                        <span class="topbar-menu-label">Primary</span>
+                        <a class="button secondary" href="/settings">Validate Setup</a>
+                        <form class="inline-form" method="post" action="/actions/test-agent">
+                          <input type="hidden" name="next" value="{{ request_path }}">
+                          <button class="secondary" type="submit">Run Agent Health Check</button>
+                        </form>
+                      </div>
+                      <div class="topbar-menu-section">
+                        <span class="topbar-menu-label">System</span>
+                        <form class="inline-form" method="post" action="/actions/toggle-safe-mode">
+                          <input type="hidden" name="next" value="{{ request_path }}">
+                          <button class="secondary" type="submit">{{ "Turn Safe Mode Off" if safe_mode else "Turn Safe Mode On" }}</button>
+                        </form>
+                        <form class="inline-form" method="post" action="/actions/restart">
+                          <input type="hidden" name="next" value="{{ request_path }}">
+                          <button
+                            class="secondary"
+                            type="submit"
+                            title="{{ restart_action.description }}"
+                            {% if not restart_action.enabled %}disabled aria-disabled="true"{% endif %}
+                          >
+                            {{ restart_action.label }}
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </details>
+                  {% if user %}
+                    <details class="topbar-menu topbar-mobile-user">
+                      <summary>
+                        <span class="avatar">
+                          {% if user.avatar_url %}
+                            <img src="{{ user.avatar_url }}" alt="{{ user.label }}">
+                          {% else %}
+                            {{ user.initials }}
+                          {% endif %}
+                        </span>
+                        <span>{{ user.label }}</span>
+                      </summary>
+                      <div class="topbar-menu-panel">
+                        <a class="button secondary" href="/profile">Profile</a>
+                        <a class="button secondary" href="/settings">Settings</a>
+                        <form class="inline-form" method="post" action="/logout">
+                          <button class="secondary" type="submit">Logout</button>
+                        </form>
+                      </div>
+                    </details>
                   {% endif %}
                 </div>
               </div>
@@ -1418,13 +2034,17 @@
               </section>
             {% endif %}
 
-            {% if flash %}
-              <div class="flash {{ flash.level }}" data-testid="flash-message">{{ flash.message }}</div>
-            {% endif %}
+            <div id="global-flash-slot">
+              {% if flash %}
+                <div class="flash {{ flash.level }}" data-testid="flash-message">{{ flash.message }}</div>
+              {% endif %}
+            </div>
             {{ body_content | safe }}
           </div>
         </main>
       </div>
     {% endif %}
+    <script src="/static/webgui-ui.js"></script>
+    <script src="/static/chat-live.js"></script>
   </body>
 </html>

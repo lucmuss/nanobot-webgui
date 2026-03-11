@@ -435,6 +435,7 @@ class GUIConfigService:
                 "group": "Memory",
                 "description": "Long-term memory facts used by the agent.",
                 "path": str(workspace / "memory" / "MEMORY.md"),
+                "filename": "MEMORY.md",
             },
             {
                 "key": "history",
@@ -442,6 +443,7 @@ class GUIConfigService:
                 "group": "Project Context",
                 "description": "Searchable running history and project context log.",
                 "path": str(workspace / "memory" / "HISTORY.md"),
+                "filename": "HISTORY.md",
             },
             {
                 "key": "agents",
@@ -449,6 +451,7 @@ class GUIConfigService:
                 "group": "Instructions",
                 "description": "Primary behavior instructions loaded into the system prompt.",
                 "path": str(workspace / "AGENTS.md"),
+                "filename": "AGENTS.md",
             },
             {
                 "key": "heartbeat",
@@ -456,6 +459,7 @@ class GUIConfigService:
                 "group": "Automation",
                 "description": "Recurring heartbeat guidance for the agent.",
                 "path": str(workspace / "HEARTBEAT.md"),
+                "filename": "HEARTBEAT.md",
             },
             {
                 "key": "soul",
@@ -463,6 +467,7 @@ class GUIConfigService:
                 "group": "Instructions",
                 "description": "High-level persona and guiding behavior.",
                 "path": str(workspace / "SOUL.md"),
+                "filename": "SOUL.md",
             },
             {
                 "key": "tools",
@@ -470,6 +475,7 @@ class GUIConfigService:
                 "group": "Instructions",
                 "description": "Tool usage conventions and limits.",
                 "path": str(workspace / "TOOLS.md"),
+                "filename": "TOOLS.md",
             },
             {
                 "key": "user",
@@ -477,6 +483,7 @@ class GUIConfigService:
                 "group": "Project Context",
                 "description": "User-specific preferences and working style.",
                 "path": str(workspace / "USER.md"),
+                "filename": "USER.md",
             },
         ]
 

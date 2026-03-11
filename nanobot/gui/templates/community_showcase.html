@@ -113,6 +113,13 @@
             <span>{{ item.stack.recommended_model if item.stack else "Not set" }}</span>
           </div>
         </div>
+        {% if item.best_for %}
+          <div class="stack-list" style="margin-top: 12px;">
+            {% for entry in item.best_for %}
+              <span class="pill">{{ entry }}</span>
+            {% endfor %}
+          </div>
+        {% endif %}
 
         {% if item.stack_items %}
           <div class="insight-panel community" style="margin-top: 14px;">
@@ -130,6 +137,11 @@
           <strong>Example Prompt</strong>
           <span>{{ item.example_prompt }}</span>
         </div>
+        {% if item.demo_ready %}
+          <div class="page-meta-bar" style="margin-top: 14px;">
+            <span class="meta-chip good"><strong>Demo</strong>Ready to try in chat</span>
+          </div>
+        {% endif %}
         <div class="actions" style="margin-top: 16px;">
           <form method="get" action="/chat">
             <input type="hidden" name="draft" value="{{ item.example_prompt }}">
