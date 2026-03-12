@@ -5,8 +5,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from nanobot.config.schema import MCPServerConfig
-from nanobot.gui.app import GUISettings, _render_chat_message_html, create_gui_app
+from nanobot.gui.app import GUISettings, _display_summary_text, _render_chat_message_html, create_gui_app
 from nanobot.gui.mcp_service import _parse_repository_source
+from nanobot.session.manager import SessionManager
 from tests.helpers.mcp_fixtures import build_mcp_fixture_analysis, load_mcp_fixture
 
 
@@ -273,6 +274,48 @@ def test_login_accepts_email_identifier(tmp_path: Path):
     assert response.headers["location"] == "/setup/provider"
 
 
+def test_setup_agent_page_lists_instruction_files_compactly(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.post(
+        "/setup/provider",
+        data={
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "api_key": "backend-openrouter-key",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "Channel" in response.text
+
+    response = client.post(
+        "/setup/channel",
+        data={
+            "channel": "telegram",
+            "token": "123456:ABCDEF",
+            "allow_from": "owner-1",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "Agent" in response.text
+    assert "Open instructions" in response.text
+    assert "Open full instructions" not in response.text
+    assert "Persona → SOUL.md" in response.text
+    assert "User Profile → USER.md" in response.text
+    assert "Instructions → AGENTS.md" in response.text
+    assert "Heartbeat Tasks → HEARTBEAT.md" in response.text
+    assert "Tool Notes → TOOLS.md" in response.text
+    assert "Project Context / History → HISTORY.md" in response.text
+    assert "Available tools:" not in response.text
+    assert "Last changed:" not in response.text
+
+
 def test_dashboard_exposes_operational_shortcuts_after_setup(tmp_path: Path):
     client, _app = _make_client(tmp_path)
 
@@ -285,6 +328,8 @@ def test_dashboard_exposes_operational_shortcuts_after_setup(tmp_path: Path):
     assert "Manage MCP Servers" in response.text
     assert "Configure Channels" in response.text
     assert "Change Provider" in response.text
+    assert "installed /" not in response.text
+    assert "Run Health Check" in response.text
 
 
 def test_dashboard_shows_usage_24h_metric_after_usage_events(tmp_path: Path):
@@ -332,6 +377,12 @@ def test_chat_markdown_renderer_formats_headings_lists_and_code() -> None:
     assert "<h3>Functioning and configured</h3>" in rendered
     assert "<li>Agent configuration</li>" in rendered
     assert "<code>nanobot</code>" in rendered
+    assert "markdown-preview" not in rendered
+
+
+def test_display_summary_text_strips_html_artifacts() -> None:
+    cleaned = _display_summary_text('Context docs helper <img src="x"> -purple>) [link](https://example.com)')
+    assert cleaned == "Context docs helper link"
 
 
 def test_gui_profile_and_settings_routes_persist_backend_state(tmp_path: Path):
@@ -691,6 +742,7 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
     assert "Confidence" in body
     assert "Usage trend" in body
     assert "Makes outbound network requests" in body
+    assert "Why recommended" not in body
     assert captured == {
         "query": "context",
         "category": "Research",
@@ -753,6 +805,28 @@ def test_gui_memory_page_shows_filenames_and_extended_markdown_help(tmp_path: Pa
     assert "/ HEARTBEAT.md" in response.text
     assert "heartbeat steps or recurring routines." in response.text
     assert "Store API keys in config or environment variables" in response.text
+
+
+def test_history_open_loads_selected_session_into_main_chat(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    session_manager = SessionManager(app.state.config_service.default_workspace)
+    archived = session_manager.get_or_create("web:archived-session")
+    archived.add_message("user", "Archived question")
+    archived.add_message("assistant", "Archived answer")
+    session_manager.save(archived)
+
+    response = client.get("/history/open", params={"session": "web:archived-session"}, follow_redirects=True)
+    assert response.status_code == 200
+    assert "Archived question" in response.text
+    assert "Archived answer" in response.text
+
+    raw = client.get("/history/raw", params={"session": "web:archived-session"})
+    assert raw.status_code == 200
+    assert "Archived answer" in raw.text
 
 
 def test_gui_community_discover_renders_tool_preview_and_compact_install_meta(tmp_path: Path):
@@ -1410,11 +1484,11 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
     def fake_fetch(repo: str) -> dict[str, str]:
         calls.append(repo)
         return {
-            "tag_name": "v0.3.2",
-            "latest_version": "0.3.2",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
-            "release_name": "v0.3.2",
+            "tag_name": "v0.3.3",
+            "latest_version": "0.3.3",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
+            "release_name": "v0.3.3",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         }
@@ -1427,14 +1501,14 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
         follow_redirects=True,
     )
     assert login_response.status_code == 200
-    assert "New version available: v0.3.2" in login_response.text
+    assert "New version available: v0.3.3" in login_response.text
     assert "View release notes" in login_response.text
     assert "Update now" in login_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     dashboard_response = client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert "New version available: v0.3.2" in dashboard_response.text
+    assert "New version available: v0.3.3" in dashboard_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     status = app.state.config_service.get_update_status()
@@ -1457,14 +1531,14 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     app.state.config_service.set_update_status(
         {
             "enabled": True,
-            "current_version": "0.3.1",
-            "latest_version": "0.3.2",
-            "tag_name": "v0.3.2",
+            "current_version": "0.3.2",
+            "latest_version": "0.3.3",
+            "tag_name": "v0.3.3",
             "available": True,
             "checked_at": "2026-03-10T00:00:00+00:00",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
-            "release_name": "v0.3.2",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
+            "release_name": "v0.3.3",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
             "repo": "lucmuss/nanobot-webgui",
@@ -1484,11 +1558,11 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     monkeypatch.setattr(
         "nanobot.gui.app._fetch_latest_release_info",
         lambda _repo: {
-            "tag_name": "v0.3.2",
-            "latest_version": "0.3.2",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
-            "release_name": "v0.3.2",
+            "tag_name": "v0.3.3",
+            "latest_version": "0.3.3",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
+            "release_name": "v0.3.3",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         },
@@ -1504,5 +1578,5 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     update_response = client.post("/actions/update")
     assert update_response.status_code == 202
     assert "Updating GUI" in update_response.text
-    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.3.2")]
+    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.3.3")]
     assert app.state.config_service.get_update_status()["updating"] is True

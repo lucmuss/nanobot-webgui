@@ -48,6 +48,20 @@ test('logout clears the session and relogin restores dashboard access', async ({
   await expect(page.getByTestId('dashboard-system-info')).toBeVisible();
 });
 
+test('login accepts email identifiers as well as usernames', async ({ page, request }) => {
+  await resetE2E(request);
+  await bootstrapAdmin(page);
+  await page.getByTestId('topbar-logout').click();
+  await expect(page).toHaveURL(/\/login/);
+
+  await page.goto('/login');
+  await page.getByTestId('login-identifier').fill('gui-admin@example.com');
+  await page.getByTestId('login-password').fill('NanobotGuiTest!123');
+  await page.getByTestId('login-submit').click();
+
+  await expect(page).toHaveURL(/\/setup\/provider/);
+});
+
 test('setup validation failure shows fix guidance for invalid provider, missing model, and missing API key', async ({ page, request }) => {
   await bootstrapAndCompleteSetup(page, request);
 

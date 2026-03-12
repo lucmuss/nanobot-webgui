@@ -57,36 +57,24 @@
       <p class="eyebrow">Event Log</p>
       <h3>Recent Usage Events</h3>
     </div>
-    <div class="card-list">
+    <div class="usage-event-list">
       {% for event in usage_events %}
-        <article class="card compact-card">
-          <header>
+        <article class="card compact-card usage-event-row">
+          <div class="usage-event-main">
             <strong>{{ event.source }}</strong>
-            <span class="pill">{{ event.provider }} / {{ event.model }}</span>
-          </header>
-          <div class="details-grid">
-            <div>
-              <strong>Total</strong>
-              <p class="muted">{{ event.total_tokens }}</p>
-            </div>
-            <div>
-              <strong>Prompt</strong>
-              <p class="muted">{{ event.prompt_tokens }}</p>
-            </div>
-            <div>
-              <strong>Completion</strong>
-              <p class="muted">{{ event.completion_tokens }}</p>
-            </div>
-            <div>
-              <strong>When</strong>
-              <p class="muted">{{ event.timestamp }}</p>
-            </div>
+            <span class="muted">{{ event.provider }} / {{ event.model }}</span>
+          </div>
+          <div class="usage-event-stats mono">
+            <span>Total {{ event.total_tokens }}</span>
+            <span>Prompt {{ event.prompt_tokens }}</span>
+            <span>Completion {{ event.completion_tokens }}</span>
+            <span>{{ event.timestamp.split('T')[0] if event.timestamp else 'Unknown date' }}</span>
           </div>
           {% if event.note %}
-            <p class="muted" style="margin-top: 10px;">{{ event.note }}</p>
+            <p class="muted" style="margin-top: 8px;">{{ event.note }}</p>
           {% endif %}
           {% if event.estimated_cost_usd is not none %}
-            <p class="muted">Estimated cost: ${{ '%.4f'|format(event.estimated_cost_usd) }}</p>
+            <p class="muted" style="margin-top: 4px;">Estimated cost: ${{ '%.4f'|format(event.estimated_cost_usd) }}</p>
           {% endif %}
         </article>
       {% else %}

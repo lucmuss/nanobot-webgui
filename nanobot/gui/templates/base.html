@@ -571,7 +571,18 @@
         display: grid;
         gap: 8px;
         font-size: 0.875rem;
-        font-weight: 500;
+        font-weight: 600;
+      }
+
+      .field-caption {
+        color: var(--text-secondary);
+        font-size: 0.78rem;
+        font-weight: 400;
+        line-height: 1.3;
+      }
+
+      .nowrap-text {
+        white-space: nowrap;
       }
 
       input,
@@ -583,7 +594,10 @@
         border-radius: var(--radius-control);
         background: var(--surface);
         color: var(--text-primary);
-        font: inherit;
+        font-family: inherit;
+        font-size: inherit;
+        font-weight: 400;
+        line-height: 1.4;
         transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
       }
 
@@ -769,6 +783,7 @@
         display: flex;
         gap: 10px;
         align-items: center;
+        font-weight: 500;
       }
 
       .checkbox input {
@@ -1093,6 +1108,7 @@
         background: var(--surface);
         border: 1px solid var(--border);
         box-shadow: var(--shadow-sm);
+        overflow: hidden;
       }
 
       .chat-message.user {
@@ -1116,6 +1132,9 @@
 
       .chat-message-body {
         color: var(--text-primary);
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
 
       .chat-message-body p:last-child,
@@ -1128,6 +1147,30 @@
         padding: 0;
         border: none;
         background: transparent;
+      }
+
+      .chat-markdown pre {
+        max-width: 100%;
+        margin: 12px 0;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        border: none;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.42);
+        padding: 10px 12px;
+      }
+
+      .chat-markdown code {
+        border-radius: 6px;
+        background: rgba(17, 17, 17, 0.04);
+        padding: 1px 5px;
+      }
+
+      .chat-markdown blockquote {
+        margin: 12px 0;
+        padding-left: 12px;
+        border-left: 3px solid rgba(217, 119, 6, 0.35);
       }
 
       .chat-markdown h2,
@@ -1181,9 +1224,43 @@
         border: 1px solid rgba(249, 115, 22, 0.14);
       }
 
+      .hero-callout.compact {
+        padding: 10px 14px;
+        border-radius: 10px;
+      }
+
+      .hero-callout.compact strong {
+        display: block;
+        font-size: 0.83rem;
+      }
+
+      .hero-callout.compact p {
+        margin: 4px 0 0;
+        font-size: 0.82rem;
+        line-height: 1.3;
+      }
+
       .stack-list {
         display: grid;
         gap: 8px;
+      }
+
+      .card-list.compact {
+        gap: 12px;
+      }
+
+      .guidance-card {
+        padding: 12px;
+      }
+
+      .guidance-card header {
+        margin-bottom: 4px;
+      }
+
+      .guidance-card p {
+        margin: 0;
+        font-size: 0.83rem;
+        line-height: 1.35;
       }
 
       .meta-list {
@@ -1221,6 +1298,20 @@
         gap: 10px;
       }
 
+      .progress-list.compact .progress-item {
+        padding: 8px 10px;
+        gap: 12px;
+      }
+
+      .progress-list.compact .progress-item p {
+        margin: 4px 0 0;
+      }
+
+      .progress-list.flow-grid {
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
       .progress-item {
         display: flex;
         justify-content: space-between;
@@ -1230,6 +1321,28 @@
         border-radius: var(--radius-control);
         border: 1px solid var(--border);
         background: var(--surface);
+      }
+
+      .progress-item.step-card {
+        display: grid;
+        gap: 6px;
+        align-items: start;
+        justify-content: stretch;
+      }
+
+      .progress-item.step-card strong {
+        font-size: 0.9rem;
+      }
+
+      .progress-item.step-card p {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: 0.83rem;
+        line-height: 1.35;
+      }
+
+      .progress-item.step-card .state {
+        justify-self: start;
       }
 
       .progress-item .state {
@@ -1248,6 +1361,24 @@
       .activity-feed {
         display: grid;
         gap: 12px;
+      }
+
+      .recommendation-carousel {
+        display: flex;
+        gap: 16px;
+        overflow-x: auto;
+        padding-bottom: 6px;
+        scroll-snap-type: x proximity;
+      }
+
+      .recommendation-card {
+        flex: 0 0 min(340px, 84vw);
+        min-width: min(340px, 84vw);
+        scroll-snap-align: start;
+      }
+
+      .recommendation-card .meta-pair {
+        min-width: 0;
       }
 
       details {
@@ -1339,6 +1470,81 @@
         padding: 14px 16px;
       }
 
+      .instruction-file-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .instruction-file-row {
+        display: grid;
+        gap: 2px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+
+      .instruction-file-row:first-child {
+        padding-top: 0;
+        border-top: none;
+      }
+
+      .instruction-file-row strong {
+        font-size: 0.88rem;
+      }
+
+      .instruction-file-link {
+        color: var(--text-primary);
+        text-decoration: none;
+        width: fit-content;
+      }
+
+      .instruction-file-link:hover {
+        color: var(--primary);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      .instruction-file-link:focus-visible {
+        outline: 2px solid rgba(249, 115, 22, 0.35);
+        outline-offset: 3px;
+        border-radius: 4px;
+      }
+
+      .instruction-file-row .mono {
+        font-size: 0.76rem;
+        color: var(--text-secondary);
+      }
+
+      .mcp-choice-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .mcp-choice-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        padding-top: 8px;
+        border-top: 1px solid var(--border);
+      }
+
+      .mcp-choice-row:first-child {
+        padding-top: 0;
+        border-top: none;
+      }
+
+      .mcp-choice-row .checkbox {
+        gap: 8px;
+        margin: 0;
+      }
+
+      .setup-inline-note {
+        margin-top: 8px;
+        color: var(--text-secondary);
+        font-size: 0.79rem;
+        line-height: 1.3;
+      }
+
       .meta-grid {
         display: grid;
         gap: 10px 18px;
@@ -1416,7 +1622,7 @@
       }
 
       .active-tools-scroll {
-        max-height: 220px;
+        max-height: 112px;
         overflow-y: auto;
         padding-right: 4px;
       }
@@ -1428,13 +1634,66 @@
         align-content: flex-start;
       }
 
+      .usage-event-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .usage-event-row {
+        display: grid;
+        gap: 8px;
+      }
+
+      .usage-event-main,
+      .usage-event-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 16px;
+        align-items: baseline;
+      }
+
+      .usage-event-stats {
+        font-size: 0.82rem;
+      }
+
+      .history-list {
+        gap: 10px;
+      }
+
+      .history-entry {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+      }
+
+      .history-entry-main {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+
+      .history-entry-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 16px;
+        margin-top: 6px;
+        font-size: 0.84rem;
+      }
+
+      .history-entry-actions {
+        display: flex;
+        align-items: flex-start;
+        justify-content: flex-end;
+        min-width: fit-content;
+      }
+
       .doc-switcher {
         display: grid;
         gap: 14px;
       }
 
       .memory-layout {
-        grid-template-columns: minmax(260px, 0.85fr) minmax(0, 2.15fr);
+        grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
         align-items: start;
       }
 
@@ -1596,20 +1855,56 @@
         border: 1px solid #c9eec9;
       }
 
-      .mcp-card-link {
-        display: grid;
-        gap: 14px;
-        color: inherit;
-      }
-
-      .mcp-card-link:hover .mcp-card-title {
-        color: var(--primary-hover);
-      }
-
       .mcp-card-title {
         margin: 0;
         font-size: 1.15rem;
         line-height: 1.2;
+      }
+
+      .mcp-card-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: flex-start;
+      }
+
+      .mcp-card-title-row {
+        display: flex;
+        align-items: baseline;
+        gap: 18px;
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+
+      .mcp-card-title-link {
+        color: inherit;
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .mcp-card-title-link:hover .mcp-card-title {
+        color: var(--primary-hover);
+      }
+
+      .mcp-card-status {
+        flex-shrink: 0;
+      }
+
+      .mcp-card-repo-inline {
+        color: var(--text-secondary);
+        font-size: 0.76rem;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .mcp-card-repo-inline:hover {
+        color: var(--primary-hover);
+      }
+
+      .mcp-card-summary {
+        margin: 8px 0 12px;
       }
 
       .mcp-card-meta-grid {
@@ -1618,11 +1913,32 @@
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
+      .mcp-card-meta-grid-spaced {
+        margin-top: 6px;
+      }
+
       .mcp-card-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 10px;
         margin-top: 16px;
+      }
+
+      .tool-chip-strip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        max-width: 100%;
+        max-height: 28px;
+        padding-bottom: 2px;
+        scrollbar-width: thin;
+      }
+
+      .tool-pill {
+        flex-shrink: 0;
       }
 
       .mcp-test-checklist {
@@ -1764,6 +2080,21 @@
       @media (max-width: 720px) {
         .mcp-card-meta-grid {
           grid-template-columns: 1fr;
+        }
+
+        .mcp-card-header {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .mcp-card-title-row {
+          gap: 8px;
+        }
+
+        .mcp-card-repo-inline {
+          white-space: normal;
+          overflow: visible;
+          text-overflow: unset;
         }
       }
 
@@ -1991,9 +2322,9 @@
           align-items: stretch;
           gap: 8px;
           width: 100%;
+          justify-content: flex-end;
         }
 
-        .topbar-mobile-toolbar > .button,
         .topbar-mobile-toolbar > .topbar-menu {
           flex: 1 1 0;
           min-width: 0;
@@ -2003,7 +2334,6 @@
           flex: 0 0 auto;
         }
 
-        .topbar-mobile-toolbar .button,
         .topbar-mobile-toolbar .topbar-menu summary {
           width: 100%;
         }
@@ -2066,6 +2396,10 @@
           align-items: flex-start;
         }
 
+        .progress-list.flow-grid {
+          grid-template-columns: 1fr;
+        }
+
         .chat-stack {
           max-height: min(48vh, 520px);
         }
@@ -2074,13 +2408,8 @@
           gap: 8px;
         }
 
-        .topbar-mobile-toolbar > .button,
         .topbar-mobile-toolbar > .topbar-menu {
           flex: 1 1 auto;
-        }
-
-        .topbar-mobile-toolbar > .topbar-mobile-user {
-          flex: 0 0 auto;
         }
 
         .list-row {
@@ -2100,6 +2429,29 @@
         .flow-arrow {
           align-self: center;
           transform: rotate(90deg);
+        }
+
+        .topbar-mobile-user summary {
+          min-width: 42px;
+          padding: 10px;
+        }
+
+        .topbar-mobile-user summary span:not(.avatar) {
+          display: none;
+        }
+
+        .history-entry {
+          flex-direction: column;
+        }
+
+        .history-entry-actions {
+          width: 100%;
+          justify-content: flex-start;
+        }
+
+        .recommendation-card {
+          flex-basis: min(300px, 88vw);
+          min-width: min(300px, 88vw);
         }
 
         .section-tabs {
@@ -2209,7 +2561,7 @@
                     <a class="button secondary" href="/settings" data-testid="topbar-validate-link" title="Run a quick validation check of the provider, runtime, workspace and MCP configuration.">Validate Setup</a>
                     <form class="inline-form" method="post" action="/actions/test-agent" data-testid="topbar-test-agent-form" data-loading-label="Running health check..." data-feedback-message="Health check started...">
                       <input type="hidden" name="next" value="{{ request_path }}">
-                      <button class="secondary" type="submit" data-testid="topbar-test-agent" title="Run a deeper diagnostic test of the agent runtime and tool execution pipeline.">Run Agent Health Check</button>
+                      <button class="secondary" type="submit" data-testid="topbar-test-agent" title="Run a deeper diagnostic test of the agent runtime and tool execution pipeline.">Run Health Check</button>
                     </form>
                   </div>
                   <div class="topbar-group system topbar-utility">
@@ -2249,16 +2601,16 @@
                   {% endif %}
                 </div>
                 <div class="topbar-mobile-toolbar" data-testid="topbar-mobile-toolbar">
-                  <a class="button secondary" href="/chat" data-testid="topbar-mobile-chat">Chat</a>
                   <details class="topbar-menu topbar-mobile-system">
                     <summary>Quick Actions</summary>
                     <div class="topbar-menu-panel">
                       <div class="topbar-menu-section">
                         <span class="topbar-menu-label">Primary</span>
+                        <a class="button secondary" href="/chat">Chat</a>
                         <a class="button secondary" href="/settings">Validate Setup</a>
                         <form class="inline-form" method="post" action="/actions/test-agent" data-loading-label="Running health check..." data-feedback-message="Health check started...">
                           <input type="hidden" name="next" value="{{ request_path }}">
-                          <button class="secondary" type="submit">Run Agent Health Check</button>
+                          <button class="secondary" type="submit">Run Health Check</button>
                         </form>
                       </div>
                       <div class="topbar-menu-section">

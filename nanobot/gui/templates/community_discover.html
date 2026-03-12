@@ -31,17 +31,13 @@
           <p class="muted">These entries are picked from community reliability plus how well they match your current model and already installed MCPs.</p>
         </div>
       </div>
-      <div class="card-grid three">
+      <div class="recommendation-carousel">
         {% for item in community_recommendations %}
-          <article class="card compact-card community-card">
+          <article class="card compact-card community-card recommendation-card">
             <header>
               <strong>{{ item.name }}</strong>
               <span class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Recommended') }}</span>
             </header>
-            <div class="insight-panel community" style="margin-top: 12px;">
-              <h4>Why recommended</h4>
-              <p class="muted" style="margin: 8px 0 0;">{{ item.reason }}</p>
-            </div>
             <div class="reliability-stack">
               <div class="split-header" style="margin-bottom: 0;">
                 <span class="muted">Reliability</span>
@@ -57,10 +53,11 @@
             </div>
             <div class="badge-row" style="margin-top: 12px;">
               <span class="pill {{ item.get('difficulty', {}).get('tone', 'muted') }}">{{ item.get('difficulty', {}).get('label', 'Unknown') }}</span>
-              {% for label in item.get('best_for', [])[:2] %}
+              {% for label in item.get('best_for', [])[:3] %}
                 <span class="pill">{{ label }}</span>
               {% endfor %}
             </div>
+            <p class="muted" style="margin: 12px 0 0;">{{ item.reason }}</p>
             <div class="actions community-card-footer">
               <a class="button secondary" href="/community/mcp/{{ item.slug }}">View Details</a>
               <form method="post" action="/community/install/mcp/{{ item.slug }}">

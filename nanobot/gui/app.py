@@ -20,8 +20,8 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import BackgroundTasks, FastAPI, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
@@ -426,7 +426,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             )
 
         recommendations.sort(key=lambda item: item.get("score", 0), reverse=True)
-        return recommendations[:3]
+        return recommendations[:5]
 
     def _build_community_meta_bar(item: dict[str, Any]) -> list[dict[str, str]]:
         """Summarize community MCP detail signals as compact meta chips."""
@@ -1386,8 +1386,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         config = config_service.load()
         agent_doc = config_service.read_markdown_document("agents")
-        soul_doc = config_service.read_markdown_document("soul")
-        user_doc = config_service.read_markdown_document("user")
+        instruction_files = _build_setup_instruction_files(config_service)
         return _render(
             request,
             "setup_agent.html",
@@ -1399,9 +1398,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "workspace": str(config.workspace_path),
                 "instruction_content": agent_doc["content"],
                 "instruction_path": agent_doc["path"],
-                "instruction_modified_at": agent_doc["modified_at"],
-                "soul_path": soul_doc["path"],
-                "user_path": user_doc["path"],
+                "instruction_display_path": _workspace_display_path(agent_doc["path"], config.workspace_path),
+                "instruction_files": instruction_files,
                 "response_style": config_service.get_response_style(),
                 "mcp_servers": _build_mcp_server_cards(config, config_service),
                 "workspace_locked": bool(config_service.workspace_override),
@@ -1431,8 +1429,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             defaults.memory_window = _form_int(form.get("memory_window"), defaults.memory_window)
         except ValueError as exc:
             agent_doc = config_service.read_markdown_document("agents")
-            soul_doc = config_service.read_markdown_document("soul")
-            user_doc = config_service.read_markdown_document("user")
+            instruction_files = _build_setup_instruction_files(config_service)
             return _render(
                 request,
                 "setup_agent.html",
@@ -1445,9 +1442,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "error": str(exc),
                     "instruction_content": str(form.get("instruction_content", agent_doc["content"])),
                     "instruction_path": agent_doc["path"],
-                    "instruction_modified_at": agent_doc["modified_at"],
-                    "soul_path": soul_doc["path"],
-                    "user_path": user_doc["path"],
+                    "instruction_display_path": _workspace_display_path(agent_doc["path"], config.workspace_path),
+                    "instruction_files": instruction_files,
                     "response_style": str(form.get("response_style", config_service.get_response_style())),
                     "mcp_servers": _build_mcp_server_cards(config, config_service),
                     "workspace_locked": bool(config_service.workspace_override),
@@ -1586,11 +1582,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "value": "Healthy" if agent_health.get("ok") else "Not verified" if not agent_health else "Failed",
                 "tone": "good" if agent_health.get("ok") else "muted" if not agent_health else "bad",
                 "href": "/status",
-                "action_label": "Open Agent Status",
+                "action_label": "Run Health Check",
             },
             {
                 "label": "MCP",
-                "value": f"{len(installed_servers)} installed / {enabled_mcp_count} enabled",
+                "value": f"{len(installed_servers)} installed",
                 "tone": "neutral",
                 "href": "/mcp",
                 "action_label": "Manage MCP Servers",
@@ -1655,7 +1651,6 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "community_preferences": community_preferences,
                 "community_recommendations": community_recommendations,
                 "quick_actions": [
-                    {"label": "Open Chat", "href": "/chat"},
                     {"label": "Add MCP", "href": "/mcp"},
                     {"label": "Discover MCP", "href": "/community/discover"},
                     {"label": "Save Agent", "href": "/setup/agent"},
@@ -3386,6 +3381,33 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             },
         )
 
+    @app.get("/history/open")
+    async def history_open_chat(request: Request, session: str = Query("")):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        try:
+            await agent_service.load_session_into_chat(user, session)
+        except ValueError as exc:
+            _set_flash(request, str(exc), level="error")
+            return RedirectResponse("/history", status_code=303)
+
+        _set_flash(request, "Saved session loaded into the main chat.")
+        return RedirectResponse("/chat", status_code=303)
+
+    @app.get("/history/raw", response_class=PlainTextResponse)
+    async def history_raw_session(request: Request, session: str = Query("")):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        try:
+            raw = await agent_service.read_session_jsonl(session)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        return PlainTextResponse(raw)
+
     @app.get("/status", response_class=HTMLResponse)
     async def status_page(request: Request):
         user = _require_admin(request, auth_service)
@@ -3753,6 +3775,38 @@ def _build_mcp_server_cards(config, config_service: GUIConfigService) -> list[di
     return cards
 
 
+def _workspace_display_path(path: str, workspace_root: Path | str) -> str:
+    """Shorten one workspace file path for UI display."""
+    raw_path = Path(str(path))
+    workspace = Path(str(workspace_root))
+    try:
+        relative = raw_path.relative_to(workspace)
+    except ValueError:
+        return str(raw_path)
+    suffix = relative.as_posix()
+    return f"/workspace/{suffix}" if suffix else "/workspace"
+
+
+def _build_setup_instruction_files(config_service: GUIConfigService) -> list[dict[str, str]]:
+    """Return the compact instruction/context file list for the setup wizard."""
+    order = ["soul", "user", "agents", "heartbeat", "tools", "history", "memory"]
+    documents = {item["key"]: item for item in config_service.markdown_documents()}
+    files: list[dict[str, str]] = []
+    for key in order:
+        item = documents.get(key)
+        if not item:
+            continue
+        files.append(
+            {
+                "key": key,
+                "label": str(item["label"]),
+                "filename": str(item["filename"]),
+                "display_path": _workspace_display_path(str(item["path"]), config_service.default_workspace),
+            }
+        )
+    return files
+
+
 def _display_summary_text(value: Any) -> str:
     """Strip raw HTML and markdown image syntax from stored MCP summaries."""
     text = html.unescape(str(value or "").strip())
@@ -3762,6 +3816,8 @@ def _display_summary_text(value: Any) -> str:
     text = re.sub(r"<img\b[^>]*>", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"</?[^>]+>", " ", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"\s*-[A-Za-z0-9_-]+>\)", " ", text)
+    text = text.replace(">", " ")
     text = re.sub(r"\s+", " ", text).strip()
     return text
 

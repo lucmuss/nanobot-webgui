@@ -10,34 +10,40 @@
       <span class="pill">{{ sessions|length }} sessions</span>
     </div>
 
-    <div class="card-list">
+    <div class="card-list history-list">
       {% for session in sessions %}
-        <article class="card">
-          <header>
-            <strong>{{ session.key }}</strong>
-            <span class="pill">{{ session.session_type }}</span>
-          </header>
-          <div class="details-grid">
-            <div>
-              <strong>Updated</strong>
-              <p class="muted">{{ session.updated_at or "Unknown" }}</p>
+        <article class="card compact-card history-entry">
+          <div class="history-entry-main">
+            <header>
+              <strong>{{ session.key }}</strong>
+              <span class="pill">{{ session.session_type }}</span>
+            </header>
+            <div class="history-entry-meta muted">
+              <span>Updated {{ session.updated_at or "Unknown" }}</span>
+              <span>{{ session.message_count }} messages</span>
             </div>
-            <div>
-              <strong>Messages</strong>
-              <p class="muted">{{ session.message_count }}</p>
-            </div>
+            {% if session.last_user %}
+              <div>
+                <p class="muted" style="margin: 10px 0 4px;">Last user message</p>
+                <div class="mono">{{ session.last_user }}</div>
+              </div>
+            {% endif %}
+            {% if session.last_assistant %}
+              <div>
+                <p class="muted" style="margin: 10px 0 4px;">Last assistant reply</p>
+                <div class="mono">{{ session.last_assistant }}</div>
+              </div>
+            {% endif %}
+            <details style="margin-top: 10px;">
+              <summary>Debug details</summary>
+              <p class="muted" style="margin-top: 10px;">{{ session.path }}</p>
+              <div class="actions" style="margin-top: 10px;">
+                <a class="button secondary" href="/history/raw?session={{ session.key | urlencode }}">View JSON</a>
+              </div>
+            </details>
           </div>
-          {% if session.last_user %}
-            <p class="muted" style="margin-top: 12px;">Last user message</p>
-            <div class="mono">{{ session.last_user }}</div>
-          {% endif %}
-          {% if session.last_assistant %}
-            <p class="muted" style="margin-top: 12px;">Last assistant reply</p>
-            <div class="mono">{{ session.last_assistant }}</div>
-          {% endif %}
-          <p class="muted" style="margin-top: 12px;">{{ session.path }}</p>
-          <div class="actions" style="margin-top: 12px;">
-            <a class="button secondary" href="/chat">Open Chat</a>
+          <div class="history-entry-actions">
+            <a class="button secondary" href="/history/open?session={{ session.key | urlencode }}">Open Chat</a>
           </div>
         </article>
       {% else %}

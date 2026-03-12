@@ -85,6 +85,47 @@ class GUIAgentService:
         """List saved chat sessions in the workspace."""
         return self._get_session_manager().list_sessions()
 
+    async def load_session_into_chat(self, admin: AdminUser, session_key: str) -> None:
+        """Load a saved session into the main web chat session."""
+        normalized_key = str(session_key or "").strip()
+        if not normalized_key:
+            raise ValueError("Choose a saved session first.")
+
+        session_manager = self._get_session_manager()
+        available = {item.get("key", "") for item in session_manager.list_sessions()}
+        if normalized_key not in available:
+            raise ValueError("That saved session could not be found.")
+
+        source = session_manager.get_or_create(normalized_key)
+        target = session_manager.get_or_create(self._session_key(admin))
+        target.messages = [dict(message) for message in source.messages]
+        target.metadata = dict(source.metadata)
+        target.last_consolidated = int(source.last_consolidated or 0)
+        target.updated_at = datetime.now()
+        session_manager.save(target)
+        self.logger.info(
+            "chat_session_loaded admin=%s source=%s target=%s",
+            admin.username,
+            normalized_key,
+            self._session_key(admin),
+        )
+
+    async def read_session_jsonl(self, session_key: str) -> str:
+        """Return the raw JSONL contents for one saved session."""
+        normalized_key = str(session_key or "").strip()
+        if not normalized_key:
+            raise ValueError("Choose a saved session first.")
+
+        session_manager = self._get_session_manager()
+        available = {item.get("key", "") for item in session_manager.list_sessions()}
+        if normalized_key not in available:
+            raise ValueError("That saved session could not be found.")
+
+        path = session_manager._get_session_path(normalized_key)
+        if not path.exists():
+            raise ValueError("The saved session file is not available on disk.")
+        return path.read_text(encoding="utf-8", errors="replace")
+
     async def get_recent_tool_activity(self, admin: AdminUser, limit: int = 10) -> list[dict[str, Any]]:
         """Return the most recent tool calls from the current direct chat session."""
         session_manager = self._get_session_manager()

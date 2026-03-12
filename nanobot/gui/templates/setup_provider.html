@@ -18,7 +18,7 @@
       </div>
       {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
       <form method="post" action="/setup/provider" data-testid="provider-form">
-        <div class="hero-callout">
+        <div class="hero-callout compact">
           <strong>Required for AI to work</strong>
           <p class="muted">These are the only fields a new user normally needs to finish provider setup.</p>
         </div>
@@ -42,7 +42,7 @@
           <input type="password" name="api_key" value="{{ api_key }}" data-testid="provider-api-key">
         </label>
 
-        <details {% if not safe_mode %}open{% endif %} data-testid="provider-advanced">
+        <details data-testid="provider-advanced">
           <summary>Advanced (optional)</summary>
           <div class="form-columns" style="margin-top: 14px;">
             <label title="Only change this when you use a custom OpenAI-compatible endpoint.">
@@ -69,16 +69,16 @@
         <h3>Recommendation</h3>
         <p class="muted">For the first test run, OpenRouter is usually the fastest path. Use `custom` when you want to point Nanobot at your own OpenAI-compatible endpoint.</p>
       </div>
-      <div class="card-list">
-        <article class="card">
+      <div class="card-list compact">
+        <article class="card compact-card guidance-card">
           <header><strong>OpenRouter</strong></header>
           <p class="muted">Quickest setup with one API key and access to many models.</p>
         </article>
-        <article class="card">
+        <article class="card compact-card guidance-card">
           <header><strong>Custom</strong></header>
           <p class="muted">Direct connection to local or self-hosted OpenAI-compatible APIs.</p>
         </article>
-        <article class="card">
+        <article class="card compact-card guidance-card">
           <header><strong>Safe Mode</strong></header>
           <p class="muted">When Safe Mode is on, optional provider fields stay collapsed so beginners only see the essential setup.</p>
         </article>

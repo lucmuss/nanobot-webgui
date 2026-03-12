@@ -70,7 +70,7 @@
               <strong>{{ "You" if message.role == "user" else "Nanobot" }}</strong>
               <span>{{ message.compact_timestamp or message.timestamp }}</span>
             </div>
-            <div class="chat-message-body {% if message.role == 'assistant' %}markdown-preview chat-markdown{% else %}chat-plain{% endif %}">{{ message.rendered_content | safe }}</div>
+            <div class="chat-message-body {% if message.role == 'assistant' %}chat-markdown text-markdown{% else %}chat-plain{% endif %}">{{ message.rendered_content | safe }}</div>
           </article>
         {% else %}
           <article class="chat-message">
@@ -107,24 +107,6 @@
         </div>
       </form>
 
-      <div class="chat-suggestions" style="margin-top: 14px;">
-        {% for prompt in chat_quick_prompts %}
-          <form
-            class="inline-form"
-            method="post"
-            action="/chat/send"
-            data-chat-async="quick"
-            hx-post="/chat/send"
-            hx-target="#chat-live-shell"
-            hx-swap="outerHTML"
-            hx-indicator="#chat-live-indicator"
-            hx-disabled-elt="find button, find input"
-          >
-            <input type="hidden" name="message" value="{{ prompt }}">
-            <button class="secondary" type="submit">{{ prompt }}</button>
-          </form>
-        {% endfor %}
-      </div>
     </section>
 
     <section class="panel" data-tab-panel-group="chat-sections" data-tab-panel="runtime">
@@ -237,6 +219,28 @@
         {% else %}
           <p class="muted">No files have been uploaded through the chat UI yet.</p>
         {% endfor %}
+      </div>
+
+      <div class="card compact-card" style="margin-top: 16px;" data-testid="chat-suggested-prompts-card">
+        <header><strong>Suggested prompts</strong></header>
+        <div class="chat-suggestions">
+          {% for prompt in chat_quick_prompts %}
+            <form
+              class="inline-form"
+              method="post"
+              action="/chat/send"
+              data-chat-async="quick"
+              hx-post="/chat/send"
+              hx-target="#chat-live-shell"
+              hx-swap="outerHTML"
+              hx-indicator="#chat-live-indicator"
+              hx-disabled-elt="find button, find input"
+            >
+              <input type="hidden" name="message" value="{{ prompt }}">
+              <button class="secondary" type="submit">{{ prompt }}</button>
+            </form>
+          {% endfor %}
+        </div>
       </div>
     </section>
   </div>

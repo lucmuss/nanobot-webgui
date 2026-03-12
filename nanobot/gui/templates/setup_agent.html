@@ -20,7 +20,7 @@
           <span class="pill">Nanobot core</span>
         </div>
 
-        <div class="hero-callout">
+        <div class="hero-callout compact">
           <strong>Required</strong>
           <p class="muted">These fields define the default runtime Nanobot will actually use.</p>
         </div>
@@ -29,14 +29,14 @@
           <label title="The workspace is the default root for sessions, memory, uploads, and MCP installs.">
             Workspace
             <input type="text" name="workspace" value="{{ workspace }}" {% if workspace_locked %}readonly{% endif %} required data-testid="agent-workspace">
+            <span class="field-caption">
+              {% if workspace_locked %}
+                Dev container workspace.
+              {% else %}
+                Default root for sessions, memory, uploads, and MCP installs.
+              {% endif %}
+            </span>
           </label>
-          <p class="muted">
-            {% if workspace_locked %}
-              This dev instance uses a fixed container workspace.
-            {% else %}
-              The default workspace is where sessions, memory, and MCP installs live.
-            {% endif %}
-          </p>
 
           <label title="This overrides the default model for the main Nanobot runtime.">
             Model
@@ -50,9 +50,8 @@
           <label title="This instruction becomes the main system behavior for the runtime.">
             System instruction / main behavior
             <textarea class="mono tall-textarea" name="instruction_content" data-testid="agent-instruction">{{ instruction_content }}</textarea>
+            <span class="field-caption">AGENTS.md · <span class="mono">{{ instruction_display_path }}</span></span>
           </label>
-          <p class="muted">File: <span class="mono">{{ instruction_path }}</span></p>
-          <p class="muted">Last changed: {{ instruction_modified_at }}</p>
 
           <label title="Choose how verbose Nanobot should normally sound in replies.">
             Response style
@@ -74,7 +73,7 @@
           </label>
         </div>
 
-        <details {% if not safe_mode %}open{% endif %} style="margin-top: 16px;" data-testid="agent-advanced">
+        <details style="margin-top: 16px;" data-testid="agent-advanced">
           <summary>Advanced tuning</summary>
           <div class="form-columns" style="margin-top: 14px;">
             <div class="details-grid">
@@ -115,33 +114,41 @@
             <h3 style="margin: 0;">Behavior and MCP Defaults</h3>
             <p class="muted">Keep the main behavior visible and default MCP selection easy to understand.</p>
           </div>
-          <a class="button secondary" href="/memory?doc=agents">Open full instructions</a>
+          <a class="button secondary nowrap-text" href="/memory?doc=agents">Open instructions</a>
         </div>
 
-        <div class="card">
+        <div class="card compact-card">
           <header><strong>Instruction Files</strong></header>
-          <p class="muted">Persona: <span class="mono">{{ soul_path }}</span></p>
-          <p class="muted">User profile: <span class="mono">{{ user_path }}</span></p>
+          <div class="instruction-file-list">
+            {% for file in instruction_files %}
+              <div class="instruction-file-row">
+                <a class="instruction-file-link" href="/memory?doc={{ file.key }}" data-testid="agent-instruction-file-{{ file.key }}">
+                  <strong>{{ file.label }} → {{ file.filename }}</strong>
+                </a>
+                <span class="mono">{{ file.display_path }}</span>
+              </div>
+            {% endfor %}
+          </div>
         </div>
 
-        <div class="card" style="margin-top: 16px;">
+        <div class="card compact-card" style="margin-top: 16px;">
           <header><strong>Default MCP Selection</strong></header>
-          <div class="stack-list">
+          <div class="mcp-choice-list">
             {% for server in mcp_servers %}
-              <label class="checkbox">
-                <input type="checkbox" name="enabled_mcp" value="{{ server.name }}" {% if server.enabled %}checked{% endif %} data-testid="agent-enabled-mcp-{{ server.name }}">
-                <span>{{ server.name }} ({{ server.status_label }})</span>
-              </label>
-              {% if server.tool_names %}
-                <p class="muted">Available tools: {{ server.tool_names|join(", ") }}</p>
-              {% endif %}
+              <div class="mcp-choice-row">
+                <label class="checkbox">
+                  <input type="checkbox" name="enabled_mcp" value="{{ server.name }}" {% if server.enabled %}checked{% endif %} data-testid="agent-enabled-mcp-{{ server.name }}">
+                  <span>{{ server.name }}</span>
+                </label>
+                <span class="pill {% if server.enabled %}good{% else %}muted{% endif %}">{{ server.status_label }}</span>
+              </div>
             {% else %}
               <p class="muted">No MCP servers are installed yet. Finish setup, then add servers from the MCP page.</p>
             {% endfor %}
           </div>
         </div>
 
-        <div class="card" style="margin-top: 16px;">
+        <div class="card compact-card guidance-card" style="margin-top: 16px;">
           <header><strong>Safe Mode</strong></header>
           <p class="muted">When Safe Mode is on, advanced tuning stays collapsed and the page keeps focus on the fields that matter first.</p>
         </div>
