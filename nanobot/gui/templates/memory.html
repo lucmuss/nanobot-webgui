@@ -7,8 +7,8 @@
     <button class="section-tab" type="button" data-tab-target="help">Markdown Help</button>
   </div>
 
-  <div class="tabbed-grid" data-testid="memory-sections-grid">
-    <section class="panel" data-tab-panel-group="memory-sections" data-tab-panel="documents">
+  <div class="tabbed-grid memory-layout" data-testid="memory-sections-grid">
+    <section class="panel memory-panel-documents" data-tab-panel-group="memory-sections" data-tab-panel="documents">
       <div class="section-intro">
         <p class="eyebrow">Memory Workspace</p>
         <h3>Document Switcher</h3>
@@ -42,7 +42,7 @@
       </div>
     </section>
 
-    <section class="panel" data-tab-panel-group="memory-sections" data-tab-panel="editor">
+    <section class="panel memory-panel-editor" data-tab-panel-group="memory-sections" data-tab-panel="editor">
       <div class="section-intro">
         <p class="eyebrow">Editing</p>
         <h3>Editor</h3>
@@ -70,7 +70,7 @@
       {% endif %}
     </section>
 
-    <section class="panel" data-tab-panel-group="memory-sections" data-tab-panel="preview" data-testid="memory-preview-panel">
+    <section class="panel memory-panel-preview" data-tab-panel-group="memory-sections" data-tab-panel="preview" data-testid="memory-preview-panel">
       <div class="section-intro">
         <p class="eyebrow">Rendered Output</p>
         <h3>Preview</h3>
@@ -80,7 +80,7 @@
       </div>
     </section>
 
-    <section class="panel" data-tab-panel-group="memory-sections" data-tab-panel="help">
+    <section class="panel memory-panel-help" data-tab-panel-group="memory-sections" data-tab-panel="help">
       <div class="section-intro">
         <p class="eyebrow">Syntax Guide</p>
         <h3>Markdown Help</h3>

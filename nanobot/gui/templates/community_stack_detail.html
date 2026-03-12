@@ -32,7 +32,7 @@
         <div class="meta-pair"><strong>Use Case</strong><span>{{ community_item.use_case }}</span></div>
         <div class="meta-pair"><strong>Recommended Model</strong><span>{{ community_item.recommended_model }}</span></div>
         <div class="meta-pair"><strong>Observed imports</strong><span>{{ community_item.imports_count }}</span></div>
-        <div class="meta-pair"><strong>Rating</strong><span>{{ community_item.rating }}</span></div>
+        <div class="meta-pair"><strong>Votes</strong><span>{{ community_item.get('votes', {}).get('score_percent', 0)|round(0)|int }}% · {{ community_item.get('votes', {}).get('total', 0) }}</span></div>
       </div>
       {% if community_item.best_for %}
         <div class="stack-list" style="margin-top: 14px;">
@@ -44,6 +44,16 @@
       <div class="insight-panel local" style="margin-top: 16px;">
         <h4>Example Prompt</h4>
         <p class="muted" style="margin-top: 10px;">{{ community_item.example_prompt }}</p>
+      </div>
+      <div class="actions" style="margin-top: 14px;">
+        <form method="post" action="/community/vote/stack/{{ community_item.slug }}">
+          <input type="hidden" name="vote_type" value="up">
+          <button class="secondary" type="submit" data-testid="community-stack-vote-up">👍 {{ community_item.get('votes', {}).get('up', 0) }}</button>
+        </form>
+        <form method="post" action="/community/vote/stack/{{ community_item.slug }}">
+          <input type="hidden" name="vote_type" value="down">
+          <button class="secondary" type="submit" data-testid="community-stack-vote-down">👎 {{ community_item.get('votes', {}).get('down', 0) }}</button>
+        </form>
       </div>
     </section>
     <section class="panel">

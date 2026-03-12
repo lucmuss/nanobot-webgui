@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import json
 import logging
 import os
@@ -70,11 +71,34 @@ class GUIMCPService:
         install_logs: list[str] = []
         install_mode = str(analysis.get("install_mode", "source")).strip() or "source"
         install_dir: Path | None = None
+        normalized_repo_url = _normalize_repo_url(str(analysis.get("repo_url", "")))
 
         missing_runtimes = [str(item) for item in analysis.get("missing_runtimes", [])]
         if missing_runtimes:
             raise ValueError(
                 "Missing required runtime tools for this MCP: " + ", ".join(missing_runtimes)
+            )
+
+        config = self.config_service.load()
+        existing = config.tools.mcp_servers.get(server_name)
+        existing_record = self.config_service.get_mcp_record(server_name)
+        if (
+            existing
+            and existing_record
+            and _normalize_repo_url(str(existing_record.get("repo_url", ""))) == normalized_repo_url
+        ):
+            raise ValueError(
+                f"MCP server already installed as '{server_name}'. "
+                "Open the existing MCP entry instead of reinstalling it."
+            )
+        duplicate_server_name = self._find_duplicate_repo_server_name(
+            normalized_repo_url,
+            current_server_name=server_name,
+        )
+        if duplicate_server_name:
+            raise ValueError(
+                f"MCP server already installed from this repository: '{duplicate_server_name}'. "
+                "Open the existing MCP entry instead of installing it again."
             )
 
         if install_mode == "source":
@@ -96,18 +120,16 @@ class GUIMCPService:
             for step in analysis["install_steps"]:
                 install_logs.append(f"$ {step['display']}\nRegistered without a managed checkout.")
 
-        config = self.config_service.load()
-        existing = config.tools.mcp_servers.get(server_name)
         server_cfg = self._build_server_config(analysis, install_dir, existing, config)
         config.tools.mcp_servers[server_name] = server_cfg
         self.config_service.save(config)
 
-        existing_record = self.config_service.get_mcp_record(server_name)
         provisional = {
             "server_name": server_name,
             "title": analysis["title"],
             "summary": analysis["summary"],
             "repo_url": analysis["repo_url"],
+            "normalized_repo_url": normalized_repo_url,
             "clone_url": analysis["clone_url"],
             "install_dir": str(install_dir) if install_dir is not None else "",
             "install_steps": [step["display"] for step in analysis["install_steps"]],
@@ -124,12 +146,21 @@ class GUIMCPService:
             "next_action": analysis.get("next_action", ""),
             "last_installed_at": _utc_now(),
             "enabled": bool(existing_record.get("enabled", False)),
+            "auto_enabled": False,
             "log_tail": "\n\n".join(install_logs)[-4000:],
         }
         self.config_service.set_mcp_record(server_name, provisional)
 
         record = await self.test_server(server_name)
         record.update(provisional)
+        if not existing and record.get("status") == "active" and not record.get("enabled"):
+            self.config_service.set_mcp_enabled(server_name, True)
+            record["enabled"] = True
+            record["auto_enabled"] = True
+            record["log_tail"] = _append_log(
+                str(record.get("log_tail", "")).strip(),
+                "Auto-enabled for chat after a successful first install test.",
+            )
         self.config_service.set_mcp_record(server_name, record)
         self.logger.info("mcp_installed server=%s source=%s", server_name, analysis["repo_url"])
         return record
@@ -157,9 +188,16 @@ class GUIMCPService:
             "enabled": bool(existing.get("enabled", False)),
             "friendly_error": {},
             "log_tail": str(existing.get("log_tail", "")).strip(),
+            "last_test_checks": [],
         }
 
         if missing_env:
+            result["last_test_checks"] = [
+                {"label": "Secrets provided", "ok": False, "detail": ", ".join(missing_env)},
+                {"label": "Startup preflight", "ok": False, "detail": "Blocked until required secrets are configured."},
+                {"label": "Connection established", "ok": False, "detail": "Waiting for a valid MCP launch."},
+                {"label": "Tool discovery", "ok": False, "detail": "No tools can be listed before the server starts."},
+            ]
             result["status"] = "needs_configuration"
             result["status_label"] = "Needs configuration"
             result["last_test_status"] = result["status"]
@@ -171,6 +209,12 @@ class GUIMCPService:
 
         preflight = await self._preflight_server(cfg)
         if preflight:
+            result["last_test_checks"] = [
+                {"label": "Secrets provided", "ok": True, "detail": "Required env vars are present."},
+                {"label": "Startup preflight", "ok": False, "detail": preflight},
+                {"label": "Connection established", "ok": False, "detail": "The MCP process exited before the handshake completed."},
+                {"label": "Tool discovery", "ok": False, "detail": "Tool listing was skipped because startup failed."},
+            ]
             result["status"] = "error"
             result["status_label"] = "Probe failed"
             result["last_test_status"] = result["status"]
@@ -184,6 +228,12 @@ class GUIMCPService:
             tool_names = await self._list_server_tools(cfg)
         except Exception as exc:
             message = _summarize_exception(exc)
+            result["last_test_checks"] = [
+                {"label": "Secrets provided", "ok": True, "detail": "Required env vars are present."},
+                {"label": "Startup preflight", "ok": True, "detail": "The MCP process started."},
+                {"label": "Connection established", "ok": False, "detail": message},
+                {"label": "Tool discovery", "ok": False, "detail": "The MCP handshake failed before tools could be listed."},
+            ]
             result["status"] = "error"
             result["status_label"] = "Probe failed"
             result["last_test_status"] = result["status"]
@@ -200,6 +250,20 @@ class GUIMCPService:
         result["status_label"] = "Active"
         result["last_test_status"] = result["status"]
         result["last_test_label"] = result["status_label"]
+        result["last_test_checks"] = [
+            {"label": "Secrets provided", "ok": True, "detail": "Required env vars are present."},
+            {"label": "Startup preflight", "ok": True, "detail": "The MCP process started successfully."},
+            {"label": "Connection established", "ok": True, "detail": f"Transport {result['transport']} responded successfully."},
+            {
+                "label": "Tool discovery",
+                "ok": True,
+                "detail": (
+                    f"{len(tool_names)} tool(s) discovered: {', '.join(tool_names)}"
+                    if tool_names
+                    else "The MCP responded successfully but reported no tools."
+                ),
+            },
+        ]
         result["log_tail"] = _append_log(
             result["log_tail"],
             "Connected successfully. Tools: " + (", ".join(tool_names) if tool_names else "(none)"),
@@ -527,13 +591,20 @@ class GUIMCPService:
     def _build_repository_bundle(self, checkout_dir: Path, repo: dict[str, str]) -> dict[str, Any]:
         """Collect bounded repository evidence for optional AI fallback planning."""
         workspace_packages = []
-        for package_path in sorted(checkout_dir.glob("packages/*/package.json"))[:6]:
+        for package_path in sorted(checkout_dir.rglob("package.json")):
+            relative_path = package_path.relative_to(checkout_dir)
+            if relative_path == Path("package.json") or "node_modules" in relative_path.parts:
+                continue
+            if len(relative_path.parts) > 4:
+                continue
             workspace_packages.append(
                 {
-                    "path": str(package_path.relative_to(checkout_dir)),
+                    "path": str(relative_path),
                     "package_json": _read_json(package_path),
                 }
             )
+            if len(workspace_packages) >= 6:
+                break
 
         files = sorted(
             str(path.relative_to(checkout_dir))
@@ -677,6 +748,19 @@ class GUIMCPService:
             return await _list_streamable_http_tools(cfg)
         raise ValueError(f"Unsupported MCP transport: {transport}")
 
+    def _find_duplicate_repo_server_name(self, normalized_repo_url: str, *, current_server_name: str) -> str:
+        """Return another installed server name using the same repo URL, if any."""
+        if not normalized_repo_url:
+            return ""
+        config = self.config_service.load()
+        for name in config.tools.mcp_servers.keys():
+            if name == current_server_name:
+                continue
+            record = self.config_service.get_mcp_record(str(name))
+            if _normalize_repo_url(str(record.get("repo_url", ""))) == normalized_repo_url:
+                return str(name)
+        return ""
+
 
 def _parse_repository_source(source: str) -> dict[str, str]:
     """Normalize supported repository inputs into GitHub clone metadata."""
@@ -694,32 +778,43 @@ def _parse_repository_source(source: str) -> dict[str, str]:
             "clone_url": f"https://github.com/{owner}/{repo}.git",
         }
 
-    if raw.startswith("git@github.com:"):
-        _, path = raw.split(":", 1)
-        owner, repo = path.split("/", 1)
-        repo = repo.removesuffix(".git")
+    if raw.startswith("git@"):
+        host_part, path = raw.split(":", 1)
+        host = host_part.split("@", 1)[1]
+        path_parts = [part for part in path.split("/") if part]
+        if len(path_parts) < 2:
+            raise ValueError("Enter a full git repository reference like git@host:owner/repo.git.")
+        owner, repo = path_parts[0], path_parts[1].removesuffix(".git")
+        clone_url = raw if raw.endswith(".git") else raw + ".git"
+        repo_url = f"https://{host}/{owner}/{repo}"
         return {
             "owner": owner,
             "repo": repo,
-            "repo_url": f"https://github.com/{owner}/{repo}",
-            "clone_url": f"https://github.com/{owner}/{repo}.git",
+            "repo_url": repo_url,
+            "clone_url": clone_url,
         }
 
     parsed = urlparse(raw)
     host = parsed.netloc.lower()
-    if host not in {"github.com", "www.github.com"}:
+    if host and host not in {"github.com", "www.github.com"} and not raw.endswith(".git"):
         raise ValueError("Only direct GitHub repository URLs are supported right now.")
-
     parts = [part for part in parsed.path.split("/") if part]
     if len(parts) < 2:
-        raise ValueError("Enter a full GitHub repository URL like https://github.com/owner/repo.")
+        raise ValueError("Enter a full repository URL like https://github.com/owner/repo.")
 
     owner, repo = parts[0], parts[1].removesuffix(".git")
+    normalized_repo_url = f"{parsed.scheme}://{parsed.netloc}/{owner}/{repo}"
+    clone_url = raw
+    if host in {"github.com", "www.github.com"}:
+        clone_url = f"https://github.com/{owner}/{repo}.git"
+        normalized_repo_url = f"https://github.com/{owner}/{repo}"
+    elif not clone_url.endswith(".git"):
+        clone_url = normalized_repo_url + ".git"
     return {
         "owner": owner,
         "repo": repo,
-        "repo_url": f"https://github.com/{owner}/{repo}",
-        "clone_url": f"https://github.com/{owner}/{repo}.git",
+        "repo_url": normalized_repo_url,
+        "clone_url": clone_url,
     }
 
 
@@ -758,7 +853,7 @@ def _extract_readme_summary(path: Path) -> str:
 
 def _sanitize_summary_text(raw: str) -> str:
     """Strip non-readable markup from README summary candidates."""
-    text = raw.strip()
+    text = html.unescape(raw.strip())
     if not text:
         return ""
 
@@ -893,7 +988,14 @@ def _normalize_manifest_transport(payload: dict[str, Any]) -> str:
 def _find_workspace_mcp_package(checkout_dir: Path) -> dict[str, str]:
     """Look for a nested workspace package that exposes the actual MCP runtime."""
     candidates: list[dict[str, str | int]] = []
-    for package_path in sorted(checkout_dir.glob("packages/*/package.json")):
+    for package_path in sorted(checkout_dir.rglob("package.json")):
+        relative_path = package_path.relative_to(checkout_dir)
+        if relative_path == Path("package.json"):
+            continue
+        if "node_modules" in relative_path.parts:
+            continue
+        if len(relative_path.parts) > 4:
+            continue
         package_json = _read_json(package_path)
         if not package_json:
             continue
@@ -909,13 +1011,15 @@ def _find_workspace_mcp_package(checkout_dir: Path) -> dict[str, str]:
             score += 2
         if "mcp" in package_path.parent.name.lower():
             score += 1
+        if any(part in {"packages", "servers", "src"} for part in relative_path.parts[:-1]):
+            score += 1
         if score <= 0 or not package_name:
             continue
         candidates.append(
             {
                 "name": package_name,
                 "version": str(package_json.get("version", "")).strip(),
-                "path": str(package_path.relative_to(checkout_dir)),
+                "path": str(relative_path),
                 "score": score,
             }
         )
@@ -1428,6 +1532,17 @@ def _derive_node_entry(checkout_dir: Path, package_json: dict[str, Any]) -> tupl
         return "node", [str(checkout_dir / "build" / "index.js")]
     if (checkout_dir / "dist" / "index.js").exists():
         return "node", [str(checkout_dir / "dist" / "index.js")]
+    for candidate in (
+        "build/main.js",
+        "dist/main.js",
+        "lib/index.js",
+        "src/index.js",
+        "server.js",
+        "mcp.js",
+    ):
+        path = checkout_dir / candidate
+        if path.exists():
+            return "node", [str(path)]
 
     return "", []
 
@@ -1539,6 +1654,29 @@ def _resolve_transport(cfg: MCPServerConfig) -> str:
     if cfg.url.rstrip("/").endswith("/sse"):
         return "sse"
     return "streamableHttp"
+
+
+def _normalize_repo_url(value: str) -> str:
+    """Normalize repository URLs so duplicate detection is stable across variants."""
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    if raw.startswith("git@"):
+        host_part, path = raw.split(":", 1)
+        host = host_part.split("@", 1)[1].lower()
+        path = path.removesuffix(".git").strip("/")
+        return f"https://{host}/{path}"
+    parsed = urlparse(raw)
+    if not parsed.scheme or not parsed.netloc:
+        return raw.rstrip("/").removesuffix(".git").lower()
+    path = parsed.path.rstrip("/")
+    if path.endswith(".git"):
+        path = path[:-4]
+    if parsed.netloc.lower() in {"github.com", "www.github.com"}:
+        parts = [part for part in path.split("/") if part]
+        if len(parts) >= 2:
+            return f"https://github.com/{parts[0]}/{parts[1]}".lower()
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{path}".lower()
 
 
 async def _list_stdio_tools(cfg: MCPServerConfig) -> list[str]:

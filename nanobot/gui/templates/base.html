@@ -282,6 +282,12 @@
         white-space: nowrap;
       }
 
+      .topbar-actions [title],
+      .topbar-group.system [title],
+      .topbar-group.user [title] {
+        cursor: pointer;
+      }
+
       .topbar-menu {
         position: relative;
         border: none;
@@ -684,6 +690,41 @@
         color: var(--info);
       }
 
+      .action-feedback {
+        position: sticky;
+        top: 12px;
+        z-index: 35;
+        display: none;
+        margin-bottom: 14px;
+        padding: 12px 14px;
+        border-radius: var(--radius-control);
+        border: 1px solid rgba(249, 115, 22, 0.18);
+        background: var(--primary-soft);
+        color: var(--primary-strong);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .action-feedback.is-visible {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .action-feedback .spinner {
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(234, 88, 12, 0.2);
+        border-top-color: var(--primary);
+        border-radius: 50%;
+        animation: spinner-rotate 0.8s linear infinite;
+      }
+
+      @keyframes spinner-rotate {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
       .update-banner {
         margin-bottom: 18px;
         padding: 16px 18px;
@@ -770,6 +811,8 @@
       .avatar {
         width: 38px;
         height: 38px;
+        aspect-ratio: 1 / 1;
+        flex: 0 0 38px;
         border-radius: 50%;
         background: linear-gradient(135deg, rgba(249, 115, 22, 0.95), rgba(234, 88, 12, 0.95));
         color: #fff;
@@ -783,13 +826,17 @@
       .avatar.large {
         width: 84px;
         height: 84px;
+        aspect-ratio: 1 / 1;
+        flex-basis: 84px;
         font-size: 1.5rem;
       }
 
       .avatar img {
+        display: block;
         width: 100%;
         height: 100%;
         object-fit: cover;
+        border-radius: 50%;
       }
 
       .split-header {
@@ -915,6 +962,11 @@
         min-height: 148px;
       }
 
+      .compact-kpi.metric-card.warning-card {
+        border-color: rgba(241, 216, 122, 0.92);
+        background: #fff8d6;
+      }
+
       .compact-kpi strong {
         display: block;
         margin-top: 6px;
@@ -934,7 +986,19 @@
         color: var(--text-secondary);
       }
 
+      .compact-kpi .metric-action {
+        margin-top: auto;
+        padding-top: 10px;
+        color: var(--primary-strong);
+        font-weight: 600;
+      }
+
       .compact-kpi .actions {
+        margin-top: auto;
+        padding-top: 12px;
+      }
+
+      .card-footer {
         margin-top: auto;
         padding-top: 12px;
       }
@@ -1035,6 +1099,12 @@
         background: #f3f4f6;
       }
 
+      .chat-message.assistant {
+        background: #fff9e6;
+        border-color: rgba(255, 213, 79, 0.38);
+        border-left: 4px solid #ffd54f;
+      }
+
       .chat-meta {
         display: flex;
         justify-content: space-between;
@@ -1044,7 +1114,30 @@
         font-size: 0.92rem;
       }
 
+      .chat-message-body {
+        color: var(--text-primary);
+      }
+
+      .chat-message-body p:last-child,
+      .chat-message-body ul:last-child,
+      .chat-message-body pre:last-child {
+        margin-bottom: 0;
+      }
+
+      .chat-markdown {
+        padding: 0;
+        border: none;
+        background: transparent;
+      }
+
+      .chat-markdown h2,
+      .chat-markdown h3,
+      .chat-markdown h4 {
+        margin-top: 0;
+      }
+
       .chat-composer {
+        display: grid;
         gap: 12px;
         padding: 14px;
         border-radius: var(--radius-chat);
@@ -1057,6 +1150,15 @@
         min-height: 96px;
         border-radius: 16px;
         background: #fbfbfc;
+      }
+
+      .composer-actions {
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .file-button {
+        cursor: pointer;
       }
 
       .chat-suggestions {
@@ -1261,14 +1363,84 @@
         border-top: none;
       }
 
+      .inline-meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: baseline;
+      }
+
+      .inline-meta-row .meta-pair {
+        flex: 1 1 180px;
+        min-width: 0;
+      }
+
       .compact-list {
         display: grid;
         gap: 10px;
       }
 
+      .text-markdown {
+        color: var(--text-primary);
+      }
+
+      .text-markdown > *:first-child {
+        margin-top: 0;
+      }
+
+      .text-markdown > *:last-child {
+        margin-bottom: 0;
+      }
+
+      .text-markdown ul,
+      .text-markdown ol {
+        padding-left: 18px;
+      }
+
+      .compact-tool-log {
+        gap: 6px;
+      }
+
+      .tool-log-item {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: baseline;
+        padding: 4px 0;
+        font-size: 0.8rem;
+        line-height: 1.3;
+      }
+
+      .tool-log-item strong {
+        font-size: 0.82rem;
+      }
+
+      .active-tools-scroll {
+        max-height: 220px;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+
+      .active-tools-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-content: flex-start;
+      }
+
       .doc-switcher {
         display: grid;
         gap: 14px;
+      }
+
+      .memory-layout {
+        grid-template-columns: minmax(260px, 0.85fr) minmax(0, 2.15fr);
+        align-items: start;
+      }
+
+      .memory-panel-preview,
+      .memory-panel-help {
+        grid-column: 1 / -1;
       }
 
       .doc-group {
@@ -1339,6 +1511,18 @@
         color: var(--text-secondary);
       }
 
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
       .form-columns {
         display: grid;
         gap: 18px;
@@ -1348,6 +1532,19 @@
         display: grid;
         gap: 18px;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .settings-actions-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        margin-top: 16px;
+      }
+
+      .settings-actions-row form {
+        display: inline-grid;
+        gap: 0;
       }
 
       .page-stack {
@@ -1370,6 +1567,109 @@
         border-radius: var(--radius-card);
         border: 1px solid var(--primary-border);
         background: var(--primary-soft);
+      }
+
+      .compact-flow-strip {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        padding: 10px 12px;
+        border-radius: var(--radius-control);
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.86);
+        font-size: 0.82rem;
+        line-height: 1.3;
+      }
+
+      .compact-flow-strip strong {
+        font-size: 0.82rem;
+      }
+
+      .compact-flow-arrow {
+        color: var(--text-secondary);
+        font-weight: 700;
+      }
+
+      .mcp-preview-card {
+        background: #f1fff1;
+        border: 1px solid #c9eec9;
+      }
+
+      .mcp-card-link {
+        display: grid;
+        gap: 14px;
+        color: inherit;
+      }
+
+      .mcp-card-link:hover .mcp-card-title {
+        color: var(--primary-hover);
+      }
+
+      .mcp-card-title {
+        margin: 0;
+        font-size: 1.15rem;
+        line-height: 1.2;
+      }
+
+      .mcp-card-meta-grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .mcp-card-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 16px;
+      }
+
+      .mcp-test-checklist {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .mcp-test-check {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-control);
+        background: rgba(255, 255, 255, 0.82);
+      }
+
+      .mcp-test-check.good {
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+      }
+
+      .mcp-test-check.bad {
+        border-color: #fecaca;
+        background: #fef2f2;
+      }
+
+      .mcp-test-check-icon {
+        flex-shrink: 0;
+        font-weight: 700;
+      }
+
+      .mcp-test-check-copy {
+        display: grid;
+        gap: 3px;
+        min-width: 0;
+      }
+
+      .mcp-test-check-copy strong {
+        font-size: 0.84rem;
+      }
+
+      .mcp-test-check-copy span {
+        color: var(--text-secondary);
+        font-size: 0.8rem;
+        line-height: 1.35;
       }
 
       .subtle-panel {
@@ -1421,6 +1721,23 @@
         line-height: 1.2;
       }
 
+      .community-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      .community-card-footer {
+        margin-top: auto;
+        padding-top: 16px;
+      }
+
+      .settings-validation-card {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
       .tool-pills {
         display: flex;
         flex-wrap: wrap;
@@ -1442,6 +1759,12 @@
         align-items: flex-start;
         padding: 12px 0;
         border-top: 1px solid var(--border);
+      }
+
+      @media (max-width: 720px) {
+        .mcp-card-meta-grid {
+          grid-template-columns: 1fr;
+        }
       }
 
       .list-row:first-child {
@@ -1882,17 +2205,17 @@
               <div class="topbar-toolbar">
                 <div class="topbar-desktop-toolbar" data-testid="topbar-desktop-toolbar">
                   <div class="topbar-actions topbar-group primary">
-                    <a class="button secondary" href="/chat" data-testid="topbar-chat-link">Chat</a>
-                    <a class="button secondary" href="/settings" data-testid="topbar-validate-link">Validate Setup</a>
-                    <form class="inline-form" method="post" action="/actions/test-agent" data-testid="topbar-test-agent-form">
+                    <a class="button secondary" href="/chat" data-testid="topbar-chat-link" title="Open the chat interface to interact directly with the agent.">Chat</a>
+                    <a class="button secondary" href="/settings" data-testid="topbar-validate-link" title="Run a quick validation check of the provider, runtime, workspace and MCP configuration.">Validate Setup</a>
+                    <form class="inline-form" method="post" action="/actions/test-agent" data-testid="topbar-test-agent-form" data-loading-label="Running health check..." data-feedback-message="Health check started...">
                       <input type="hidden" name="next" value="{{ request_path }}">
-                      <button class="secondary" type="submit" data-testid="topbar-test-agent">Run Agent Health Check</button>
+                      <button class="secondary" type="submit" data-testid="topbar-test-agent" title="Run a deeper diagnostic test of the agent runtime and tool execution pipeline.">Run Agent Health Check</button>
                     </form>
                   </div>
                   <div class="topbar-group system topbar-utility">
                     <form class="inline-form" method="post" action="/actions/toggle-safe-mode" data-testid="topbar-safe-mode-form">
                       <input type="hidden" name="next" value="{{ request_path }}">
-                      <button class="secondary" type="submit" data-testid="topbar-safe-mode">{{ "Turn Safe Mode Off" if safe_mode else "Turn Safe Mode On" }}</button>
+                      <button class="secondary" type="submit" data-testid="topbar-safe-mode" title="Enable safe mode to restrict agent actions and disable risky execution paths.">{{ "Turn Safe Mode Off" if safe_mode else "Turn Safe Mode On" }}</button>
                     </form>
                     <form class="inline-form" method="post" action="/actions/restart" data-testid="topbar-restart-form">
                       <input type="hidden" name="next" value="{{ request_path }}">
@@ -1933,7 +2256,7 @@
                       <div class="topbar-menu-section">
                         <span class="topbar-menu-label">Primary</span>
                         <a class="button secondary" href="/settings">Validate Setup</a>
-                        <form class="inline-form" method="post" action="/actions/test-agent">
+                        <form class="inline-form" method="post" action="/actions/test-agent" data-loading-label="Running health check..." data-feedback-message="Health check started...">
                           <input type="hidden" name="next" value="{{ request_path }}">
                           <button class="secondary" type="submit">Run Agent Health Check</button>
                         </form>
@@ -2038,6 +2361,10 @@
               {% if flash %}
                 <div class="flash {{ flash.level }}" data-testid="flash-message">{{ flash.message }}</div>
               {% endif %}
+            </div>
+            <div id="action-feedback" class="action-feedback" aria-live="polite" data-testid="action-feedback">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="action-feedback-text">Working...</span>
             </div>
             {{ body_content | safe }}
           </div>

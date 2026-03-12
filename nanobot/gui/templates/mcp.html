@@ -19,9 +19,16 @@
         {% endif %}
       </div>
 
-      <div class="highlight-panel" style="margin-bottom: 16px;">
-        <strong>Git URL to working MCP</strong>
-        <p class="muted">This is the main automation path for non-technical users: inspect, install, test, then enable.</p>
+      <div class="compact-flow-strip" style="margin-bottom: 16px;">
+        <strong>Git URL</strong>
+        <span class="compact-flow-arrow">→</span>
+        <span>Inspect</span>
+        <span class="compact-flow-arrow">→</span>
+        <span>Install</span>
+        <span class="compact-flow-arrow">→</span>
+        <span>Test</span>
+        <span class="compact-flow-arrow">→</span>
+        <span>Enable</span>
       </div>
 
       <div class="progress-list" style="margin-bottom: 16px;" data-testid="mcp-primary-flow">
@@ -74,7 +81,7 @@
       {% endif %}
 
       {% if preview %}
-        <article class="card" style="margin-top: 18px;" data-testid="mcp-preview">
+        <article class="card mcp-preview-card" style="margin-top: 18px;" data-testid="mcp-preview">
           <header>
             <strong>MCP Install Preview: {{ preview.title }}</strong>
             <span class="pill">Server {{ preview.server_name }}</span>
@@ -265,78 +272,90 @@
     <div class="card-list">
       {% for server in installed_servers %}
         <article class="card" data-testid="mcp-card-{{ server.name }}">
-          <header>
-            <strong>{{ server.name }}</strong>
-            <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
-              {{ server.effective_status }}
-            </span>
-          </header>
+          <a class="mcp-card-link" href="/mcp/{{ server.name }}" data-testid="mcp-card-link-{{ server.name }}">
+            <header>
+              <h4 class="mcp-card-title">{{ server.name }}</h4>
+              <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
+                {{ server.effective_status }}
+              </span>
+            </header>
 
-          {% if server.summary %}
-            <p class="muted">{{ server.summary }}</p>
-          {% endif %}
-          {% if server.repo_url %}
-            <div class="mono">{{ server.repo_url }}</div>
-          {% endif %}
+            {% if server.summary %}
+              <p class="muted">{{ server.summary }}</p>
+            {% endif %}
+            {% if server.repo_url %}
+              <div class="mono">{{ server.repo_url }}</div>
+            {% endif %}
 
-          <div class="badge-row">
-            <span class="pill">transport {{ server.type }}</span>
-            {% if server.repo_type %}
-              <span class="pill">repo {{ server.repo_type }}</span>
-            {% endif %}
-            <span class="pill">{{ "AI plan" if server.analysis_mode == "ai_fallback" else "deterministic" }}</span>
-            <span class="pill {% if server.enabled %}good{% else %}muted{% endif %}">{{ "enabled" if server.enabled else "disabled" }}</span>
-            <span class="pill">{{ server.status_label }}</span>
-            {% if server.tool_names %}
-              <span class="pill good">{{ server.tool_names|length }} tool(s)</span>
-            {% endif %}
-            {% if server.missing_env %}
-              <span class="pill bad">missing {{ server.missing_env|join(", ") }}</span>
-            {% endif %}
-            {% if server.missing_runtimes %}
-              <span class="pill bad">runtime {{ server.missing_runtimes|join(", ") }}</span>
-            {% endif %}
-          </div>
+            <div class="badge-row">
+              <span class="pill">transport {{ server.type }}</span>
+              {% if server.repo_type %}
+                <span class="pill">repo {{ server.repo_type }}</span>
+              {% endif %}
+              <span class="pill">{{ "AI plan" if server.analysis_mode == "ai_fallback" else "deterministic" }}</span>
+              <span class="pill {{ server.enabled_tone }}">{{ "enabled" if server.enabled else "disabled" }}</span>
+              <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">{{ server.status_label }}</span>
+              {% if server.tool_names %}
+                <span class="pill good">{{ server.tool_count }} tool(s)</span>
+              {% endif %}
+              {% if server.missing_env %}
+                <span class="pill bad">missing {{ server.missing_env|join(", ") }}</span>
+              {% endif %}
+              {% if server.missing_runtimes %}
+                <span class="pill bad">runtime {{ server.missing_runtimes|join(", ") }}</span>
+              {% endif %}
+            </div>
 
-          {% if server.tool_names %}
-            <p class="muted" style="margin-top: 10px;">Available tools: {{ server.tool_names|join(", ") }}</p>
-          {% endif %}
-
-          <div class="meta-list">
-            {% if server.command %}
-              <div>
-                <strong>Command</strong>
-                <div class="mono">{{ server.command }}{% if server.args %} {{ server.args|join(' ') }}{% endif %}</div>
+            <div class="mcp-card-meta-grid">
+              <div class="meta-pair">
+                <strong>{{ "Endpoint" if server.url else "Command" }}</strong>
+                <span class="mono">
+                  {% if server.url %}
+                    {{ server.url }}
+                  {% else %}
+                    {{ server.command }}{% if server.args %} {{ server.args|join(' ') }}{% endif %}
+                  {% endif %}
+                </span>
               </div>
-            {% elif server.url %}
-              <div>
-                <strong>Endpoint</strong>
-                <div class="mono">{{ server.url }}</div>
+              <div class="meta-pair">
+                <strong>Available tools</strong>
+                <span>{{ server.tool_names|join(", ") if server.tool_names else "No tools discovered yet" }}</span>
               </div>
-            {% endif %}
-
-            {% if server.last_checked_at %}
-              <div>
+              <div class="meta-pair">
+                <strong>Next step</strong>
+                <span>{{ server.next_action or "Run the MCP test and enable it for chat when it is ready." }}</span>
+              </div>
+              <div class="meta-pair">
                 <strong>Last test</strong>
-                <div class="muted">{{ server.last_checked_at }}</div>
+                <span>{{ server.last_checked_at or "Not tested yet" }}</span>
               </div>
-            {% endif %}
+            </div>
+          </a>
 
-            {% if server.last_error %}
+          {% if server.last_test_checks %}
+            <div class="mcp-test-checklist" style="margin-top: 14px;">
+              {% for check in server.last_test_checks %}
+                <div class="mcp-test-check {{ 'good' if check.ok else 'bad' }}">
+                  <span class="mcp-test-check-icon">{{ "✓" if check.ok else "!" }}</span>
+                  <div class="mcp-test-check-copy">
+                    <strong>{{ check.label }}</strong>
+                    <span>{{ check.detail }}</span>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          {% if server.last_error %}
+            <div class="meta-list" style="margin-top: 14px;">
               <div>
                 <strong>Last error</strong>
                 <div class="mono">{{ server.last_error }}</div>
               </div>
-            {% endif %}
-            {% if server.next_action %}
-              <div>
-                <strong>Next step</strong>
-                <div class="muted">{{ server.next_action }}</div>
-              </div>
-            {% endif %}
-          </div>
+            </div>
+          {% endif %}
 
-          <div class="actions" style="margin-top: 16px;">
+          <div class="mcp-card-actions">
             <a class="button secondary" href="/mcp/{{ server.name }}" data-testid="mcp-open-{{ server.name }}">{{ "Fix Configuration" if server.missing_env else "Edit Settings" }}</a>
             <form class="inline-form" method="post" action="/mcp/test/{{ server.name }}" data-testid="mcp-test-form-{{ server.name }}">
               <input type="hidden" name="next" value="/mcp">

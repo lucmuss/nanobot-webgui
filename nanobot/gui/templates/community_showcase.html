@@ -6,7 +6,7 @@
       <div class="page-header-copy">
         <p class="eyebrow">Showcase</p>
         <h3>Real Nanobot setups</h3>
-        <p class="muted">The showcase stays practical: use case, recommended stack, and a prompt you can try immediately in the local chat.</p>
+        <p class="muted">The showcase stays practical: use case, recommended stack, and the prompt that made the setup worth sharing.</p>
       </div>
     </div>
   </section>
@@ -19,7 +19,12 @@
       </label>
       <label>
         Category
-        <input type="text" name="category" value="{{ category }}" placeholder="Coding, Research, Automation" data-testid="community-showcase-category">
+        <select name="category" data-testid="community-showcase-category">
+          <option value="">All categories</option>
+          {% for item in community_showcase_categories %}
+            <option value="{{ item }}" {% if category == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
       </label>
       <div class="actions" style="align-self: end;">
         <button type="submit" data-testid="community-showcase-submit">Search</button>
@@ -46,16 +51,34 @@
         </label>
         <label>
           Category
-          <input type="text" name="category" value="{{ showcase_submission_form.category }}" placeholder="Research" required data-testid="community-showcase-submit-category">
+          <select name="category" required data-testid="community-showcase-submit-category">
+            <option value="">Select a category</option>
+            {% for item in community_showcase_categories %}
+              <option value="{{ item }}" {% if showcase_submission_form.category == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
         </label>
         <label style="grid-column: 1 / -1;">
           Description
           <textarea name="description" rows="2" required data-testid="community-showcase-submit-description">{{ showcase_submission_form.description }}</textarea>
         </label>
+        <p class="muted" style="margin: -6px 0 0; grid-column: 1 / -1;">Supports basic Markdown such as <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, links, and bullet lists.</p>
+        {% if showcase_submission_form.description %}
+          <div class="card compact-card" style="grid-column: 1 / -1;">
+            <header><strong>Description preview</strong></header>
+            <div class="text-markdown">{{ render_markdown(showcase_submission_form.description) | safe }}</div>
+          </div>
+        {% endif %}
         <label style="grid-column: 1 / -1;">
           Use case
           <textarea name="use_case" rows="2" required data-testid="community-showcase-submit-use-case">{{ showcase_submission_form.use_case }}</textarea>
         </label>
+        {% if showcase_submission_form.use_case %}
+          <div class="card compact-card" style="grid-column: 1 / -1;">
+            <header><strong>Use case preview</strong></header>
+            <div class="text-markdown">{{ render_markdown(showcase_submission_form.use_case) | safe }}</div>
+          </div>
+        {% endif %}
         <label style="grid-column: 1 / -1;">
           Example prompt
           <textarea name="example_prompt" rows="2" required data-testid="community-showcase-submit-prompt">{{ showcase_submission_form.example_prompt }}</textarea>
@@ -98,7 +121,7 @@
         <div class="split-header">
           <div>
             <h3 style="margin: 0;">{{ item.title }}</h3>
-            <p class="muted" style="margin: 8px 0 0;">{{ item.description }}</p>
+            <div class="text-markdown muted" style="margin: 8px 0 0;">{{ render_markdown(item.description) | safe }}</div>
           </div>
           <span class="pill">{{ item.imports_count }} observed imports</span>
         </div>
@@ -106,7 +129,7 @@
         <div class="details-grid compact" style="margin-top: 14px;">
           <div class="meta-pair">
             <strong>Use Case</strong>
-            <span>{{ item.use_case }}</span>
+            <div class="text-markdown">{{ render_markdown(item.use_case) | safe }}</div>
           </div>
           <div class="meta-pair">
             <strong>Recommended Model</strong>
@@ -143,10 +166,6 @@
           </div>
         {% endif %}
         <div class="actions" style="margin-top: 16px;">
-          <form method="get" action="/chat">
-            <input type="hidden" name="draft" value="{{ item.example_prompt }}">
-            <button class="secondary" type="submit" data-testid="community-showcase-try-{{ item.slug }}">Try Prompt in Chat</button>
-          </form>
           {% if item.stack %}
             <a class="button secondary" href="/community/stacks/{{ item.stack.slug }}">Open Stack</a>
             <form method="post" action="/community/import/showcase/{{ item.slug }}">

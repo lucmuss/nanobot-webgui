@@ -1,6 +1,7 @@
 (function () {
   let statusResetTimer = null;
   let lastRequestKind = 'message';
+  let lastRequestHadAttachment = false;
 
   function byTestId(id) {
     return document.querySelector('[data-testid="' + id + '"]');
@@ -61,7 +62,7 @@
       case 'quick':
         return 'Sending quick prompt...';
       default:
-        return 'Sending message...';
+        return lastRequestHadAttachment ? 'Uploading file and sending...' : 'Sending message...';
     }
   }
 
@@ -72,7 +73,7 @@
       case 'clear':
         return 'Clearing...';
       default:
-        return 'Sending...';
+        return lastRequestHadAttachment ? 'Uploading...' : 'Sending...';
     }
   }
 
@@ -87,7 +88,7 @@
       case 'quick':
         return 'Prompt sent.';
       default:
-        return 'Message sent.';
+        return lastRequestHadAttachment ? 'File sent to chat.' : 'Message sent.';
     }
   }
 
@@ -126,6 +127,8 @@
       return;
     }
     lastRequestKind = form.dataset.chatAsync || 'message';
+    const attachment = form.querySelector('input[type="file"]');
+    lastRequestHadAttachment = Boolean(attachment && attachment.files && attachment.files.length > 0);
     setIndicatorMessage(messageForKind(form.dataset.chatAsync), 'busy');
     setBusyState(form, true);
     enhanceForm(form);

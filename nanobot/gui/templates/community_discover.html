@@ -33,7 +33,7 @@
       </div>
       <div class="card-grid three">
         {% for item in community_recommendations %}
-          <article class="card compact-card">
+          <article class="card compact-card community-card">
             <header>
               <strong>{{ item.name }}</strong>
               <span class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Recommended') }}</span>
@@ -51,7 +51,7 @@
                 <div class="reliability-fill {{ item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ item.get('reliability', {}).get('bar_width', ((item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
               </div>
             </div>
-            <div class="details-grid compact" style="margin-top: 12px;">
+            <div class="inline-meta-row" style="margin-top: 12px;">
               <div class="meta-pair"><strong>Confidence</strong><span>{{ item.get('install_confidence', {}).get('score', 'n/a') }}/10</span></div>
               <div class="meta-pair"><strong>Signals</strong><span>{{ item.get('install_confidence', {}).get('based_on_instances', 0) }}</span></div>
             </div>
@@ -61,7 +61,7 @@
                 <span class="pill">{{ label }}</span>
               {% endfor %}
             </div>
-            <div class="actions" style="margin-top: 14px;">
+            <div class="actions community-card-footer">
               <a class="button secondary" href="/community/mcp/{{ item.slug }}">View Details</a>
               <form method="post" action="/community/install/mcp/{{ item.slug }}">
                 <button type="submit" data-testid="community-recommend-install-{{ item.slug }}">Install</button>
@@ -84,10 +84,21 @@
     </div>
 
     <form method="get" action="/community/discover" class="form-columns" data-testid="community-discover-form">
-      <label>
-        Search
-        <input type="text" name="q" value="{{ query }}" placeholder="Search MCP name or repository" data-testid="community-discover-query">
-      </label>
+      <div class="form-row">
+        <label>
+          Search
+          <input type="text" name="q" value="{{ query }}" placeholder="Search MCP name or repository" data-testid="community-discover-query">
+        </label>
+        <label>
+          Sort
+          <select name="sort" data-testid="community-discover-sort">
+            <option value="trending" {% if sort == "trending" %}selected{% endif %}>Trending</option>
+            <option value="reliable" {% if sort == "reliable" %}selected{% endif %}>Most Reliable</option>
+            <option value="installed" {% if sort == "installed" %}selected{% endif %}>Most Installed</option>
+            <option value="new" {% if sort == "new" %}selected{% endif %}>New</option>
+          </select>
+        </label>
+      </div>
       <div class="form-row">
         <label>
           Category
@@ -126,15 +137,6 @@
                 {% if item == 0 %}Any reliability{% else %}>={{ item }}% reliability{% endif %}
               </option>
             {% endfor %}
-          </select>
-        </label>
-        <label>
-          Sort
-          <select name="sort" data-testid="community-discover-sort">
-            <option value="trending" {% if sort == "trending" %}selected{% endif %}>Trending</option>
-            <option value="reliable" {% if sort == "reliable" %}selected{% endif %}>Most Reliable</option>
-            <option value="installed" {% if sort == "installed" %}selected{% endif %}>Most Installed</option>
-            <option value="new" {% if sort == "new" %}selected{% endif %}>New</option>
           </select>
         </label>
       </div>
@@ -192,12 +194,24 @@
         </label>
         <label>
           Category
-          <input type="text" name="category" value="{{ submission_form.category }}" placeholder="Coding, Research, Automation" data-testid="community-submit-category">
+          <select name="category" data-testid="community-submit-category">
+            <option value="">Select a category</option>
+            {% for item in community_categories %}
+              <option value="{{ item }}" {% if submission_form.category == item %}selected{% endif %}>{{ item }}</option>
+            {% endfor %}
+          </select>
         </label>
         <label style="grid-column: 1 / -1;">
           Description
           <textarea name="description" rows="3" data-testid="community-submit-description">{{ submission_form.description }}</textarea>
         </label>
+        <p class="muted" style="margin: -6px 0 0; grid-column: 1 / -1;">Supports basic Markdown such as <code>**bold**</code>, <code>*italic*</code>, <code>`code`</code>, links, and bullet lists.</p>
+        {% if submission_form.description %}
+          <div class="card compact-card" style="grid-column: 1 / -1;">
+            <header><strong>Description preview</strong></header>
+            <div class="text-markdown">{{ render_markdown(submission_form.description) | safe }}</div>
+          </div>
+        {% endif %}
         <label style="grid-column: 1 / -1;">
           Tags
           <input type="text" name="tags" value="{{ submission_form.tags }}" placeholder="browser, automation, docs" data-testid="community-submit-tags">
@@ -222,11 +236,11 @@
 
   <section class="card-list" style="margin-top: 22px;">
     {% for item in community_items %}
-      <article class="card" data-testid="community-mcp-card-{{ item.slug }}">
+      <article class="card community-card" data-testid="community-mcp-card-{{ item.slug }}">
         <div class="split-header">
           <div>
             <h3 class="community-card-title">{{ item.name }}</h3>
-            <p class="muted" style="margin: 8px 0 0;">{{ item.description }}</p>
+            <div class="text-markdown muted" style="margin: 8px 0 0;">{{ render_markdown(item.description) | safe }}</div>
           </div>
           <div class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Tracked') }}</div>
         </div>
@@ -294,8 +308,12 @@
             <span>{{ item.get("best_for", [])|join(", ") if item.get("best_for", []) else "General MCP workflows" }}</span>
           </div>
           <div class="meta-pair">
-            <strong>Confidence</strong>
-            <span title="Confidence measures how strong the community evidence is. It grows with 30-day run volume and the number of independent instances.">{{ item.get("install_confidence", {}).get("score", "n/a") }}/10 · {{ item.get("install_confidence", {}).get("label", "Tracked") }}</span>
+            <strong>Confidence | Signals</strong>
+            <span title="Confidence measures how strong the community evidence is. It grows with 30-day run volume and the number of independent instances.">{{ item.get("install_confidence", {}).get("score", "n/a") }}/10 · {{ item.get("install_confidence", {}).get("label", "Tracked") }} · {{ item.get("install_confidence", {}).get("based_on_instances", 0) }} signals</span>
+          </div>
+          <div class="meta-pair">
+            <strong>Votes</strong>
+            <span>{{ item.get("votes", {}).get("score_percent", 0)|round(0)|int }}% · {{ item.get("votes", {}).get("total", 0) }}</span>
           </div>
           <div class="meta-pair">
             <strong>Usage trend</strong>
@@ -319,7 +337,7 @@
             <p class="muted" style="margin: 6px 0 0;">{{ item.known_fixes[0].summary }}</p>
           </div>
         {% endif %}
-        <div class="actions" style="margin-top: 16px;">
+        <div class="actions community-card-footer">
           <a class="button secondary" href="/community/mcp/{{ item.slug }}" data-testid="community-mcp-open-{{ item.slug }}">View Details</a>
           <form method="post" action="/community/install/mcp/{{ item.slug }}">
             <button type="submit" data-testid="community-mcp-install-{{ item.slug }}">Install from Community</button>

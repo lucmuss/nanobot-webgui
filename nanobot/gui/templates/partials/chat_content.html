@@ -10,8 +10,7 @@
   <div class="section-tabs" data-tab-group="chat-sections" data-default-tab="conversation" data-testid="chat-mobile-tabs">
     <button class="section-tab" type="button" data-tab-target="conversation">Chat</button>
     <button class="section-tab" type="button" data-tab-target="runtime">Runtime</button>
-    <button class="section-tab" type="button" data-tab-target="templates">Templates</button>
-    <button class="section-tab" type="button" data-tab-target="uploads">Uploads</button>
+    <button class="section-tab" type="button" data-tab-target="uploads">Files</button>
   </div>
 
   <div class="tabbed-grid" data-testid="chat-sections-grid">
@@ -69,9 +68,9 @@
           <article class="chat-message {{ message.role }}">
             <div class="chat-meta">
               <strong>{{ "You" if message.role == "user" else "Nanobot" }}</strong>
-              <span>{{ message.timestamp }}</span>
+              <span>{{ message.compact_timestamp or message.timestamp }}</span>
             </div>
-            <div class="mono">{{ message.content }}</div>
+            <div class="chat-message-body {% if message.role == 'assistant' %}markdown-preview chat-markdown{% else %}chat-plain{% endif %}">{{ message.rendered_content | safe }}</div>
           </article>
         {% else %}
           <article class="chat-message">
@@ -87,19 +86,23 @@
         method="post"
         action="/chat/send"
         class="chat-composer"
+        enctype="multipart/form-data"
         data-testid="chat-form"
         data-chat-async="message"
         hx-post="/chat/send"
+        hx-encoding="multipart/form-data"
         hx-target="#chat-live-shell"
         hx-swap="outerHTML"
         hx-indicator="#chat-live-indicator"
         hx-disabled-elt="find button, find textarea"
-      >
+        >
         <label>
           Message
           <textarea name="message" placeholder="Ask nanobot to inspect a repository, explain a file, or draft a change." data-testid="chat-message">{{ chat_draft }}</textarea>
         </label>
-        <div class="actions">
+        <div class="actions composer-actions">
+          <label class="button secondary file-button" for="chat-attachment-input" data-testid="chat-upload-trigger">Upload File</label>
+          <input id="chat-attachment-input" type="file" name="attachment" data-testid="chat-attachment" class="visually-hidden">
           <button type="submit" data-testid="chat-send">Send Message</button>
         </div>
       </form>
@@ -153,7 +156,15 @@
           </div>
           <div class="meta-pair" data-testid="chat-active-mcp-tools-card">
             <strong>Active tools</strong>
-            <span>{{ active_tool_names|join(", ") if active_tool_names else "None" }}</span>
+            {% if active_tool_names %}
+              <div class="active-tools-scroll active-tools-list" data-testid="chat-active-tools-list">
+                {% for tool_name in active_tool_names %}
+                  <span class="pill muted">{{ tool_name }}</span>
+                {% endfor %}
+              </div>
+            {% else %}
+              <span>None</span>
+            {% endif %}
           </div>
           <div class="meta-pair" data-testid="chat-usage-card">
             <strong>Usage 24h</strong>
@@ -165,11 +176,11 @@
       <div class="card compact-card" style="margin-top: 14px;" data-testid="chat-recent-tool-activity-card">
         <header><strong>Recent Tool Activity</strong></header>
         {% if recent_tool_activity %}
-          <div class="compact-list">
+          <div class="compact-list compact-tool-log">
             {% for item in recent_tool_activity %}
-              <div>
-                <strong>Tool used: {{ item.name }}</strong>
-                <p class="muted">{{ item.timestamp }}</p>
+              <div class="tool-log-item">
+                <strong>{{ item.name }}</strong>
+                <span class="muted">{{ item.compact_timestamp or item.timestamp }}</span>
               </div>
             {% endfor %}
           </div>
@@ -208,83 +219,13 @@
       </div>
     </section>
 
-    <section class="panel" data-tab-panel-group="chat-sections" data-tab-panel="templates">
-      <div class="split-header">
-        <div>
-          <h3 style="margin: 0;">Prompt Templates</h3>
-          <p class="muted">Small, high-value templates for the most common Nanobot tasks.</p>
-        </div>
-      </div>
-
-      <details open>
-        <summary>Open templates</summary>
-        <div class="card-list" style="margin-top: 14px;">
-          {% for template in chat_templates %}
-            <article class="card compact-card" data-testid="chat-template-{{ template.key }}">
-              <header><strong>{{ template.label }}</strong></header>
-              <p class="muted">{{ template.description }}</p>
-              <form
-                method="post"
-                action="/chat/template"
-                data-chat-async="template"
-                hx-post="/chat/template"
-                hx-target="#chat-live-shell"
-                hx-swap="outerHTML"
-                hx-indicator="#chat-live-indicator"
-                hx-disabled-elt="find button, find input"
-              >
-                <input type="hidden" name="template" value="{{ template.key }}">
-                <label>
-                  Input
-                  <input type="text" name="value" placeholder="{{ template.placeholder }}" data-testid="chat-template-input-{{ template.key }}">
-                </label>
-                <div class="actions">
-                  <button class="secondary" type="submit" data-testid="chat-template-submit-{{ template.key }}">{{ template.submit_label }}</button>
-                </div>
-              </form>
-            </article>
-          {% endfor %}
-        </div>
-      </details>
-    </section>
-
     <section class="panel" data-tab-panel-group="chat-sections" data-tab-panel="uploads">
       <div class="split-header">
         <div>
-          <h3 style="margin: 0;">File to Chat</h3>
-          <p class="muted">Uploads are copied into the workspace and then referenced by path. This works best for text, logs, configs, and code files.</p>
+          <h3 style="margin: 0;">Uploads</h3>
+          <p class="muted">Files are now attached directly from the main composer. Use this section to review what was recently sent into the workspace.</p>
         </div>
       </div>
-
-      <details open>
-        <summary>Open file-to-chat tools</summary>
-        <form
-          method="post"
-          action="/chat/upload"
-          enctype="multipart/form-data"
-          data-testid="chat-upload-form"
-          data-chat-async="upload"
-          style="margin-top: 14px;"
-          hx-post="/chat/upload"
-          hx-encoding="multipart/form-data"
-          hx-target="#chat-live-shell"
-          hx-swap="outerHTML"
-          hx-indicator="#chat-live-indicator"
-          hx-disabled-elt="find button, find input, find textarea"
-        >
-          <label>
-            File
-            <input type="file" name="attachment" required data-testid="chat-attachment">
-          </label>
-          <label>
-            Optional instruction
-            <textarea name="message" placeholder="Example: explain this error log and tell me what to fix first." data-testid="chat-upload-message"></textarea>
-          </label>
-          <div class="actions">
-            <button type="submit" data-testid="chat-upload-submit">Upload and Send</button>
-          </div>
-        </form>
-      </details>
 
       <div class="card compact-card" style="margin-top: 16px;" data-testid="chat-recent-uploads-card">
         <header><strong>Recent uploads</strong></header>

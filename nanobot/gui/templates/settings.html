@@ -10,7 +10,7 @@
         <p class="muted">Edit the core instance values that are safe and useful to manage from the GUI. Keep the critical values at the top and move risky toggles lower.</p>
       </div>
 
-      <form method="post" action="/settings" data-testid="settings-form">
+      <form method="post" action="/settings" data-testid="settings-form" id="settings-form">
         <details open data-testid="settings-runtime-section">
           <summary>Runtime</summary>
           <div class="highlight-panel" style="margin-top: 14px;">
@@ -92,19 +92,19 @@
             <div class="compact-list">
               <label class="checkbox">
                 <input type="checkbox" name="receive_recommendations" {% if settings_form.receive_recommendations %}checked{% endif %} data-testid="settings-community-recommendations">
-                <span>Receive community recommendations and MCP metadata</span>
+                <span title="Allows this instance to receive recommended MCP servers and metadata updates from the community hub.">Receive community recommendations and MCP metadata</span>
               </label>
               <label class="checkbox">
                 <input type="checkbox" name="show_marketplace_stats" {% if settings_form.show_marketplace_stats %}checked{% endif %} data-testid="settings-community-stats">
-                <span>Show community marketplace stats in the dashboard and community pages</span>
+                <span title="Displays marketplace statistics such as installs, reliability scores, and signals in the dashboard and discovery pages.">Show community marketplace stats in the dashboard and community pages</span>
               </label>
               <label class="checkbox">
                 <input type="checkbox" name="share_anonymous_metrics" {% if settings_form.share_anonymous_metrics %}checked{% endif %} data-testid="settings-community-telemetry">
-                <span>Share anonymous MCP runtime metrics with the community hub</span>
+                <span title="Shares aggregated and anonymous MCP runtime metrics without personal data to improve reliability rankings.">Share anonymous MCP runtime metrics with the community hub</span>
               </label>
               <label class="checkbox">
                 <input type="checkbox" name="allow_public_mcp_submissions" {% if settings_form.allow_public_mcp_submissions %}checked{% endif %} data-testid="settings-community-submit">
-                <span>Allow this GUI to publish MCP repository entries to the community hub</span>
+                <span title="Allows this instance to publish MCP repositories to the community hub registry.">Allow this GUI to publish MCP repository entries to the community hub</span>
               </label>
             </div>
           </div>
@@ -122,16 +122,14 @@
           </div>
         </details>
 
-        <div class="actions">
-          <button type="submit" data-testid="settings-save">Save Settings</button>
-        </div>
       </form>
 
-      <form method="post" action="/settings/validate" style="margin-top: 12px;" data-testid="settings-validate-form">
-        <div class="actions">
+      <div class="settings-actions-row">
+        <button type="submit" form="settings-form" data-testid="settings-save">Save Settings</button>
+        <form method="post" action="/settings/validate" data-testid="settings-validate-form">
           <button class="secondary" type="submit" data-testid="settings-validate">Validate Setup</button>
-        </div>
-      </form>
+        </form>
+      </div>
     </section>
 
     <section class="panel">
@@ -153,7 +151,7 @@
 
       <div class="details-grid compact">
         {% for item in validation_results %}
-          <article class="card compact-card" data-testid="validation-card-{{ item.label|lower|replace(' ', '-') }}">
+          <article class="card compact-card settings-validation-card" data-testid="validation-card-{{ item.label|lower|replace(' ', '-') }}">
             <header>
               <strong>{{ item.label }}</strong>
               <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "OK" if item.ok else "Needs attention" }}</span>
@@ -161,7 +159,9 @@
             <div class="mono">{{ item.detail }}</div>
             <p class="muted" style="margin-top: 10px;">{{ item.hint }}</p>
             {% if item.action_url %}
-              <a class="button secondary" href="{{ item.action_url }}" data-testid="validation-action-{{ item.label|lower|replace(' ', '-') }}">{{ item.action_label or "Open" }}</a>
+              <div class="card-footer">
+                <a class="button secondary" href="{{ item.action_url }}" data-testid="validation-action-{{ item.label|lower|replace(' ', '-') }}">{{ item.action_label or "Open" }}</a>
+              </div>
             {% endif %}
           </article>
         {% endfor %}

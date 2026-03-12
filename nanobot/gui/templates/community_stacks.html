@@ -95,7 +95,7 @@
         <div class="page-meta-bar">
           <span class="meta-chip"><strong>Observed imports</strong>{{ item.imports_count }}</span>
           <span class="meta-chip"><strong>Model</strong>{{ item.recommended_model }}</span>
-          <span class="meta-chip"><strong>Rating</strong>{{ item.rating }}</span>
+          <span class="meta-chip"><strong>Votes</strong>{{ item.get('votes', {}).get('score_percent', 0)|round(0)|int }}% · {{ item.get('votes', {}).get('total', 0) }}</span>
           <span class="meta-chip {{ item.get('difficulty', {}).get('tone', 'muted') }}"><strong>Difficulty</strong>{{ item.get('difficulty', {}).get('label', 'Unknown') }}</span>
         </div>
         <div class="insight-panel community" style="margin-top: 14px;">

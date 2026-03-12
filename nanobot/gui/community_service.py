@@ -89,6 +89,14 @@ class GUICommunityService:
         """Return one showcase entry."""
         return await self._get_json(f"/showcase/{slug}")
 
+    async def vote_mcp(self, slug: str, *, vote_type: str, voter_key: str) -> dict[str, Any]:
+        """Submit one community vote for an MCP."""
+        return await self._post_json(f"/marketplace/{slug}/vote", json={"vote_type": vote_type, "voter_key": voter_key})
+
+    async def vote_stack(self, slug: str, *, vote_type: str, voter_key: str) -> dict[str, Any]:
+        """Submit one community vote for a stack."""
+        return await self._post_json(f"/stacks/{slug}/vote", json={"vote_type": vote_type, "voter_key": voter_key})
+
     async def marketplace_fixes(
         self,
         slug: str,

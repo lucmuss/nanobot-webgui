@@ -1,6 +1,6 @@
 # WebGUI Deployment Guide
 
-Current release target: `0.3.0`
+Current release target: `0.3.1`
 
 This guide is for running the `nanobot` WebGUI as a stable self-hosted service.
 
@@ -78,7 +78,7 @@ The GUI can now consume real community data from a separate FastAPI/Jinja2/HTMX 
 In the current `ai-stack` deployment, the intended wiring is:
 
 - GUI internal community API: `http://nanobot-community-hub:18811/api/v1`
-- GUI public URL: `https://nanobot-gui.kolibri-kollektiv.eu`
+- GUI public URL: `https://your-nanobot-gui.example.com`
 - Hub public URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
 - Hub database: shared PostgreSQL from `apps-stack`, reachable as `postgres:5432` on `apps-shared`
 
@@ -142,7 +142,7 @@ It must not send prompts, local paths, API keys, or chat contents.
 
 If you use the existing `cloudflared` service in `ai-stack`, create these public hostname mappings in the Cloudflare dashboard:
 
-- `nanobot-gui.kolibri-kollektiv.eu` -> `http://host.docker.internal:18791`
+- `your-nanobot-gui.example.com` -> `http://host.docker.internal:18791`
 - `nanobot-community-hub.kolibri-kollektiv.eu` -> `http://host.docker.internal:18811`
 
 That is enough for this stack because the services already publish fixed local ports and the Cloudflare tunnel container can reach `host.docker.internal`.

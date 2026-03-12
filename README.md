@@ -1,9 +1,9 @@
 <div align="center">
   <h1>nanobot-webgui</h1>
-  <p><strong>Release 0.3.0</strong></p>
+  <p><strong>Release 0.3.1</strong></p>
   <p>Production-focused web GUI for <a href="https://github.com/HKUDS/nanobot">HKUDS/nanobot</a>.</p>
   <p>
-    <img src="https://img.shields.io/badge/release-0.3.0-f59e0b" alt="Release 0.3.0">
+    <img src="https://img.shields.io/badge/release-0.3.1-f59e0b" alt="Release 0.3.1">
     <a href="https://github.com/HKUDS/nanobot"><img src="https://img.shields.io/badge/upstream-HKUDS%2Fnanobot-c4632c" alt="Upstream"></a>
     <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">
     <img src="https://img.shields.io/badge/gui-FastAPI%20%2B%20Jinja2%20%2B%20HTMX-2c7a5a" alt="GUI stack">
@@ -220,7 +220,7 @@ The running `ai-stack` wiring now uses:
 - internal API URL: `http://nanobot-community-hub:18811/api/v1`
 - public hub URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
 - the hub service uses the shared PostgreSQL instance from `apps-stack` over `apps-shared`
-- public GUI URL: `https://nanobot-gui.kolibri-kollektiv.eu`
+- public GUI URL: `https://your-nanobot-gui.example.com`
 - service-to-service write auth via `NANOBOT_GUI_COMMUNITY_API_TOKEN` -> `NANOBOT_HUB_API_TOKEN`
 - GUI-side MCP publishing is controlled by the Community setting `Allow this GUI to publish MCP repository entries to the community hub`
 
@@ -233,7 +233,7 @@ The community pages now support:
 
 For the Cloudflare tunnel, map:
 
-- `nanobot-gui.kolibri-kollektiv.eu` -> `http://host.docker.internal:18791`
+- `your-nanobot-gui.example.com` -> `http://host.docker.internal:18791`
 - `nanobot-community-hub.kolibri-kollektiv.eu` -> `http://host.docker.internal:18811`
 
 This keeps the GUI and community backend on separate services while still letting the GUI use real API calls to the hub.

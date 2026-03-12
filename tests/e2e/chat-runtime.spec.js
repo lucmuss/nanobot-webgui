@@ -20,7 +20,7 @@ test('chat without a healthy agent points the user back to provider setup', asyn
   await expect(page.getByTestId('chat-error-card')).toContainText('Open Provider');
 });
 
-test('chat shows active MCPs, template prompts, tool activity, file upload, and clear history', async ({ page, request }) => {
+test('chat shows active MCPs, compact tool activity, file upload, and clear history', async ({ page, request }) => {
   await bootstrapAndCompleteSetup(page, request);
 
   await page.goto('/mcp');
@@ -37,22 +37,14 @@ test('chat shows active MCPs, template prompts, tool activity, file upload, and 
   await page.getByTestId('chat-message').fill('Use the active MCP tool for this request.');
   await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('flash-message')).toContainText('Response received.');
-  await expect(page.getByTestId('chat-history')).toContainText('Used tool `echo_message` successfully.');
-  await expect(page.getByTestId('chat-recent-tool-activity-card')).toContainText('Tool used: echo_message');
-
-  await page.getByTestId('chat-template-input-repo_analyze').fill('https://github.com/example/repo');
-  await page.getByTestId('chat-template-submit-repo_analyze').click();
-  await expect(page.getByTestId('flash-message')).toContainText('Template prompt sent.');
-  await expect(page.getByTestId('chat-history')).toContainText('Repository analysis ready');
-
-  await page.getByTestId('chat-template-input-error_explain').fill('Missing Authentication header');
-  await page.getByTestId('chat-template-submit-error_explain').click();
-  await expect(page.getByTestId('chat-history')).toContainText('Plain-English error explanation ready');
+  await expect(page.getByTestId('chat-history')).toContainText('Used tool');
+  await expect(page.getByTestId('chat-history')).toContainText('echo_message');
+  await expect(page.getByTestId('chat-recent-tool-activity-card')).toContainText('echo_message');
 
   const uploadFixture = ensureTextFixture('chat-upload.txt', 'line one from upload\nline two from upload');
   await page.setInputFiles('[data-testid="chat-attachment"]', uploadFixture);
-  await page.getByTestId('chat-upload-message').fill('Please inspect this uploaded file.');
-  await page.getByTestId('chat-upload-submit').click();
+  await page.getByTestId('chat-message').fill('Please inspect this uploaded file.');
+  await page.getByTestId('chat-send').click();
   await expect(page.getByTestId('flash-message')).toContainText('Uploaded chat-upload.txt and sent it to chat.');
   await expect(page.getByTestId('chat-history')).toContainText('line one from upload');
   const uploadedFiles = fs.readdirSync(`${paths.workspaceDir}/uploads`);

@@ -4,6 +4,18 @@
   </header>
   <p class="muted">{{ channel_meta.description }}</p>
 
+  {% if channel_name == "whatsapp" %}
+    <div class="highlight-panel" style="margin-bottom: 14px;" data-testid="whatsapp-setup-help">
+      <strong>WhatsApp setup</strong>
+      <p class="muted" style="margin-top: 6px;">This flow expects a separate WhatsApp bridge service. Start the bridge first, open its dashboard, and scan the QR code with your phone before you try to send messages through Nanobot.</p>
+      <ul class="muted" style="margin: 10px 0 0 18px; padding: 0;">
+        <li>Step 1: Start the bridge service</li>
+        <li>Step 2: Open the bridge dashboard</li>
+        <li>Step 3: Scan the QR code and wait for the bridge to connect</li>
+      </ul>
+    </div>
+  {% endif %}
+
   {% for field in channel_meta.fields %}
     {% if field.type == "bool" %}
       <label class="checkbox">

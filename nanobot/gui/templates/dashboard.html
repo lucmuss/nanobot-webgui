@@ -12,7 +12,6 @@
         </div>
         <div class="page-header-actions">
           <a class="button secondary" href="/community/discover">Discover MCP</a>
-          <a class="button secondary" href="/chat">Open Chat</a>
         </div>
       </div>
       <div class="page-meta-bar">
@@ -67,14 +66,16 @@
               <span class="muted">{{ metric.label }}</span>
               <strong>{{ metric.value }}</strong>
               {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
+              {% if metric.action_label %}<small class="metric-action">{{ metric.action_label }}</small>{% endif %}
             </article>
           </a>
         {% else %}
-          <article class="compact-kpi" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
-            <span class="muted">{{ metric.label }}</span>
-            <strong>{{ metric.value }}</strong>
-            {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
-          </article>
+            <article class="compact-kpi" data-testid="dashboard-metric-{{ metric.label|lower|replace(' ', '-') }}">
+              <span class="muted">{{ metric.label }}</span>
+              <strong>{{ metric.value }}</strong>
+              {% if metric.hint %}<small>{{ metric.hint }}</small>{% endif %}
+              {% if metric.action_label %}<small class="metric-action">{{ metric.action_label }}</small>{% endif %}
+            </article>
         {% endif %}
       {% endfor %}
     </section>
@@ -118,7 +119,7 @@
         </div>
         <div class="compact-kpi-grid">
           {% for item in validation_results[:6] %}
-            <article class="compact-kpi metric-card" data-testid="dashboard-validation-card-{{ item.label|lower|replace(' ', '-') }}">
+            <article class="compact-kpi metric-card {% if not item.ok %}warning-card{% endif %}" data-testid="dashboard-validation-card-{{ item.label|lower|replace(' ', '-') }}">
               <span class="muted metric-heading">{{ item.label }}</span>
               <strong class="status-callout">{{ "OK" if item.ok else "Fix needed" }}</strong>
               <small>{{ item.detail }}</small>
@@ -148,6 +149,11 @@
                 <span class="pill {% if item.ok %}good{% else %}bad{% endif %}">{{ "Ready" if item.ok else "Missing" }}</span>
               </header>
               <div class="mono">{{ item.value }}</div>
+              {% if item.href and item.action_label %}
+                <div class="actions" style="margin-top: 12px;">
+                  <a class="button secondary" href="{{ item.href }}">{{ item.action_label }}</a>
+                </div>
+              {% endif %}
             </article>
           {% endfor %}
         </div>

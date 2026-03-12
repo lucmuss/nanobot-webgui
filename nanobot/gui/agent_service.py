@@ -85,7 +85,7 @@ class GUIAgentService:
         """List saved chat sessions in the workspace."""
         return self._get_session_manager().list_sessions()
 
-    async def get_recent_tool_activity(self, admin: AdminUser, limit: int = 6) -> list[dict[str, Any]]:
+    async def get_recent_tool_activity(self, admin: AdminUser, limit: int = 10) -> list[dict[str, Any]]:
         """Return the most recent tool calls from the current direct chat session."""
         session_manager = self._get_session_manager()
         session = session_manager.get_or_create(self._session_key(admin))

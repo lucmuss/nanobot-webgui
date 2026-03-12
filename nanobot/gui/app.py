@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import html
+import hashlib
 import json
 import logging
 import os
@@ -59,7 +60,7 @@ CHANNEL_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
     "whatsapp": {
         "label": "WhatsApp",
-        "description": "Bridge-based connection through a QR login flow.",
+        "description": "Bridge-based connection through a QR login flow with an external WhatsApp bridge service.",
         "fields": [
             {"name": "bridge_url", "label": "Bridge URL", "type": "text", "placeholder": "ws://localhost:3001"},
             {"name": "bridge_token", "label": "Bridge token", "type": "password"},
@@ -113,31 +114,6 @@ CHANNEL_DEFINITIONS: dict[str, dict[str, Any]] = {
     },
 }
 
-CHAT_TEMPLATE_DEFINITIONS: list[dict[str, str]] = [
-    {
-        "key": "repo_analyze",
-        "label": "Analyze Repository",
-        "description": "Explain structure, risks, and next steps for a repo URL or local path.",
-        "placeholder": "https://github.com/owner/repo or /workspace/project",
-        "submit_label": "Analyze",
-    },
-    {
-        "key": "error_explain",
-        "label": "Explain Error",
-        "description": "Turn a raw error into a plain-language explanation and next actions.",
-        "placeholder": "Paste the error message or stack trace headline",
-        "submit_label": "Explain",
-    },
-    {
-        "key": "file_summarize",
-        "label": "Summarize File",
-        "description": "Summarize one file in the workspace and highlight what matters.",
-        "placeholder": "uploads/example.log or /workspace/src/app.py",
-        "submit_label": "Summarize",
-    },
-]
-
-
 @dataclass(slots=True)
 class GUISettings:
     """Runtime settings for the GUI instance."""
@@ -167,6 +143,7 @@ class GUISettings:
 
 def create_gui_app(settings: GUISettings) -> FastAPI:
     """Create the FastAPI app for the nanobot web GUI."""
+    _TEMPLATES.env.globals["render_markdown"] = _render_markdown_preview
     config_service = GUIConfigService(settings.config_path, settings.workspace)
     config_service.ensure_instance()
 
@@ -456,6 +433,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         reliability = item.get("reliability") if isinstance(item.get("reliability"), dict) else {}
         difficulty = item.get("difficulty") if isinstance(item.get("difficulty"), dict) else {}
         recommended_config = item.get("recommended_config") if isinstance(item.get("recommended_config"), dict) else {}
+        votes = item.get("votes") if isinstance(item.get("votes"), dict) else {}
         meta = [
             {
                 "label": "Community reliability",
@@ -476,6 +454,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "value": str(difficulty.get("label", "Unknown") or "Unknown"),
                 "tone": str(difficulty.get("tone", "muted") or "muted"),
             },
+            {
+                "label": "Votes",
+                "value": f"{int(votes.get('score_percent', 0) or 0)}% · {int(votes.get('total', 0) or 0)}",
+                "tone": "muted",
+            },
         ]
         if recommended_config:
             meta.append(
@@ -494,6 +477,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
     def _build_stack_meta_bar(item: dict[str, Any]) -> list[dict[str, str]]:
         """Summarize one community stack with compact meta chips."""
         difficulty = item.get("difficulty") if isinstance(item.get("difficulty"), dict) else {}
+        votes = item.get("votes") if isinstance(item.get("votes"), dict) else {}
         return [
             {
                 "label": "Recommended model",
@@ -513,6 +497,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             {
                 "label": "MCP count",
                 "value": str(len(item.get("items", []))),
+                "tone": "muted",
+            },
+            {
+                "label": "Votes",
+                "value": f"{int(votes.get('score_percent', 0) or 0)}% · {int(votes.get('total', 0) or 0)}",
                 "tone": "muted",
             },
         ]
@@ -643,7 +632,18 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         """Collect the chat page state for full-page and HTMX partial renders."""
         config = config_service.load()
         history = await agent_service.get_chat_history(user)
+        for message in history:
+            role = str(message.get("role", "")).strip()
+            content = str(message.get("content", "") or "")
+            message["rendered_content"] = (
+                _render_chat_message_html(content, role=role)
+                if role == "assistant"
+                else _render_chat_plaintext_html(content)
+            )
+            message["compact_timestamp"] = _format_compact_timestamp(str(message.get("timestamp", "")).strip())
         recent_tool_activity = await agent_service.get_recent_tool_activity(user)
+        for item in recent_tool_activity:
+            item["compact_timestamp"] = _format_compact_timestamp(str(item.get("timestamp", "")).strip())
         agent_health = config_service.get_agent_health()
         installed_servers = _build_mcp_server_cards(config, config_service)
         active_servers = [server for server in installed_servers if server["enabled"]]
@@ -695,7 +695,6 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "List the active MCP servers and the tools they provide.",
                 "Explain the current workspace structure in simple language.",
             ],
-            "chat_templates": CHAT_TEMPLATE_DEFINITIONS,
             "recent_uploads": config_service.recent_uploads(),
             "usage_snapshot": usage_summary,
             "chat_draft": draft.strip(),
@@ -1529,6 +1528,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             installed_community_slugs=installed_community_slugs,
             current_model=config.agents.defaults.model,
         )
+        usage_summary = config_service.get_usage_summary()
         setup_progress = _build_setup_progress(
             config=config,
             agent_health=agent_health,
@@ -1537,34 +1537,93 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         )
         next_step = _determine_next_step(setup_progress)
         config_status = [
-            {"label": "Provider set", "ok": bool(provider_name and provider_name != "auto"), "value": provider_name or "Not set"},
-            {"label": "Model set", "ok": bool(config.agents.defaults.model.strip()), "value": config.agents.defaults.model},
-            {"label": "API key present", "ok": _provider_has_credentials(config, provider_name), "value": "Present" if _provider_has_credentials(config, provider_name) else "Missing"},
-            {"label": "Agent ready", "ok": bool(agent_health.get("ok")), "value": "Ready" if agent_health.get("ok") else "Not ready"},
+            {
+                "label": "Provider set",
+                "ok": bool(provider_name and provider_name != "auto"),
+                "value": provider_name or "Not set",
+                "action_label": "Change Provider",
+                "href": "/setup/provider",
+            },
+            {
+                "label": "Model set",
+                "ok": bool(config.agents.defaults.model.strip()),
+                "value": config.agents.defaults.model,
+                "action_label": "Open Agent",
+                "href": "/setup/agent",
+            },
+            {
+                "label": "API key present",
+                "ok": _provider_has_credentials(config, provider_name),
+                "value": "Present" if _provider_has_credentials(config, provider_name) else "Missing",
+                "action_label": "Open Provider",
+                "href": "/setup/provider",
+            },
+            {
+                "label": "Agent ready",
+                "ok": bool(agent_health.get("ok")),
+                "value": "Ready" if agent_health.get("ok") else "Not ready",
+                "action_label": "Run Health Check",
+                "href": "/status",
+            },
         ]
         metrics = [
-            {"label": "Runtime", "value": runtime_status["label"], "tone": runtime_status["tone"], "href": "/status"},
-            {"label": "Provider", "value": provider_name or "Not set", "tone": "neutral", "href": "/setup/provider"},
+            {
+                "label": "Runtime",
+                "value": runtime_status["label"],
+                "tone": runtime_status["tone"],
+                "href": "/status",
+                "action_label": "Open Status",
+            },
+            {
+                "label": "Provider",
+                "value": provider_name or "Not set",
+                "tone": "neutral",
+                "href": "/setup/provider",
+                "action_label": "Change Provider",
+            },
             {
                 "label": "Agent",
                 "value": "Healthy" if agent_health.get("ok") else "Not verified" if not agent_health else "Failed",
                 "tone": "good" if agent_health.get("ok") else "muted" if not agent_health else "bad",
                 "href": "/status",
+                "action_label": "Open Agent Status",
             },
             {
                 "label": "MCP",
                 "value": f"{len(installed_servers)} installed / {enabled_mcp_count} enabled",
                 "tone": "neutral",
                 "href": "/mcp",
+                "action_label": "Manage MCP Servers",
             },
-            {"label": "Channels", "value": str(len(enabled_channels)), "tone": "neutral", "href": "/setup/channel"},
-            {"label": "Saved Sessions", "value": str(len(sessions)), "tone": "neutral", "href": "/history"},
+            {
+                "label": "Channels",
+                "value": str(len(enabled_channels)),
+                "tone": "neutral",
+                "href": "/setup/channel",
+                "action_label": "Configure Channels",
+            },
+            {
+                "label": "Saved Sessions",
+                "value": str(len(sessions)),
+                "tone": "neutral",
+                "href": "/history",
+                "action_label": "Open History",
+            },
             {
                 "label": "Tokens",
                 "value": str((agent_health.get("usage") or {}).get("total_tokens", "n/a")),
                 "tone": "neutral",
                 "href": "/usage",
                 "hint": "last health check",
+                "action_label": "Open Usage",
+            },
+            {
+                "label": "Usage 24h",
+                "value": f"{int((usage_summary.get('totals_24h', {}) or {}).get('total_tokens', 0) or 0):,}",
+                "tone": "neutral",
+                "href": "/usage",
+                "hint": "tokens",
+                "action_label": "Open Usage",
             },
             {"label": "Gateway", "value": gateway_status["label"], "tone": gateway_status["tone"], "href": "/status"},
         ]
@@ -1790,6 +1849,25 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             },
         )
 
+    @app.post("/community/vote/mcp/{slug}")
+    async def community_vote_mcp(request: Request, slug: str):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+        if not community_service.enabled:
+            _set_flash(request, "Community hub is not configured for this GUI instance.", level="error")
+            return RedirectResponse(f"/community/mcp/{slug}", status_code=303)
+        form = await request.form()
+        vote_type = str(form.get("vote_type", "")).strip().lower()
+        try:
+            await community_service.vote_mcp(slug, vote_type=vote_type, voter_key=_community_voter_key(settings.instance_name, user))
+        except Exception as exc:
+            gui_logger.exception("community_vote_mcp_failed slug=%s", slug)
+            _set_flash(request, f"Vote failed: {exc}", level="error")
+        else:
+            _set_flash(request, "Community vote saved.")
+        return RedirectResponse(f"/community/mcp/{slug}", status_code=303)
+
     @app.post("/community/install/mcp/{slug}")
     async def community_install_mcp(request: Request, slug: str):
         user = _require_admin(request, auth_service)
@@ -1926,6 +2004,25 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "community_meta": _build_stack_meta_bar(item),
             },
         )
+
+    @app.post("/community/vote/stack/{slug}")
+    async def community_vote_stack(request: Request, slug: str):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+        if not community_service.enabled:
+            _set_flash(request, "Community hub is not configured for this GUI instance.", level="error")
+            return RedirectResponse(f"/community/stacks/{slug}", status_code=303)
+        form = await request.form()
+        vote_type = str(form.get("vote_type", "")).strip().lower()
+        try:
+            await community_service.vote_stack(slug, vote_type=vote_type, voter_key=_community_voter_key(settings.instance_name, user))
+        except Exception as exc:
+            gui_logger.exception("community_vote_stack_failed slug=%s", slug)
+            _set_flash(request, f"Vote failed: {exc}", level="error")
+        else:
+            _set_flash(request, "Community vote saved.")
+        return RedirectResponse(f"/community/stacks/{slug}", status_code=303)
 
     @app.post("/community/import/stack/{slug}")
     async def community_import_stack(request: Request, slug: str):
@@ -2075,6 +2172,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "community_preferences": config_service.get_community_preferences(),
                 "community_write_enabled": community_service.can_write,
                 "community_stacks_catalog": stacks_payload.get("items", []),
+                "community_showcase_categories": payload.get("categories", []),
                 "showcase_submission_form": {
                     "title": "",
                     "description": "",
@@ -2302,9 +2400,14 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         if record["status"] == "active":
             await send_community_telemetry(record)
             clear_error()
+            success_message = f"MCP server '{record['server_name']}' installed and verified."
+            if record.get("enabled"):
+                success_message += " It was enabled for chat automatically."
+            else:
+                success_message += " Enable it for chat when you are ready."
             _set_flash(
                 request,
-                f"MCP server '{record['server_name']}' installed and verified. Enable it for chat when you are ready.",
+                success_message,
             )
             return RedirectResponse("/mcp", status_code=303)
         elif record["status"] == "needs_configuration":
@@ -2925,6 +3028,36 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         form = await request.form()
         message = str(form.get("message", "")).strip()
+        upload = form.get("attachment")
+        if (
+            upload is not None
+            and hasattr(upload, "filename")
+            and hasattr(upload, "file")
+            and str(getattr(upload, "filename", "")).strip()
+        ):
+            try:
+                uploaded = _store_chat_upload(upload, config_service.uploads_dir, config_service.default_workspace)
+            except ValueError as exc:
+                _set_flash(request, str(exc), level="error")
+                if _is_htmx_request(request):
+                    return await render_chat_page(request, user, draft=message, partial=True)
+                return RedirectResponse("/chat", status_code=303)
+
+            base_message = message or f"Inspect the uploaded file at `{uploaded['relative_path']}` and summarize what matters."
+            upload_message = (
+                f"{base_message}\n\n"
+                f"The user uploaded a file into the workspace at `{uploaded['relative_path']}`. "
+                "Use your file tools to inspect that path directly. If the file is text or code, summarize its contents and the next useful actions."
+            )
+            return await dispatch_chat_message(
+                request,
+                user,
+                upload_message,
+                source="chat_upload",
+                success_flash=f"Uploaded {uploaded['name']} and sent it to chat.",
+                note=f"Chat upload {uploaded['relative_path']}",
+            )
+
         if not message:
             _set_flash(request, "Write a message before sending.", level="error")
             if _is_htmx_request(request):
@@ -2937,43 +3070,6 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             message,
             source="chat",
             success_flash="Response received.",
-        )
-
-    @app.post("/chat/template")
-    async def chat_template_send(request: Request):
-        user = _require_admin(request, auth_service)
-        if user is None:
-            return RedirectResponse("/login", status_code=303)
-
-        form = await request.form()
-        template_key = str(form.get("template", "")).strip()
-        value = str(form.get("value", "")).strip()
-        if not template_key:
-            _set_flash(request, "Select a prompt template first.", level="error")
-            if _is_htmx_request(request):
-                return await render_chat_page(request, user, partial=True)
-            return RedirectResponse("/chat", status_code=303)
-        if not value:
-            _set_flash(request, "Fill in the template field before sending.", level="error")
-            if _is_htmx_request(request):
-                return await render_chat_page(request, user, partial=True)
-            return RedirectResponse("/chat", status_code=303)
-
-        try:
-            message = _build_chat_template_message(template_key, value)
-        except ValueError as exc:
-            _set_flash(request, str(exc), level="error")
-            if _is_htmx_request(request):
-                return await render_chat_page(request, user, partial=True)
-            return RedirectResponse("/chat", status_code=303)
-
-        return await dispatch_chat_message(
-            request,
-            user,
-            message,
-            source=f"template:{template_key}",
-            success_flash="Template prompt sent.",
-            note=f"Template {template_key}",
         )
 
     @app.post("/chat/upload")
@@ -3499,6 +3595,12 @@ def _split_list(value: str) -> list[str]:
     return parts
 
 
+def _community_voter_key(instance_name: str, user: AdminUser) -> str:
+    """Build a stable anonymized voter key for Community Hub interactions."""
+    base = f"{instance_name.strip().lower()}::{user.username.strip().lower()}::{user.email.strip().lower()}"
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()
+
+
 def _parse_json_object(raw: str, *, field_name: str) -> dict[str, str]:
     """Parse a JSON object textarea used in the GUI forms."""
     try:
@@ -3590,7 +3692,7 @@ def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_ser
         status_tone = "good" if test_status == "active" else "bad" if test_status in {"error", "needs_configuration"} else "muted"
     else:
         effective_status = "Disabled"
-        status_tone = "muted"
+        status_tone = "bad"
 
     return {
         "name": server_name,
@@ -3602,12 +3704,15 @@ def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_ser
         "status_label": test_label,
         "effective_status": effective_status,
         "status_tone": status_tone,
+        "enabled_tone": "good" if enabled else "bad",
         "enabled": enabled,
         "friendly_error": record.get("friendly_error") if isinstance(record.get("friendly_error"), dict) else {},
         "last_error": str(record.get("last_error", "")).strip(),
         "last_checked_at": str(record.get("last_checked_at", "")).strip(),
         "last_installed_at": str(record.get("last_installed_at", "")).strip(),
         "tool_names": [str(item) for item in record.get("tool_names", [])],
+        "tool_count": len([str(item) for item in record.get("tool_names", [])]),
+        "last_test_checks": list(record.get("last_test_checks", [])) if isinstance(record.get("last_test_checks"), list) else [],
         "required_env": [str(item) for item in record.get("required_env", [])],
         "optional_env": [str(item) for item in record.get("optional_env", [])],
         "missing_env": [str(item) for item in record.get("missing_env", [])],
@@ -3650,12 +3755,13 @@ def _build_mcp_server_cards(config, config_service: GUIConfigService) -> list[di
 
 def _display_summary_text(value: Any) -> str:
     """Strip raw HTML and markdown image syntax from stored MCP summaries."""
-    text = str(value or "").strip()
+    text = html.unescape(str(value or "").strip())
     if not text:
         return ""
     text = re.sub(r"!\[[^\]]*]\([^)]*\)", " ", text)
     text = re.sub(r"<img\b[^>]*>", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"</?[^>]+>", " ", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text
 
@@ -3819,9 +3925,28 @@ def _group_documents(documents: list[dict[str, str]]) -> list[dict[str, Any]]:
 
 def _render_markdown_preview(content: str) -> str:
     """Render a lightweight markdown preview without extra dependencies."""
-    text = content.strip()
+    return _render_markdown_html(content, empty_html="<p class='muted'>No content yet.</p>")
+
+
+def _render_chat_message_html(content: str, *, role: str) -> str:
+    """Render assistant chat content with lightweight markdown support."""
+    empty_text = "No content returned." if role == "assistant" else "No content yet."
+    return _render_markdown_html(content, empty_html=f"<p class='muted'>{html.escape(empty_text)}</p>")
+
+
+def _render_chat_plaintext_html(content: str) -> str:
+    """Render user chat content as escaped plaintext with preserved line breaks."""
+    text = (content or "").strip()
     if not text:
         return "<p class='muted'>No content yet.</p>"
+    return "<p>" + html.escape(text).replace("\n", "<br>") + "</p>"
+
+
+def _render_markdown_html(content: str, *, empty_html: str) -> str:
+    """Render a lightweight markdown subset suitable for previews and assistant messages."""
+    text = content.strip()
+    if not text:
+        return empty_html
 
     lines = content.splitlines()
     blocks: list[str] = []
@@ -3891,7 +4016,7 @@ def _render_markdown_preview(content: str) -> str:
     if in_code_block:
         flush_code()
 
-    return "".join(blocks) or "<p class='muted'>No content yet.</p>"
+    return "".join(blocks) or empty_html
 
 
 def _render_inline_markdown(text: str) -> str:
@@ -3901,31 +4026,6 @@ def _render_inline_markdown(text: str) -> str:
     escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
     escaped = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", escaped)
     return escaped
-
-
-def _build_chat_template_message(template_key: str, value: str) -> str:
-    """Convert one small chat template form into a concrete prompt."""
-    clean = value.strip()
-    if not clean:
-        raise ValueError("Fill in the template field before sending.")
-
-    if template_key == "repo_analyze":
-        return (
-            f"Analyze the repository or project located at `{clean}`. "
-            "Explain the purpose, likely architecture, key risks, and the most useful next steps."
-        )
-    if template_key == "error_explain":
-        return (
-            "Explain the following error in plain English, identify the most likely cause, "
-            "and suggest the next debugging steps:\n\n"
-            f"{clean}"
-        )
-    if template_key == "file_summarize":
-        return (
-            f"Open the file at `{clean}` inside the workspace. "
-            "Summarize what it does, what is important, and any issues or follow-up actions."
-        )
-    raise ValueError("Unknown prompt template.")
 
 
 def _store_chat_upload(upload: UploadFile, uploads_dir: Path, workspace: Path) -> dict[str, Any]:
@@ -3967,6 +4067,18 @@ def _format_bytes(size_bytes: int) -> str:
             return f"{size:.1f} {unit}"
         size /= 1024
     return f"{int(size_bytes)} B"
+
+
+def _format_compact_timestamp(timestamp: str) -> str:
+    """Return a compact local-style time label for chat and activity lists."""
+    raw = timestamp.strip()
+    if not raw:
+        return ""
+    try:
+        normalized = raw.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalized).strftime("%H:%M:%S")
+    except ValueError:
+        return raw
 
 
 def _estimate_usage_cost(

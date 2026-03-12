@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from nanobot.config.schema import MCPServerConfig
-from nanobot.gui.app import GUISettings, create_gui_app
+from nanobot.gui.app import GUISettings, _render_chat_message_html, create_gui_app
 from nanobot.gui.mcp_service import _parse_repository_source
 from tests.helpers.mcp_fixtures import build_mcp_fixture_analysis, load_mcp_fixture
 
@@ -258,6 +258,82 @@ def test_gui_setup_routes_persist_config_and_templates(tmp_path: Path):
     assert "- [x] Brief and concise" in app.state.config_service.read_markdown_document("user")["content"]
 
 
+def test_login_accepts_email_identifier(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.post(
+        "/login",
+        data={"identifier": "admin@example.com", "password": "BackendFlow!123"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/setup/provider"
+
+
+def test_dashboard_exposes_operational_shortcuts_after_setup(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "Manage MCP Servers" in response.text
+    assert "Configure Channels" in response.text
+    assert "Change Provider" in response.text
+
+
+def test_dashboard_shows_usage_24h_metric_after_usage_events(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    app.state.config_service.record_usage_event(
+        {
+            "source": "chat",
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "total_tokens": 150,
+            "estimated_cost_usd": 0.0,
+        }
+    )
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "Usage 24h" in response.text
+    assert "150" in response.text
+
+
+def test_whatsapp_partial_includes_bridge_guidance(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.get("/partials/channel-fields?channel=whatsapp")
+
+    assert response.status_code == 200
+    assert "WhatsApp setup" in response.text
+    assert "Scan the QR code" in response.text
+
+
+def test_chat_markdown_renderer_formats_headings_lists_and_code() -> None:
+    rendered = _render_chat_message_html(
+        "## Functioning and configured\n- Agent configuration\n- API access\n\nUse `nanobot`.",
+        role="assistant",
+    )
+
+    assert "<h3>Functioning and configured</h3>" in rendered
+    assert "<li>Agent configuration</li>" in rendered
+    assert "<code>nanobot</code>" in rendered
+
+
 def test_gui_profile_and_settings_routes_persist_backend_state(tmp_path: Path):
     client, app = _make_client(tmp_path)
 
@@ -307,6 +383,22 @@ def test_gui_profile_and_settings_routes_persist_backend_state(tmp_path: Path):
     assert admin.display_name == "Backend Admin"
     assert admin.avatar_path is not None
     assert (app.state.config_service.media_dir / admin.avatar_path).exists()
+
+
+def test_settings_and_topbar_render_new_tooltips(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    settings = client.get("/settings")
+    assert settings.status_code == 200
+    assert "Allows this instance to receive recommended MCP servers and metadata updates from the community hub." in settings.text
+    assert "Displays marketplace statistics such as installs, reliability scores, and signals in the dashboard and discovery pages." in settings.text
+
+    dashboard = client.get("/dashboard")
+    assert dashboard.status_code == 200
+    assert "Open the chat interface to interact directly with the agent." in dashboard.text
+    assert "Run a deeper diagnostic test of the agent runtime and tool execution pipeline." in dashboard.text
 
 
 def test_gui_mcp_routes_with_local_fixtures_persist_registry_and_enable(tmp_path: Path):
@@ -1084,6 +1176,94 @@ def test_gui_community_submit_stack_and_showcase_routes(tmp_path: Path):
     assert submitted_showcase_payloads[0]["stack_slug"] == "docs-stack"
 
 
+def test_gui_community_showcase_uses_category_select_and_removes_try_prompt(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=True,
+    )
+
+    async def fake_stacks(query: str = ""):
+        return {"items": [{"slug": "docs-stack", "title": "Docs Stack"}]}
+
+    async def fake_showcase(query: str = "", category: str = ""):
+        return {
+            "items": [
+                {
+                    "slug": "docs-assistant",
+                    "title": "Docs Assistant",
+                    "description": "Find answers in **docs**.",
+                    "category": "Knowledge workflows",
+                    "use_case": "Gather sources quickly for documentation questions.",
+                    "example_prompt": "Find docs sources.",
+                    "stack": {"slug": "docs-stack", "title": "Docs Stack", "recommended_model": "moonshot/kimi-k2.5"},
+                    "stack_items": [],
+                    "imports_count": 0,
+                    "demo_ready": True,
+                }
+            ],
+            "categories": ["Knowledge workflows", "Research"],
+        }
+
+    app.state.community_service.stacks = fake_stacks  # type: ignore[method-assign]
+    app.state.community_service.showcase = fake_showcase  # type: ignore[method-assign]
+
+    response = client.get("/community/showcase")
+    assert response.status_code == 200
+    assert '<select name="category"' in response.text
+    assert "Knowledge workflows" in response.text
+    assert "Supports basic Markdown" in response.text
+    assert "Try Prompt in Chat" not in response.text
+
+
+def test_gui_community_vote_routes_proxy_to_hub(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    recorded: list[tuple[str, str]] = []
+
+    async def fake_vote_mcp(slug: str, *, vote_type: str, voter_key: str):
+        recorded.append((slug, vote_type))
+        assert voter_key
+        return {"ok": True}
+
+    async def fake_vote_stack(slug: str, *, vote_type: str, voter_key: str):
+        recorded.append((slug, vote_type))
+        assert voter_key
+        return {"ok": True}
+
+    app.state.community_service.vote_mcp = fake_vote_mcp  # type: ignore[method-assign]
+    app.state.community_service.vote_stack = fake_vote_stack  # type: ignore[method-assign]
+
+    mcp_response = client.post("/community/vote/mcp/context7", data={"vote_type": "up"}, follow_redirects=False)
+    assert mcp_response.status_code == 303
+    assert mcp_response.headers["location"] == "/community/mcp/context7"
+
+    stack_response = client.post(
+        "/community/vote/stack/github-developer-stack",
+        data={"vote_type": "down"},
+        follow_redirects=False,
+    )
+    assert stack_response.status_code == 303
+    assert stack_response.headers["location"] == "/community/stacks/github-developer-stack"
+    assert recorded == [("context7", "up"), ("github-developer-stack", "down")]
+
+
 def test_gui_community_showcase_import_marks_metric_and_redirects_to_stack_import(tmp_path: Path):
     client, app = _make_client(
         tmp_path,
@@ -1230,11 +1410,11 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
     def fake_fetch(repo: str) -> dict[str, str]:
         calls.append(repo)
         return {
-            "tag_name": "v0.3.1",
-            "latest_version": "0.3.1",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
-            "release_name": "v0.3.1",
+            "tag_name": "v0.3.2",
+            "latest_version": "0.3.2",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
+            "release_name": "v0.3.2",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         }
@@ -1247,14 +1427,14 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
         follow_redirects=True,
     )
     assert login_response.status_code == 200
-    assert "New version available: v0.3.1" in login_response.text
+    assert "New version available: v0.3.2" in login_response.text
     assert "View release notes" in login_response.text
     assert "Update now" in login_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     dashboard_response = client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert "New version available: v0.3.1" in dashboard_response.text
+    assert "New version available: v0.3.2" in dashboard_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     status = app.state.config_service.get_update_status()
@@ -1277,14 +1457,14 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     app.state.config_service.set_update_status(
         {
             "enabled": True,
-            "current_version": "0.3.0",
-            "latest_version": "0.3.1",
-            "tag_name": "v0.3.1",
+            "current_version": "0.3.1",
+            "latest_version": "0.3.2",
+            "tag_name": "v0.3.2",
             "available": True,
             "checked_at": "2026-03-10T00:00:00+00:00",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
-            "release_name": "v0.3.1",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
+            "release_name": "v0.3.2",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
             "repo": "lucmuss/nanobot-webgui",
@@ -1304,11 +1484,11 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     monkeypatch.setattr(
         "nanobot.gui.app._fetch_latest_release_info",
         lambda _repo: {
-            "tag_name": "v0.3.1",
-            "latest_version": "0.3.1",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.1",
-            "release_name": "v0.3.1",
+            "tag_name": "v0.3.2",
+            "latest_version": "0.3.2",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.2",
+            "release_name": "v0.3.2",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         },
@@ -1324,5 +1504,5 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     update_response = client.post("/actions/update")
     assert update_response.status_code == 202
     assert "Updating GUI" in update_response.text
-    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.3.1")]
+    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.3.2")]
     assert app.state.config_service.get_update_status()["updating"] is True
