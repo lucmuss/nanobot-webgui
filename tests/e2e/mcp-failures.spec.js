@@ -68,7 +68,8 @@ test('MCPs with missing secrets cannot be enabled until the configuration is fix
 
   await page.getByTestId('mcp-detail-test').click();
   await expect(page.getByTestId('flash-message')).toContainText('is active with 2 tool(s)');
-  await expect(page.getByTestId('mcp-detail-cards')).toContainText('fetch_secret, echo_message');
+  await expect(page.getByTestId('mcp-detail-cards')).toContainText('fetch_secret');
+  await expect(page.getByTestId('mcp-detail-cards')).toContainText('echo_message');
 
   await page.getByTestId('mcp-detail-toggle').click();
   await expect(page.getByTestId('flash-message')).toContainText('enabled for the main chat runtime');

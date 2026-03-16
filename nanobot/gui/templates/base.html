@@ -952,6 +952,11 @@
         display: none;
       }
 
+      .mobile-nav-toggle:focus-visible + .mobile-sidebar-backdrop + .app-shell .mobile-nav-button {
+        outline: 2px solid var(--primary);
+        outline-offset: 3px;
+      }
+
       .mobile-sidebar-backdrop {
         display: none;
       }
@@ -2893,7 +2898,7 @@
         </section>
       </main>
     {% else %}
-      <input id="mobile-nav-toggle" class="mobile-nav-toggle" type="checkbox" aria-hidden="true">
+      <input id="mobile-nav-toggle" class="mobile-nav-toggle" type="checkbox" aria-label="Open navigation">
       <label for="mobile-nav-toggle" class="mobile-sidebar-backdrop" aria-hidden="true"></label>
       <div class="app-shell">
         <aside class="sidebar">

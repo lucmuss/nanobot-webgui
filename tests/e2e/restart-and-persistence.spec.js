@@ -38,7 +38,7 @@ test('restart keeps config, profile, memory, and installed MCP state intact', as
   await expect(page.locator('h1')).toContainText('Restart');
 
   await page.goto('/dashboard');
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Dashboard' })).toBeVisible();
 
   const afterConfig = readJson(paths.configPath);
   const afterState = readJson(paths.statePath);
