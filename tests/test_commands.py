@@ -1,3 +1,4 @@
+import re
 import shutil
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,6 +13,15 @@ from nanobot.providers.openai_codex_provider import _strip_model_prefix
 from nanobot.providers.registry import find_by_model
 
 runner = CliRunner()
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
+
+
+def _normalized_help_text(result) -> str:
+    """Normalize Rich/Typer help output so CI formatting does not break assertions."""
+    combined = "\n".join(
+        part for part in (getattr(result, "output", ""), getattr(result, "stdout", ""), getattr(result, "stderr", "")) if part
+    )
+    return ANSI_ESCAPE_RE.sub("", combined)
 
 
 class _StopGateway(RuntimeError):
@@ -167,30 +177,32 @@ def mock_agent_runtime(tmp_path):
 
 def test_agent_help_shows_workspace_and_config_options():
     result = runner.invoke(app, ["agent", "--help"])
+    help_text = _normalized_help_text(result)
 
     assert result.exit_code == 0
-    assert "--workspace" in result.stdout
-    assert "-w" in result.stdout
-    assert "--config" in result.stdout
-    assert "-c" in result.stdout
+    assert "--workspace" in help_text
+    assert "-w" in help_text
+    assert "--config" in help_text
+    assert "-c" in help_text
 
 
 def test_gui_help_shows_web_options():
     result = runner.invoke(app, ["gui", "--help"])
+    help_text = _normalized_help_text(result)
 
     assert result.exit_code == 0
-    assert "--workspace" in result.stdout
-    assert "--config" in result.stdout
-    assert "--secure-cookies" in result.stdout
-    assert "--gateway-health-url" in result.stdout
-    assert "--restart-mode" in result.stdout
-    assert "--restart-command" in result.stdout
-    assert "--update-check" in result.stdout
-    assert "--update-repo" in result.stdout
-    assert "--update-mode" in result.stdout
-    assert "--update-command" in result.stdout
-    assert "--repair-mode" in result.stdout
-    assert "--repair-command" in result.stdout
+    assert "--workspace" in help_text
+    assert "--config" in help_text
+    assert "--secure-cookies" in help_text
+    assert "--gateway-health-url" in help_text
+    assert "--restart-mode" in help_text
+    assert "--restart-command" in help_text
+    assert "--update-check" in help_text
+    assert "--update-repo" in help_text
+    assert "--update-mode" in help_text
+    assert "--update-command" in help_text
+    assert "--repair-mode" in help_text
+    assert "--repair-command" in help_text
 
 
 def test_gui_starts_uvicorn_with_expected_settings(monkeypatch, tmp_path: Path):

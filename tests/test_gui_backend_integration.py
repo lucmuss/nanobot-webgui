@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from nanobot import __version__
 from nanobot.config.schema import MCPServerConfig
 from nanobot.gui.app import GUISettings, _display_summary_text, _render_chat_message_html, create_gui_app
 from nanobot.gui.mcp_service import _parse_repository_source
@@ -14,6 +15,11 @@ from tests.helpers.mcp_fixtures import build_mcp_fixture_analysis, load_mcp_fixt
 PNG_1X1 = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9pSdz+gAAAAASUVORK5CYII="
 )
+
+
+def _next_patch_version(version: str) -> str:
+    major, minor, patch = version.split(".")
+    return f"{major}.{minor}.{int(patch) + 1}"
 
 
 def _make_client(
@@ -1629,6 +1635,8 @@ def test_gui_mcp_repair_route_dispatches_configured_worker(tmp_path: Path, monke
 
 
 def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    newer_version = _next_patch_version(__version__)
+    newer_tag = f"v{newer_version}"
     client, app = _make_client(
         tmp_path,
         update_check_enabled=True,
@@ -1643,11 +1651,11 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
     def fake_fetch(repo: str) -> dict[str, str]:
         calls.append(repo)
         return {
-            "tag_name": "v0.3.4",
-            "latest_version": "0.3.4",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
-            "release_name": "v0.3.4",
+            "tag_name": newer_tag,
+            "latest_version": newer_version,
+            "release_url": f"https://github.com/lucmuss/nanobot-webgui/releases/tag/{newer_tag}",
+            "release_notes_url": f"https://github.com/lucmuss/nanobot-webgui/releases/tag/{newer_tag}",
+            "release_name": newer_tag,
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         }
@@ -1660,14 +1668,14 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
         follow_redirects=True,
     )
     assert login_response.status_code == 200
-    assert "New version available: v0.3.4" in login_response.text
+    assert f"New version available: {newer_tag}" in login_response.text
     assert "View release notes" in login_response.text
     assert "Update now" in login_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     dashboard_response = client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert "New version available: v0.3.4" in dashboard_response.text
+    assert f"New version available: {newer_tag}" in dashboard_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     status = app.state.config_service.get_update_status()
@@ -1679,6 +1687,8 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
 
 
 def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    newer_version = _next_patch_version(__version__)
+    newer_tag = f"v{newer_version}"
     client, app = _make_client(
         tmp_path,
         update_check_enabled=True,
@@ -1690,14 +1700,14 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     app.state.config_service.set_update_status(
         {
             "enabled": True,
-            "current_version": "0.3.3",
-            "latest_version": "0.3.4",
-            "tag_name": "v0.3.4",
+            "current_version": __version__,
+            "latest_version": newer_version,
+            "tag_name": newer_tag,
             "available": True,
             "checked_at": "2026-03-10T00:00:00+00:00",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
-            "release_name": "v0.3.4",
+            "release_url": f"https://github.com/lucmuss/nanobot-webgui/releases/tag/{newer_tag}",
+            "release_notes_url": f"https://github.com/lucmuss/nanobot-webgui/releases/tag/{newer_tag}",
+            "release_name": newer_tag,
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
             "repo": "lucmuss/nanobot-webgui",
@@ -1717,11 +1727,11 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     monkeypatch.setattr(
         "nanobot.gui.app._fetch_latest_release_info",
         lambda _repo: {
-            "tag_name": "v0.3.4",
-            "latest_version": "0.3.4",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
-            "release_name": "v0.3.4",
+            "tag_name": newer_tag,
+            "latest_version": newer_version,
+            "release_url": f"https://github.com/lucmuss/nanobot-webgui/releases/tag/{newer_tag}",
+            "release_notes_url": f"https://github.com/lucmuss/nanobot-webgui/releases/tag/{newer_tag}",
+            "release_name": newer_tag,
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         },
@@ -1737,5 +1747,5 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     update_response = client.post("/actions/update")
     assert update_response.status_code == 202
     assert "Updating GUI" in update_response.text
-    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.3.4")]
+    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", newer_version)]
     assert app.state.config_service.get_update_status()["updating"] is True
