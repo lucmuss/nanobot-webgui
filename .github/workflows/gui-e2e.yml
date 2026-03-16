@@ -58,7 +58,7 @@ jobs:
       - name: Compile GUI modules
         run: python -m compileall nanobot/gui nanobot/cli tests
 
-      - name: Run GUI backend integration tests
+      - name: Run full Python test suite
         run: python -m pytest tests -q
 
       - name: Build release artifacts
@@ -130,7 +130,7 @@ jobs:
       - name: Compile GUI modules
         run: python -m compileall nanobot/gui nanobot/cli tests
 
-      - name: Run GUI backend integration tests
+      - name: Run full Python test suite
         run: python -m pytest tests -q
 
       - name: Build release artifacts

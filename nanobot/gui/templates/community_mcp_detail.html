@@ -19,7 +19,7 @@
         <a class="button secondary" href="/mcp?q={{ community_item.repo_url }}">Open Local Install Flow</a>
       </div>
     </div>
-    <div class="page-meta-bar">
+    <div class="page-meta-bar community-meta-bar">
       {% for item in community_meta %}
         <span class="meta-chip {{ item.tone }}"
           {% if item.label == "Community reliability" %}title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully."{% endif %}
@@ -60,7 +60,7 @@
         <div class="meta-pair"><strong>30d runs</strong><span>{{ community_item.get("install_confidence", {}).get("runs_30d", 0) }}</span></div>
         <div class="meta-pair"><strong>30d instances</strong><span>{{ community_item.get("install_confidence", {}).get("instances_30d", 0) }}</span></div>
         <div class="meta-pair"><strong>Difficulty</strong><span>{{ community_item.get("difficulty", {}).get("label", "Unknown") }}</span></div>
-        <div class="meta-pair"><strong>Best used with</strong><span>{{ community_item.get("best_for", [])|join(", ") if community_item.get("best_for", []) else "General workflows" }}</span></div>
+        <div class="meta-pair full-span"><strong>Best used with</strong><span>{{ community_item.get("best_for", [])|join(", ") if community_item.get("best_for", []) else "General workflows" }}</span></div>
         <div class="meta-pair"><strong>Runs in 24h</strong><span>{{ community_item.get("usage_trend", {}).get("runs_24h", 0) }}</span></div>
         <div class="meta-pair"><strong>Runs in 7d</strong><span>{{ community_item.get("usage_trend", {}).get("runs_7d", 0) }}</span></div>
           <div class="meta-pair"><strong>Config consensus</strong><span>{{ (community_item.get("trust_score", {}).get("config_consensus", 0) * 100)|round(1) }}%</span></div>
@@ -83,7 +83,7 @@
         </div>
       </div>
       {% if community_item.recommended_config %}
-          <div class="insight-panel community">
+        <div class="insight-panel community">
           <h4>Community recommendation</h4>
           <div class="details-grid compact community-recommended-grid" style="margin-top: 12px;">
             <div class="meta-pair"><strong>Transport</strong><span>{{ community_item.recommended_config.transport }}</span></div>
@@ -98,7 +98,7 @@
         <p class="muted">No recommended config is available yet.</p>
       {% endif %}
 
-      <div class="insight-panel local" style="margin-top: 16px;">
+      <div class="insight-panel local install-preview-panel" style="margin-top: 16px;">
         <h4>Install preview</h4>
         <div class="meta-list">
           <div><strong>Dependencies</strong><div class="muted">{{ community_item.get("dependencies", [])|join(" · ") if community_item.get("dependencies", []) else "No dependency hint" }}</div></div>

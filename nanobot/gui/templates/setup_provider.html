@@ -70,10 +70,14 @@
         <p class="muted">For the first test run, OpenRouter is usually the fastest path. Use `custom` when you want to point Nanobot at your own OpenAI-compatible endpoint.</p>
       </div>
       <div class="card-list compact">
-        <article class="card compact-card guidance-card">
+        <a class="card compact-card guidance-card guidance-card-link" href="https://openrouter.ai/" target="_blank" rel="noreferrer noopener" data-testid="provider-guidance-openrouter">
           <header><strong>OpenRouter</strong></header>
           <p class="muted">Quickest setup with one API key and access to many models.</p>
-        </article>
+        </a>
+        <a class="card compact-card guidance-card guidance-card-link" href="https://ollama.com/" target="_blank" rel="noreferrer noopener" data-testid="provider-guidance-ollama">
+          <header><strong>Ollama</strong></header>
+          <p class="muted">Best path for self-hosted local models when you want the provider to stay on your own machine.</p>
+        </a>
         <article class="card compact-card guidance-card">
           <header><strong>Custom</strong></header>
           <p class="muted">Direct connection to local or self-hosted OpenAI-compatible APIs.</p>

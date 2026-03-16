@@ -97,6 +97,43 @@
     });
   }
 
+  function setChatComposerBusy(form, busy) {
+    if (!form) {
+      return;
+    }
+    const uploadTrigger = form.querySelector('[data-testid="chat-upload-trigger"]');
+    form.classList.toggle('is-busy', busy);
+    if (uploadTrigger) {
+      uploadTrigger.classList.toggle('is-disabled', busy);
+      uploadTrigger.setAttribute('aria-disabled', busy ? 'true' : 'false');
+    }
+  }
+
+  function initChatComposerState() {
+    document.querySelectorAll('form[data-chat-async="message"]').forEach((form) => {
+      if (form.dataset.chatBusyReady === 'true') {
+        return;
+      }
+      form.dataset.chatBusyReady = 'true';
+
+      form.addEventListener('submit', function () {
+        setChatComposerBusy(form, true);
+      });
+
+      form.addEventListener('htmx:afterRequest', function () {
+        setChatComposerBusy(form, false);
+      });
+
+      form.addEventListener('htmx:sendError', function () {
+        setChatComposerBusy(form, false);
+      });
+
+      form.addEventListener('htmx:responseError', function () {
+        setChatComposerBusy(form, false);
+      });
+    });
+  }
+
   function initCopyButtons() {
     document.querySelectorAll('[data-copy-text]').forEach((button) => {
       if (button.dataset.copyReady === 'true') {
@@ -129,12 +166,14 @@
     initMobileSidebar();
     initSectionTabs();
     initAsyncFormFeedback();
+    initChatComposerState();
     initCopyButtons();
   });
 
   document.body.addEventListener('htmx:afterSwap', function () {
     initSectionTabs();
     initAsyncFormFeedback();
+    initChatComposerState();
     initCopyButtons();
   });
 })();

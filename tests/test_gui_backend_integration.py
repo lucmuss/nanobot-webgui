@@ -330,6 +330,89 @@ def test_dashboard_exposes_operational_shortcuts_after_setup(tmp_path: Path):
     assert "Change Provider" in response.text
     assert "installed /" not in response.text
     assert "Run Health Check" in response.text
+    assert 'data-testid="dashboard-setup-progress-provider"' in response.text
+    assert 'href="/setup/provider"' in response.text
+
+
+def test_provider_setup_surfaces_clickable_guidance_links(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.get("/setup/provider")
+
+    assert response.status_code == 200
+    assert 'data-testid="provider-guidance-openrouter"' in response.text
+    assert 'href="https://openrouter.ai/"' in response.text
+    assert 'data-testid="provider-guidance-ollama"' in response.text
+    assert 'href="https://ollama.com/"' in response.text
+
+
+def test_dashboard_registry_titles_link_to_local_mcp_details(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    config = app.state.config_service.load()
+    config.tools.mcp_servers["echo"] = MCPServerConfig(type="stdio", command="echo", args=["ok"])
+    app.state.config_service.save(config)
+    app.state.config_service.set_mcp_record(
+        "echo",
+        {
+            "server_name": "echo",
+            "status": "active",
+            "status_label": "Active",
+            "enabled": True,
+            "type": "stdio",
+            "summary": "Echo test MCP",
+            "tool_names": ["echo_message"],
+        },
+    )
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert 'data-testid="dashboard-mcp-title-link-echo"' in response.text
+    assert 'href="/mcp/echo"' in response.text
+
+
+def test_dashboard_hides_setup_progress_when_everything_is_ready(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    config = app.state.config_service.load()
+    config.tools.mcp_servers["echo"] = MCPServerConfig(type="stdio", command="echo", args=["ok"])
+    app.state.config_service.save(config)
+    app.state.config_service.set_mcp_record(
+        "echo",
+        {
+            "server_name": "echo",
+            "status": "active",
+            "status_label": "Active",
+            "enabled": True,
+            "type": "stdio",
+            "tool_names": ["echo_message"],
+        },
+    )
+
+    app.state.config_service.set_agent_health(
+        {
+            "ok": True,
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "latency_ms": 12,
+        }
+    )
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert "Setup Progress" not in response.text
+    assert 'data-testid="dashboard-setup-progress"' not in response.text
+    assert "System Health" in response.text
 
 
 def test_dashboard_shows_usage_24h_metric_after_usage_events(tmp_path: Path):

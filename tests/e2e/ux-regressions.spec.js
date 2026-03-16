@@ -2,7 +2,7 @@ const path = require('path');
 
 const { test, expect } = require('@playwright/test');
 
-const { bootstrapAdmin, resetE2E } = require('./helpers/gui');
+const { bootstrapAdmin, completeSetup, resetE2E } = require('./helpers/gui');
 const { paths, readText } = require('./helpers/runtime');
 
 test.describe.configure({ mode: 'serial' });
@@ -101,4 +101,42 @@ test('mobile viewport keeps dashboard, chat, and setup pages usable', async ({ p
   await expect(page.getByRole('button', { name: /Turn Safe Mode/i })).toBeVisible();
   await page.goto('/chat');
   await expect(page).toHaveURL(/\/setup\/provider/);
+});
+
+test('mobile memory tabs do not force horizontal page scrolling', async ({ page, request }) => {
+  await resetE2E(request);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await bootstrapAdmin(page);
+  await completeSetup(page);
+
+  await page.goto('/memory');
+  await expect(page.getByTestId('memory-mobile-tabs')).toBeVisible();
+
+  const horizontalScrollOffset = await page.evaluate(() => {
+    window.scrollTo({ left: 120, top: 0 });
+    return window.scrollX;
+  });
+
+  expect(horizontalScrollOffset).toBe(0);
+});
+
+test('mobile dashboard and community detail stay within the viewport width', async ({ page, request }) => {
+  await resetE2E(request);
+  await page.setViewportSize({ width: 412, height: 915 });
+  await bootstrapAdmin(page);
+  await completeSetup(page);
+
+  await page.goto('/dashboard');
+  const dashboardScrollOffset = await page.evaluate(() => {
+    window.scrollTo({ left: 160, top: 0 });
+    return window.scrollX;
+  });
+  expect(dashboardScrollOffset).toBe(0);
+
+  await page.goto('/community/mcp/context7');
+  const communityScrollOffset = await page.evaluate(() => {
+    window.scrollTo({ left: 160, top: 0 });
+    return window.scrollX;
+  });
+  expect(communityScrollOffset).toBe(0);
 });

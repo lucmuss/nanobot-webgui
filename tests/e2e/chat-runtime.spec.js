@@ -34,8 +34,19 @@ test('chat shows active MCPs, compact tool activity, file upload, and clear hist
   await expect(page.getByTestId('chat-active-mcp-servers-card')).toContainText('echo');
   await expect(page.getByTestId('chat-active-mcp-tools-card')).toContainText('echo_message');
 
+  let delayedSend = true;
+  await page.route('**/chat/send', async (route) => {
+    if (delayedSend) {
+      delayedSend = false;
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+    await route.continue();
+  });
+
   await page.getByTestId('chat-message').fill('Use the active MCP tool for this request.');
-  await page.getByTestId('chat-send').click();
+  const sendPromise = page.getByTestId('chat-send').click();
+  await expect(page.getByTestId('chat-upload-trigger')).toHaveClass(/is-disabled/);
+  await sendPromise;
   await expect(page.getByTestId('flash-message')).toContainText('Response received.');
   await expect(page.getByTestId('chat-history')).toContainText('Used tool');
   await expect(page.getByTestId('chat-history')).toContainText('echo_message');

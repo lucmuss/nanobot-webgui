@@ -3,7 +3,7 @@
 {% if error %}<div class="error" data-testid="page-error">{{ error }}</div>{% endif %}
 
   <div class="page-stack">
-    <section class="page-header">
+    <section class="page-header" data-testid="dashboard-system-info">
       <div class="page-header-main">
         <div class="page-header-copy">
           <p class="eyebrow">Operations</p>
@@ -19,41 +19,8 @@
         <span class="meta-chip"><strong>Workspace</strong>{{ workspace_path }}</span>
         <span class="meta-chip"><strong>Config</strong>{{ config_path }}</span>
         <span class="meta-chip"><strong>Project</strong>HKUDS/nanobot</span>
-      </div>
-    </section>
-
-    <section class="system-info" data-testid="dashboard-system-info">
-      <div class="split-header">
-        <div>
-          <p class="eyebrow">System Info</p>
-          <h3>Instance Overview</h3>
-        </div>
-        <span class="pill status-pill {% if setup_complete %}good{% else %}muted{% endif %}">
-          {{ "Setup complete" if setup_complete else "Setup in progress" }}
-        </span>
-      </div>
-      <div class="system-info-grid">
-        <div>
-          <strong>Workspace</strong>
-          <span class="mono">{{ workspace_path }}</span>
-        </div>
-        <div>
-          <strong>Config File</strong>
-          <span class="mono">{{ config_path }}</span>
-        </div>
-        <div>
-          <strong>Project</strong>
-          <a href="{{ upstream_repo_url }}" target="_blank" rel="noreferrer">HKUDS/nanobot</a>
-        </div>
-        <div>
-          <strong>WebGUI</strong>
-          <a href="{{ project_repo_url }}" target="_blank" rel="noreferrer">nanobot-webgui</a>
-        </div>
         {% if public_url %}
-          <div>
-            <strong>Instance URL</strong>
-            <a href="{{ public_url }}" target="_blank" rel="noreferrer">{{ public_url }}</a>
-          </div>
+          <span class="meta-chip"><strong>Instance URL</strong>{{ public_url }}</span>
         {% endif %}
       </div>
     </section>
@@ -80,7 +47,9 @@
       {% endfor %}
     </section>
 
-    <div class="panel-grid two">
+    {% set pending_setup_items = setup_progress | rejectattr('done') | list %}
+    <div class="panel-grid two" {% if not pending_setup_items %}style="grid-template-columns: 1fr;"{% endif %}>
+      {% if pending_setup_items %}
       <section class="panel">
         <div class="split-header">
         <div>
@@ -91,13 +60,17 @@
       </div>
         <div class="progress-list compact" data-testid="dashboard-setup-progress">
           {% for item in setup_progress %}
-            <article class="progress-item {% if item.done %}done{% else %}pending{% endif %}">
+            <a
+              class="progress-item progress-link setup-progress-item {% if item.done %}done{% else %}pending attention{% endif %}"
+              href="{{ item.href }}"
+              data-testid="dashboard-setup-progress-{{ item.key }}"
+            >
               <div>
                 <strong class="metric-heading">{{ item.label }}</strong>
                 <p class="muted">{{ item.detail }}</p>
               </div>
               <span class="state status-callout">{{ "Done" if item.done else "Pending" }}</span>
-            </article>
+            </a>
           {% endfor %}
         </div>
         <div class="highlight-panel" style="margin-top: 16px;" data-testid="dashboard-next-step">
@@ -106,6 +79,7 @@
           <a class="button secondary" href="{{ next_step.href }}" data-testid="dashboard-next-step-action">{{ next_step.action_label }}</a>
         </div>
       </section>
+      {% endif %}
 
       <section class="panel">
         <div class="split-header">
@@ -176,7 +150,7 @@
             <div class="divider-list" style="margin-top: 12px;">
               {% for item in community_recommendations[:2] %}
                 <div>
-                  <strong>{{ item.name }}</strong>
+                  <a class="list-row-title-link" href="/community/mcp/{{ item.slug }}" data-testid="dashboard-community-link-{{ item.slug }}"><strong>{{ item.name }}</strong></a>
                   <p class="muted">{{ item.reason }}</p>
                   <div class="actions" style="margin-top: 8px;">
                     <a class="button secondary" href="/community/mcp/{{ item.slug }}">View</a>
@@ -233,9 +207,9 @@
         </div>
         <div class="card-list">
           {% for server in installed_servers %}
-            <article class="card compact-card" data-testid="dashboard-mcp-card-{{ server.name }}">
+            <article class="card compact-card mcp-server-card" data-testid="dashboard-mcp-card-{{ server.name }}">
               <header>
-                <strong>{{ server.name }}</strong>
+                <a class="list-row-title-link" href="/mcp/{{ server.name }}" data-testid="dashboard-mcp-title-link-{{ server.name }}"><strong>{{ server.name }}</strong></a>
                 <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
                   {{ server.effective_status }}
                 </span>
@@ -307,13 +281,15 @@
           <p class="eyebrow">Activity Feed</p>
           <h3>Recent activity</h3>
         </div>
-        <div class="activity-feed">
+        <div class="activity-feed compact">
           {% for item in activity_feed %}
-            <div>
-              <strong>{{ item.title }}</strong>
-              <p class="muted">{{ item.at }}</p>
-              <p class="muted">{{ item.detail }}</p>
-            </div>
+            <article class="activity-feed-item">
+              <div class="activity-feed-heading">
+                <strong>{{ item.title }}</strong>
+                {% if item.at %}<span class="muted">{{ item.at }}</span>{% endif %}
+              </div>
+              {% if item.detail %}<p class="muted">{{ item.detail }}</p>{% endif %}
+            </article>
           {% else %}
             <p class="muted">No recent activity has been captured yet.</p>
           {% endfor %}

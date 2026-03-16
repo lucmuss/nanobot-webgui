@@ -1,28 +1,45 @@
 # WebGUI Deployment Guide
 
-Current release target: `0.3.3`
+Current release target: `0.3.4`
 
-This guide is for running the `nanobot` WebGUI as a stable self-hosted service.
+This guide is the operator-facing companion to the main [README](./README.md). It explains how to run `nanobot-webgui` reliably in standalone mode, attached-to-existing-install mode, and Docker deployments.
 
-## What This GUI Is
+## 1. What the WebGUI Manages
 
-This project can be used in two ways:
+The WebGUI is a browser shell around the normal Nanobot runtime.
+
+It manages:
+
+- admin bootstrap and login
+- provider, channel, and agent setup
+- MCP inspect, install, test, enable, disable, and remove
+- chat, uploads, logs, and validation
+- memory documents such as `SOUL.md`, `USER.md`, `AGENTS.md`, and `TOOLS.md`
+- optional Community Hub browsing and publishing flows
+
+It does not replace the upstream Nanobot runtime. It operates it.
+
+## 2. Two Supported Deployment Modes
 
 ### Standalone mode
 
-You install `nanobot-webgui`, run `nanobot onboard`, then use the GUI as the main setup and operations surface.
+Use this if you want a fresh install:
+
+```bash
+pip install -e .
+nanobot onboard
+nanobot gui --host 0.0.0.0 --port 18791
+```
 
 ### Existing-install mode
 
-You already have a Nanobot installation and want the GUI to manage that same config and workspace.
-
-Example:
+Use this if you already have a Nanobot workspace and config:
 
 ```bash
 nanobot gui --config /path/to/config.json --workspace /path/to/workspace
 ```
 
-In this mode, the GUI reads and writes the selected Nanobot config, and also creates GUI-specific files next to it:
+The GUI reads and writes the selected Nanobot config and stores GUI-specific state nearby:
 
 - `gui.sqlite3`
 - `gui-state.json`
@@ -30,26 +47,29 @@ In this mode, the GUI reads and writes the selected Nanobot config, and also cre
 - `media/`
 - `logs/`
 
-Make a backup first if you connect the GUI to a production Nanobot instance.
+If you point the GUI at a production instance, make a backup first.
 
-## Architecture
+## 3. Minimal Local Startup
 
-Recommended shape:
+```bash
+git clone https://github.com/lucmuss/nanobot-webgui.git
+cd nanobot-webgui
+pip install -e .[dev]
+nanobot onboard
+nanobot gui --host 0.0.0.0 --port 18791
+```
 
-1. `nanobot-gateway` for the headless runtime
-2. `nanobot-gui` for browser-based admin
-3. persistent `~/.nanobot` volume
-4. HTTPS reverse proxy in front of the GUI
+Open:
 
-The GUI can run without the gateway, but the cleanest production setup keeps both services available.
+- <http://127.0.0.1:18791/>
 
-## Docker Compose
+## 4. Docker Compose
 
-The repository ships with a basic compose file that exposes:
+The repository ships with a compose setup for:
 
-- `18790` for `nanobot-gateway`
-- `18791` for `nanobot-gui`
-- `18811` for `nanobot-community-hub`
+- `nanobot-gateway`
+- `nanobot-gui`
+- optional `nanobot-community-hub`
 
 Start:
 
@@ -68,107 +88,91 @@ Logs:
 ```bash
 docker compose logs -f nanobot-gui
 docker compose logs -f nanobot-gateway
-docker compose logs -f nanobot-community-hub
 ```
 
-## Community Hub Integration
+Default ports:
 
-The GUI can now consume real community data from a separate FastAPI/Jinja2/HTMX service called `nanobot-community-hub`.
+- `18790` gateway
+- `18791` WebGUI
+- `18811` Community Hub
 
-In the current `ai-stack` deployment, the intended wiring is:
+## 5. Persistent Data
 
-- GUI internal community API: `http://nanobot-community-hub:18811/api/v1`
-- GUI public URL: `https://your-nanobot-gui.example.com`
-- Hub public URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
-- Hub database: shared PostgreSQL from `apps-stack`, reachable as `postgres:5432` on `apps-shared`
+Back up these regularly:
 
-The GUI settings page includes three community toggles:
+- `~/.nanobot/config.json`
+- `~/.nanobot/gui.sqlite3`
+- `~/.nanobot/gui-session.secret`
+- `~/.nanobot/gui-state.json`
+- `~/.nanobot/workspace/`
+- `~/.nanobot/logs/`
+- `~/.nanobot/media/`
 
-- `Receive community recommendations`
-- `Show community marketplace stats`
-- `Share anonymous MCP runtime metrics`
-- `Allow this GUI to publish MCP repository entries to the community hub`
+If you use Docker, mount the persistent state explicitly, for example:
 
-The main community-backed user flows are now:
+- `~/.nanobot:/root/.nanobot`
 
-- `Community -> Discover MCP -> Install from Community`
-- `Community -> MCP Stacks -> Import Stack`
-- `Community -> Showcase -> Import Setup`
-- local MCP detail -> `Publish to Community Hub`
+## 6. HTTPS and Session Security
 
-Recommended config from the Hub is shown in:
+For public or semi-public use:
 
-- community MCP detail pages
-- local MCP detail pages when the local repository matches a Hub entry
+1. Put the GUI behind HTTPS
+2. Start the GUI with secure cookies
+3. Protect access with at least one more outer control such as VPN, reverse-proxy auth, or IP restriction
 
-### Community write authentication
-
-Read-only community browsing only needs:
-
-- `NANOBOT_GUI_COMMUNITY_API_URL`
-- `NANOBOT_GUI_COMMUNITY_PUBLIC_URL`
-
-Publishing from the GUI needs an additional trusted service token:
-
-- `NANOBOT_GUI_COMMUNITY_API_TOKEN`
-
-That token must match the Hub-side:
-
-- `NANOBOT_HUB_API_TOKEN`
-
-The Hub itself also supports browser admin authentication:
-
-- first-run bootstrap: `/setup/admin`
-- later login: `/login`
-- moderation and controlled write flows: `/admin`
-
-With that publishing toggle enabled, users can:
-
-- submit a GitHub MCP repository directly from `Community -> Discover MCP`
-- publish a locally installed MCP from its MCP detail page
-
-Telemetry is intentionally limited to technical MCP runtime fields such as:
-
-- MCP slug
-- success / error code
-- transport
-- timeout bucket
-- retries
-- Nanobot version
-
-It must not send prompts, local paths, API keys, or chat contents.
-
-### Cloudflare Tunnel Mapping
-
-If you use the existing `cloudflared` service in `ai-stack`, create these public hostname mappings in the Cloudflare dashboard:
-
-- `your-nanobot-gui.example.com` -> `http://host.docker.internal:18791`
-- `nanobot-community-hub.kolibri-kollektiv.eu` -> `http://host.docker.internal:18811`
-
-That is enough for this stack because the services already publish fixed local ports and the Cloudflare tunnel container can reach `host.docker.internal`.
-
-Important:
-
-- Docker Compose does not automatically keep the GUI on the newest version
-- if you use `build:`, you still need `git pull` and a rebuild
-- if you use published images, you still need `docker compose pull` and restart/recreate
-
-## Reverse Proxy
-
-Put the GUI behind HTTPS. The important part is that the browser reaches the GUI over TLS, then start the GUI with secure cookies enabled:
+Example:
 
 ```bash
 nanobot gui --host 0.0.0.0 --port 18791 --secure-cookies
 ```
 
-## GUI Update Banner
+## 7. Community Hub Wiring
 
-The GUI can check GitHub for a newer release at login and at most once per day. If a newer version exists, a banner appears with:
+The WebGUI can use `nanobot-community-hub` for:
 
-- `View release notes`
-- `Update now`
+- `Discover MCP`
+- `Search MCP`
+- MCP detail pages with community signals
+- stack import flows
+- showcase import flows
+- optional MCP publishing
+- anonymous runtime telemetry
 
-`Update now` does not self-mutate the container. It only runs an explicitly configured command for your deployment.
+Typical environment split:
+
+- GUI repo: `/srv/projects/agents/nanobot-dev-src`
+- Hub repo: `/srv/projects/services/nanobot-hub`
+- compose stack: `/srv/docker/ai-stack`
+
+Typical URLs:
+
+- internal API URL: `http://nanobot-community-hub:18811/api/v1`
+- GUI public URL: `https://your-nanobot-gui.example.com`
+- Hub public URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
+
+Required GUI-side settings:
+
+- `NANOBOT_GUI_COMMUNITY_API_URL`
+- `NANOBOT_GUI_COMMUNITY_PUBLIC_URL`
+
+Publishing also needs:
+
+- `NANOBOT_GUI_COMMUNITY_API_TOKEN`
+
+That must match the Hub-side:
+
+- `NANOBOT_HUB_API_TOKEN`
+
+## 8. Cloudflare Tunnel Mapping
+
+If you use `cloudflared`, a typical mapping is:
+
+- `your-nanobot-gui.example.com` -> `http://host.docker.internal:18791`
+- `nanobot-community-hub.kolibri-kollektiv.eu` -> `http://host.docker.internal:18811`
+
+## 9. Update Banner and Controlled Updates
+
+The GUI can check GitHub releases and show a banner when a new version is available.
 
 Example:
 
@@ -182,16 +186,12 @@ nanobot gui \
   --update-command "/usr/local/bin/nanobot-webgui-update.sh"
 ```
 
-Typical host script responsibilities:
+Important:
 
-- `git pull && docker compose up -d --build`
-- or `docker compose pull && docker compose up -d`
+- the GUI does not self-mutate inside the container
+- `Update now` only runs the command you explicitly configure
 
-Do not mount broad host-control interfaces into the GUI unless you intentionally accept that trust boundary.
-
-### Typical update script
-
-If you deploy from source:
+Typical host update command:
 
 ```bash
 #!/usr/bin/env bash
@@ -202,21 +202,11 @@ cd /srv/docker/ai-stack
 docker compose up -d --build nanobot-gui nanobot-gateway
 ```
 
-If you deploy from published images:
+## 10. MCP Repair Worker
 
-```bash
-#!/usr/bin/env bash
-set -e
-cd /srv/docker/ai-stack
-docker compose pull nanobot-gui nanobot-gateway
-docker compose up -d nanobot-gui nanobot-gateway
-```
+The GUI can offload MCP runtime repair to a bounded worker command.
 
-## MCP Repair Worker
-
-The GUI can now offload MCP runtime repairs to an explicit worker command instead of trying to mutate the runtime directly inside the web process.
-
-Recommended pattern:
+Example:
 
 ```bash
 nanobot gui \
@@ -226,75 +216,90 @@ nanobot gui \
   --repair-command "docker compose run --rm nanobot-repair-worker nanobot repair-worker"
 ```
 
-What the GUI does:
+Supported safe repair recipes include:
 
-- detects missing runtimes from the MCP install/test metadata
-- suggests supported recipes like `install_node`, `install_uv`, or `install_python_build_tools`
-- starts the configured repair worker
-- keeps the MCP disabled until you retest it
+- `install_node`
+- `install_uv`
+- `install_python_build_tools`
+- `install_docker_cli`
 
-Recommended operator model:
+There is also a dangerous opt-in in Settings:
 
-- keep the GUI process simple and stable
-- run repairs in a separate worker or sidecar command
-- only enable MCPs after repair + test pass
+- `Enable Unrestricted Agent + Shell for MCP repair fallback`
 
-Dangerous mode:
+Leave that disabled unless you intentionally accept that trust boundary.
 
-- The Settings page contains `Enable Unrestricted Agent + Shell for MCP repair fallback`.
-- When enabled, the AI repair planner may return `unrestricted_agent_shell` and a shell command.
-- That path is intentionally dangerous and should only be used in trusted self-hosted deployments with a clear sandbox boundary.
+## 11. Operator Runbook
 
-If you do not explicitly want this, leave it off.
-
-## Persistent Data
-
-Back up these paths regularly:
-
-- `~/.nanobot/config.json`
-- `~/.nanobot/gui.sqlite3`
-- `~/.nanobot/gui-session.secret`
-- `~/.nanobot/gui-state.json`
-- `~/.nanobot/workspace/`
-- `~/.nanobot/logs/`
-- `~/.nanobot/media/`
-
-## First Production Bring-Up
-
-1. Start the GUI.
-2. Open the WebGUI.
-3. Create the single admin account.
-4. Configure provider credentials.
-5. Run `Validate Setup`.
-6. Install and test at least one MCP.
-7. Enable only the MCPs that passed testing.
-8. Confirm `Chat` works before exposing the service more broadly.
-
-If you are attaching the GUI to an existing Nanobot install, add:
-
-9. Verify that the chosen `config.json` and workspace are the correct ones before saving changes.
-
-## Recommended Operational Rules
-
-- Keep `Safe Mode` enabled for first-time operators.
-- Use the built-in validation page before debugging by hand.
-- Prefer MCP installation through the GUI so metadata and runtime status stay in sync.
-- Do not expose the GUI publicly without HTTPS and strong credentials.
-- Keep GUI and gateway on a persistent volume so sessions and MCP installs survive restarts.
-
-## Publish-Ready Notes
-
-Before release, verify:
+### Health check
 
 ```bash
-python3 -m compileall nanobot/gui
-pytest tests/test_commands.py tests/test_config_paths.py tests/test_gui_config_service.py
-docker compose up -d --build nanobot-gateway nanobot-gui
 curl http://127.0.0.1:18791/health
 ```
 
-## Upstream Reference
+### Restart GUI container
 
-This WebGUI layer is based on the official `nanobot` project:
+```bash
+docker compose restart nanobot-gui
+```
 
-- <https://github.com/HKUDS/nanobot>
+### Rebuild GUI after pulling changes
+
+```bash
+docker compose up -d --build nanobot-gui
+```
+
+### Run the full Python test suite
+
+```bash
+python3 -m pytest tests -q
+```
+
+### Run the browser smoke suite
+
+```bash
+npm run test:e2e:critical
+```
+
+## 12. Troubleshooting
+
+### The page loads but onboarding never completes
+
+Check:
+
+- provider API key exists
+- model is set
+- the config file is writable
+- the GUI is pointing at the intended workspace
+
+### MCP install worked but the MCP stays unhealthy
+
+Check:
+
+- missing environment variables
+- missing runtimes such as `node`, `uv`, or `python`
+- endpoint or command copied incorrectly
+- `Run MCP Test` output in the GUI registry
+
+### Community pages are empty
+
+Check:
+
+- Community Hub URL
+- GUI-to-Hub token configuration if write actions are expected
+- Hub service health and API reachability
+
+### Browser login behaves strangely behind a reverse proxy
+
+Check:
+
+- HTTPS is actually terminating before the browser session
+- `--secure-cookies` matches your deployment mode
+- proxy preserves the original host and scheme
+
+## 13. Related Documents
+
+- [README.md](./README.md)
+- [GUI_TESTING.md](./GUI_TESTING.md)
+- [SECURITY.md](./SECURITY.md)
+- [COMMUNICATION.md](./COMMUNICATION.md)
