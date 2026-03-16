@@ -2,9 +2,12 @@ const { chromium } = require('@playwright/test');
 
 async function main() {
   const base = process.env.NANOBOT_GUI_BASE_URL || 'http://127.0.0.1:18795';
-  const outputDir = process.env.NANOBOT_GUI_SCREENSHOT_DIR || 'output/gui-screenshots';
+  const outputRoot = process.env.NANOBOT_GUI_SCREENSHOT_DIR || 'output/gui-screenshots';
+  const outputDir = `${outputRoot}/desktop`;
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1080 } });
+
+  require('fs').mkdirSync(outputDir, { recursive: true });
 
   await page.goto(`${base}/setup/admin`);
   await page.getByTestId('admin-setup-username').fill('gui-admin');

@@ -3,7 +3,8 @@ const path = require('path');
 const { test, expect } = require('@playwright/test');
 const { bootstrapAndCompleteSetup } = require('./helpers/gui');
 
-const outputDir = path.join(process.cwd(), 'output', 'gui-screenshots');
+const outputRoot = path.join(process.cwd(), 'output', 'gui-screenshots');
+const outputDir = path.join(outputRoot, 'desktop');
 
 async function capture(page, route, fileName, readyTestId) {
   await page.goto(route);
