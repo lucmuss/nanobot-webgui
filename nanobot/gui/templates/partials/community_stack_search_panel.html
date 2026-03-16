@@ -1,0 +1,11 @@
+<section class="panel" data-testid="community-search-stacks-panel">
+  <form method="get" action="{{ search_action or '/community/search/stacks' }}" class="form-columns" data-testid="community-search-stacks-form">
+    <label>
+      Search
+      <input type="text" name="q" value="{{ query }}" placeholder="Search stack title or use case" data-testid="community-search-stacks-query">
+    </label>
+    <div class="actions" style="align-self: end;">
+      <button type="submit" data-testid="community-search-stacks-submit">Search Stacks</button>
+    </div>
+  </form>
+</section>

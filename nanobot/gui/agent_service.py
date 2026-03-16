@@ -143,7 +143,14 @@ class GUIAgentService:
                 name = str(function.get("name", "")).strip()
                 if not name:
                     continue
-                activity.append({"name": name, "timestamp": timestamp})
+                display_name = name.split(".")[-1].split("__")[-1].replace("-", "_")
+                activity.append(
+                    {
+                        "name": display_name,
+                        "raw_name": name,
+                        "timestamp": timestamp,
+                    }
+                )
                 if len(activity) >= limit:
                     return activity
         return activity

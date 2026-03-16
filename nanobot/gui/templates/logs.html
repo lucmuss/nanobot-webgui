@@ -7,19 +7,36 @@
         <h3 style="margin: 0;">GUI Logs</h3>
         <p class="muted">Tail of the rotating action log for this instance, filtered into a more readable operator view.</p>
       </div>
-      <a class="button secondary" href="/logs?level={{ log_level }}" data-testid="logs-refresh">Refresh</a>
+      <a class="button secondary" href="/logs?level={{ log_level }}{% if log_selected_mcp %}&mcp={{ log_selected_mcp }}{% endif %}" data-testid="logs-refresh">Refresh</a>
     </div>
     <div class="subtle-panel" style="margin-bottom: 16px;">
       <strong>Log file</strong>
       <p class="muted">{{ log_file }}</p>
     </div>
 
-    <div class="quick-actions" style="margin-bottom: 16px;" data-testid="logs-filters">
-      <a class="button secondary" href="/logs?level=all" data-testid="logs-filter-all">All</a>
-      <a class="button secondary" href="/logs?level=error" data-testid="logs-filter-error">Errors</a>
-      <a class="button secondary" href="/logs?level=warning" data-testid="logs-filter-warning">Warnings</a>
-      <a class="button secondary" href="/logs?level=info" data-testid="logs-filter-info">Info</a>
-    </div>
+    <form method="get" action="/logs" class="form-columns" style="margin-bottom: 16px;" data-testid="logs-filters">
+      <label>
+        Level
+        <select name="level" data-testid="logs-level-select">
+          <option value="all" {% if log_level == "all" %}selected{% endif %}>All</option>
+          <option value="error" {% if log_level == "error" %}selected{% endif %}>Errors</option>
+          <option value="warning" {% if log_level == "warning" %}selected{% endif %}>Warnings</option>
+          <option value="info" {% if log_level == "info" %}selected{% endif %}>Info</option>
+        </select>
+      </label>
+      <label>
+        MCP Server
+        <select name="mcp" data-testid="logs-mcp-select">
+          <option value="">All MCP servers</option>
+          {% for item in log_mcp_options %}
+            <option value="{{ item }}" {% if log_selected_mcp == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="actions" style="align-self: end;">
+        <button type="submit" data-testid="logs-apply-filter">Apply Filters</button>
+      </div>
+    </form>
 
     <div class="card-list">
       {% for entry in log_entries %}

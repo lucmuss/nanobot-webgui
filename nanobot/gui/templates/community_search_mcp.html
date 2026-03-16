@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block body %}
+{% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
+
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">Community Marketplace</p>
+        <h3>Search MCP</h3>
+        <p class="muted">Search the MCP registry, compare community trust signals, and jump into the local install flow with context.</p>
+      </div>
+      <div class="page-header-actions">
+        <a class="button secondary" href="/community/discover">Browse recommendations</a>
+        <a class="button secondary" href="/community/publish/mcp">Publish MCP</a>
+      </div>
+    </div>
+  </section>
+
+  {% include "partials/community_mcp_search_panel.html" %}
+
+  {% if community_overview %}
+    <section class="compact-kpi-grid" style="margin-top: 22px;">
+      <article class="compact-kpi">
+        <span class="muted">Registry</span>
+        <strong>{{ community_overview.registry_count }}</strong>
+        <small>{{ community_overview.verified_count }} verified</small>
+      </article>
+      <article class="compact-kpi">
+        <span class="muted">Active Instances</span>
+        <strong>{{ community_overview.active_instances }}</strong>
+        <small>observed in last 30 days</small>
+      </article>
+      <article class="compact-kpi">
+        <span class="muted">Runs Today</span>
+        <strong>{{ community_overview.runs_today }}</strong>
+        <small>telemetry events</small>
+      </article>
+      <article class="compact-kpi">
+        <span class="muted">Top Category</span>
+        <strong>{{ community_overview.top_category or "No live telemetry" }}</strong>
+        <small>{{ community_overview.unique_categories or 0 }} telemetry categories</small>
+      </article>
+    </section>
+  {% endif %}
+
+  <section style="margin-top: 22px;">
+    {% include "partials/community_mcp_results.html" %}
+  </section>
+{% endblock %}

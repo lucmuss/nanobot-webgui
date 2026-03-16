@@ -63,7 +63,9 @@
       {% for item in community_overview.trending_mcps %}
         <div class="list-row">
           <div class="list-row-copy">
-            <strong class="list-row-title">{{ loop.index }}. {{ item.name }}</strong>
+            <a class="list-row-title-link" href="/community/mcp/{{ item.slug }}">
+              <strong class="list-row-title">{{ loop.index }}. {{ item.name }}</strong>
+            </a>
             <div class="muted">{{ item.recent_runs }} recent runs · {{ item.active_instances }} observed instances</div>
           </div>
           <div class="list-row-actions">
@@ -86,7 +88,9 @@
       {% for item in community_overview.most_reliable_mcps %}
         <div class="list-row">
           <div class="list-row-copy">
-            <strong class="list-row-title">{{ item.name }}</strong>
+            <a class="list-row-title-link" href="/community/mcp/{{ item.slug }}">
+              <strong class="list-row-title">{{ item.name }}</strong>
+            </a>
             <div class="muted">
               {{ item.get('reliability', {}).get('label', 'Tracked') }}
               {% if item.get('has_live_telemetry') %} · {{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}% · {{ item.avg_latency_ms }} ms{% else %} · no live telemetry yet{% endif %}
@@ -111,7 +115,9 @@
     {% for item in community_overview.top_mcps %}
       <div class="list-row">
         <div class="list-row-copy">
-          <strong class="list-row-title">{{ item.name }}</strong>
+          <a class="list-row-title-link" href="/community/mcp/{{ item.slug }}">
+            <strong class="list-row-title">{{ item.name }}</strong>
+          </a>
           <div class="muted">{{ item.active_instances }} observed instances · {{ item.installs }} observed installs · {{ item.category }}</div>
         </div>
         <div class="list-row-actions">

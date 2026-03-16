@@ -5,15 +5,17 @@
     <div class="page-header-main">
       <div class="page-header-copy">
         <p class="eyebrow">Community Stacks</p>
-        <h3>MCP Stacks</h3>
-        <p class="muted">Browse reusable MCP combinations, then switch into dedicated search or publish flows when you want to narrow down or contribute.</p>
+        <h3>Search Stacks</h3>
+        <p class="muted">Find proven MCP combinations for concrete use cases without mixing search and publish in the same view.</p>
       </div>
       <div class="page-header-actions">
-        <a class="button secondary" href="/community/search/stacks">Search Stacks</a>
+        <a class="button secondary" href="/community/stacks">Browse stacks</a>
         <a class="button secondary" href="/community/publish/stack">Publish Stack</a>
       </div>
     </div>
   </section>
+
+  {% include "partials/community_stack_search_panel.html" %}
 
   <section style="margin-top: 22px;">
     {% include "partials/community_stack_results.html" %}

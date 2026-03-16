@@ -19,9 +19,9 @@ test.describe('community screenshots', () => {
     await bootstrapAndCompleteSetup(page, request);
 
     await capture(page, '/dashboard', 'dashboard.png', 'dashboard-system-info');
-    await capture(page, '/community/discover', 'community-discover.png', 'community-discover-form');
+    await capture(page, '/community/discover', 'community-discover.png', 'community-mcp-results-list');
     await capture(page, '/community/mcp/context7', 'community-mcp-detail.png', 'topbar-chat-link');
-    await capture(page, '/community/stacks', 'community-stacks.png', 'community-stacks-form');
+    await capture(page, '/community/stacks', 'community-stacks.png', 'community-stack-results-list');
     await capture(page, '/community/stacks/github-developer-stack', 'community-stack-detail.png', 'topbar-chat-link');
     await capture(page, '/community/showcase', 'community-showcase.png', 'community-showcase-form');
     await capture(page, '/community/stats', 'community-stats.png', 'nav-community-stats');

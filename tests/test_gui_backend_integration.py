@@ -723,7 +723,7 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
     app.state.community_service.marketplace = fake_marketplace  # type: ignore[method-assign]
 
     response = client.get(
-        "/community/discover",
+        "/community/search/mcp",
         params={
             "q": "context",
             "category": "Research",
@@ -738,6 +738,7 @@ def test_gui_community_discover_supports_language_and_reliability_filters(tmp_pa
     assert "All languages" in body
     assert "Any runtime" in body
     assert "95% reliability" in body
+    assert "Search MCP" in body
     assert "Known fix" in body
     assert "Confidence" in body
     assert "Usage trend" in body
@@ -805,6 +806,53 @@ def test_gui_memory_page_shows_filenames_and_extended_markdown_help(tmp_path: Pa
     assert "/ HEARTBEAT.md" in response.text
     assert "heartbeat steps or recurring routines." in response.text
     assert "Store API keys in config or environment variables" in response.text
+
+
+def test_memory_restore_recovers_previous_saved_version(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    first = client.post("/memory", data={"doc": "memory", "content": "first version"}, follow_redirects=True)
+    assert first.status_code == 200
+    second = client.post("/memory", data={"doc": "memory", "content": "second version"}, follow_redirects=True)
+    assert second.status_code == 200
+
+    restore = client.post("/memory/restore", data={"doc": "memory"}, follow_redirects=True)
+    assert restore.status_code == 200
+    assert "Restored the previous saved version" in restore.text
+    assert app.state.config_service.read_markdown_document("memory")["content"] == "first version"
+
+
+def test_logs_page_filters_by_level_and_mcp_name(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    config = app.state.config_service.load()
+    config.tools.mcp_servers["context7"] = MCPServerConfig(type="streamableHttp", url="https://mcp.context7.com/mcp")
+    config.tools.mcp_servers["playwright-mcp"] = MCPServerConfig(type="stdio", command="npx", args=["playwright-mcp"])
+    app.state.config_service.save(config)
+
+    log_dir = app.state.config_service.runtime_dir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    (log_dir / "gui.log").write_text(
+        "\n".join(
+            [
+                "INFO mcp_probe_ok server=context7 tools=2",
+                "WARNING mcp_probe_failed server=playwright-mcp error=timeout",
+                "INFO dashboard_opened",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    response = client.get("/logs", params={"level": "warning", "mcp": "playwright-mcp"})
+    assert response.status_code == 200
+    assert "mcp_probe_failed server=playwright-mcp error=timeout" in response.text
+    assert "dashboard_opened" not in response.text
 
 
 def test_history_open_loads_selected_session_into_main_chat(tmp_path: Path):
@@ -902,6 +950,32 @@ def test_gui_community_discover_renders_tool_preview_and_compact_install_meta(tm
     assert "Tools" in response.text
     assert "Security and permissions" in response.text
     assert "Remote/API" in response.text
+
+
+def test_gui_publish_stack_page_lists_local_mcp_choices(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    _install_fixture_mcp_backend(app)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=True,
+    )
+
+    install = client.post("/mcp/install", data={"source": "https://github.com/example/echo-mcp"}, follow_redirects=True)
+    assert install.status_code == 200
+
+    response = client.get("/community/publish/stack")
+    assert response.status_code == 200
+    assert "Installed MCP servers" in response.text
+    assert "community-publish-stack-choice-echo" in response.text
 
 
 def test_gui_community_stack_import_installs_and_enables_active_mcps(tmp_path: Path):
@@ -1072,6 +1146,8 @@ def test_gui_community_apply_fix_updates_local_mcp_config(tmp_path: Path):
     updated_record = app.state.config_service.get_mcp_record("echo")
     assert updated_config.tools.mcp_servers["echo"].type == "stdio"
     assert updated_config.tools.mcp_servers["echo"].tool_timeout == 60
+    assert updated_config.agents.defaults.provider == "openrouter"
+    assert updated_config.agents.defaults.model == "openai/gpt-4.1-mini"
     assert updated_record["status"] == "registered"
     assert updated_record["enabled"] is False
 
@@ -1484,11 +1560,11 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
     def fake_fetch(repo: str) -> dict[str, str]:
         calls.append(repo)
         return {
-            "tag_name": "v0.3.3",
-            "latest_version": "0.3.3",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
-            "release_name": "v0.3.3",
+            "tag_name": "v0.3.4",
+            "latest_version": "0.3.4",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
+            "release_name": "v0.3.4",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         }
@@ -1501,14 +1577,14 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
         follow_redirects=True,
     )
     assert login_response.status_code == 200
-    assert "New version available: v0.3.3" in login_response.text
+    assert "New version available: v0.3.4" in login_response.text
     assert "View release notes" in login_response.text
     assert "Update now" in login_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     dashboard_response = client.get("/dashboard")
     assert dashboard_response.status_code == 200
-    assert "New version available: v0.3.3" in dashboard_response.text
+    assert "New version available: v0.3.4" in dashboard_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
 
     status = app.state.config_service.get_update_status()
@@ -1531,14 +1607,14 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     app.state.config_service.set_update_status(
         {
             "enabled": True,
-            "current_version": "0.3.2",
-            "latest_version": "0.3.3",
-            "tag_name": "v0.3.3",
+            "current_version": "0.3.3",
+            "latest_version": "0.3.4",
+            "tag_name": "v0.3.4",
             "available": True,
             "checked_at": "2026-03-10T00:00:00+00:00",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
-            "release_name": "v0.3.3",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
+            "release_name": "v0.3.4",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
             "repo": "lucmuss/nanobot-webgui",
@@ -1558,11 +1634,11 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     monkeypatch.setattr(
         "nanobot.gui.app._fetch_latest_release_info",
         lambda _repo: {
-            "tag_name": "v0.3.3",
-            "latest_version": "0.3.3",
-            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
-            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.3",
-            "release_name": "v0.3.3",
+            "tag_name": "v0.3.4",
+            "latest_version": "0.3.4",
+            "release_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
+            "release_notes_url": "https://github.com/lucmuss/nanobot-webgui/releases/tag/v0.3.4",
+            "release_name": "v0.3.4",
             "published_at": "2026-03-10T00:00:00Z",
             "source": "github_release",
         },
@@ -1578,5 +1654,5 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     update_response = client.post("/actions/update")
     assert update_response.status_code == 202
     assert "Updating GUI" in update_response.text
-    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.3.3")]
+    assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", "0.3.4")]
     assert app.state.config_service.get_update_status()["updating"] is True

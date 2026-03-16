@@ -55,16 +55,19 @@
           Markdown content
           <textarea class="mono tall-textarea" name="content" data-testid="memory-content">{{ active_document.content }}</textarea>
         </label>
-        <div class="actions">
+        <div class="actions memory-actions-row">
           <button type="submit" data-testid="memory-save">Save Document</button>
+          {% if active_document.template_available %}
+            <button class="secondary" type="submit" formaction="/memory/reset" formmethod="post" data-testid="memory-reset">Reset to Template</button>
+          {% endif %}
         </div>
       </form>
 
-      {% if active_document.template_available %}
-        <form method="post" action="/memory/reset" style="margin-top: 12px;" data-testid="memory-reset-form">
+      {% if memory_backup and memory_backup.content is defined %}
+        <form method="post" action="/memory/restore" style="margin-top: 12px;" data-testid="memory-restore-form">
           <input type="hidden" name="doc" value="{{ active_document.key }}">
           <div class="actions">
-            <button class="secondary" type="submit" data-testid="memory-reset">Reset to Template</button>
+            <button class="secondary" type="submit" data-testid="memory-restore">Restore Previous Save</button>
           </div>
         </form>
       {% endif %}

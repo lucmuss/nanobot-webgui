@@ -108,7 +108,15 @@
           </div>
           <div class="meta-pair">
             <strong>Detected tools</strong>
-            <span>{{ server.tool_names|join(", ") if server.tool_names else "No tools discovered yet" }}</span>
+            {% if server.tool_names %}
+              <div class="tool-chip-strip">
+                {% for tool_name in server.tool_names %}
+                  <span class="pill tool-pill">{{ tool_name }}</span>
+                {% endfor %}
+              </div>
+            {% else %}
+              <span>No tools discovered yet</span>
+            {% endif %}
           </div>
           <div class="meta-pair">
             <strong>Required env variables</strong>

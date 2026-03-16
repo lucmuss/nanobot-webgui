@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block body %}
+{% if community_error %}<div class="error" data-testid="community-error">{{ community_error }}</div>{% endif %}
+
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">Community Marketplace</p>
+        <h3>Publish MCP</h3>
+        <p class="muted">Share a GitHub MCP repository with the Community Hub without mixing submission into the browse flow.</p>
+      </div>
+      <div class="page-header-actions">
+        <a class="button secondary" href="/community/search/mcp">Search MCP</a>
+        <a class="button secondary" href="/community/discover">Back to discover</a>
+      </div>
+    </div>
+    {% if community_overview %}
+      <div class="page-meta-bar">
+        <span class="meta-chip"><strong>Registry</strong>{{ community_overview.registry_count }} MCPs</span>
+        <span class="meta-chip"><strong>Verified</strong>{{ community_overview.verified_count }} entries</span>
+        <span class="meta-chip {% if community_preferences.allow_public_mcp_submissions %}good{% else %}muted{% endif %}"><strong>Publishing</strong>{{ "Enabled" if community_preferences.allow_public_mcp_submissions else "Disabled" }}</span>
+      </div>
+    {% endif %}
+  </section>
+
+  {% include "partials/community_mcp_publish_panel.html" %}
+{% endblock %}

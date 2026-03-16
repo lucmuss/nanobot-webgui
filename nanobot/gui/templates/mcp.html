@@ -97,12 +97,22 @@
             </div>
             <div>
               <strong>{{ "Remote endpoint" if preview.run_url else "Start command" }}</strong>
-              <div class="mono">
+              <div class="copy-field">
+                <div class="mono copy-field-value">
                 {% if preview.run_url %}
                   {{ preview.run_url }}
                 {% else %}
                   {{ preview.run_command }}{% if preview.run_args %} {{ preview.run_args|join(' ') }}{% endif %}
                 {% endif %}
+                </div>
+                <button
+                  class="secondary copy-inline-button"
+                  type="button"
+                  data-copy-text="{% if preview.run_url %}{{ preview.run_url }}{% else %}{{ preview.run_command }}{% if preview.run_args %} {{ preview.run_args|join(' ') }}{% endif %}{% endif %}"
+                  data-testid="mcp-preview-copy-command"
+                >
+                  Copy
+                </button>
               </div>
             </div>
             <div>
@@ -299,13 +309,18 @@
           <div class="mcp-card-meta-grid mcp-card-meta-grid-spaced">
             <div class="meta-pair">
               <strong>{{ "Endpoint" if server.url else "Command" }}</strong>
-              <span class="mono">
-                {% if server.url %}
-                  {{ server.url }}
-                {% else %}
-                  {{ server.command }}{% if server.args %} {{ server.args|join(' ') }}{% endif %}
-                {% endif %}
-              </span>
+              {% set server_command_value = server.url if server.url else server.command ~ (' ' ~ (server.args|join(' ')) if server.args else '') %}
+              <div class="copy-field">
+                <span class="mono copy-field-value">{{ server_command_value }}</span>
+                <button
+                  class="secondary copy-inline-button"
+                  type="button"
+                  data-copy-text="{{ server_command_value }}"
+                  data-testid="mcp-copy-command-{{ server.name }}"
+                >
+                  Copy
+                </button>
+              </div>
             </div>
             <div class="meta-pair">
               <strong>Available tools</strong>

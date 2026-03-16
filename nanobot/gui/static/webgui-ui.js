@@ -97,14 +97,44 @@
     });
   }
 
+  function initCopyButtons() {
+    document.querySelectorAll('[data-copy-text]').forEach((button) => {
+      if (button.dataset.copyReady === 'true') {
+        return;
+      }
+      button.dataset.copyReady = 'true';
+      button.addEventListener('click', async function () {
+        const text = button.dataset.copyText || '';
+        if (!text) {
+          return;
+        }
+        const originalLabel = button.textContent;
+        try {
+          await navigator.clipboard.writeText(text);
+          button.textContent = 'Copied';
+          setTimeout(() => {
+            button.textContent = originalLabel;
+          }, 1200);
+        } catch (_error) {
+          button.textContent = 'Failed';
+          setTimeout(() => {
+            button.textContent = originalLabel;
+          }, 1200);
+        }
+      });
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initMobileSidebar();
     initSectionTabs();
     initAsyncFormFeedback();
+    initCopyButtons();
   });
 
   document.body.addEventListener('htmx:afterSwap', function () {
     initSectionTabs();
     initAsyncFormFeedback();
+    initCopyButtons();
   });
 })();

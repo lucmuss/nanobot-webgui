@@ -64,7 +64,7 @@ test('memory switching, reset to template, and safe mode toggling keep the UI pr
   await page.getByTestId('topbar-safe-mode').click();
   await expect(page.getByTestId('flash-message')).toContainText('Safe Mode disabled.');
   await page.goto('/setup/provider');
-  await expect(page.getByTestId('provider-advanced')).toHaveAttribute('open', '');
+  await expect(page.getByTestId('provider-advanced')).not.toHaveAttribute('open', '');
   await page.getByTestId('topbar-safe-mode').click();
   await expect(page.getByTestId('flash-message')).toContainText('Safe Mode enabled.');
 });
@@ -76,8 +76,8 @@ test('mobile viewport keeps dashboard, chat, and setup pages usable', async ({ p
 
   await page.goto('/setup/provider');
   await expect(page.getByRole('heading', { name: 'Provider', exact: true })).toBeVisible();
-  await expect(page.getByText('nanobot-e2e')).toBeVisible();
   await expect(page.getByTestId('provider-model')).toBeVisible();
+  await expect(page.getByTestId('mobile-profile-shortcut')).toBeVisible();
   await expect(page.getByTestId('topbar-mobile-toolbar')).toBeVisible();
   await expect(page.getByTestId('topbar-desktop-toolbar')).toBeHidden();
 

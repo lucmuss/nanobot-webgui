@@ -27,8 +27,8 @@ test.describe('mobile screenshots', () => {
     await capture(page, '/memory', 'memory-mobile.png', 'memory-form');
     await capture(page, '/settings', 'settings-mobile.png', 'settings-form');
     await capture(page, '/profile', 'profile-mobile.png', 'profile-form');
-    await capture(page, '/community/discover', 'community-discover-mobile.png', 'community-discover-form');
-    await capture(page, '/community/stacks', 'community-stacks-mobile.png', 'community-stacks-form');
+    await capture(page, '/community/discover', 'community-discover-mobile.png', 'community-mcp-results-list');
+    await capture(page, '/community/stacks', 'community-stacks-mobile.png', 'community-stack-results-list');
     await capture(page, '/community/showcase', 'community-showcase-mobile.png', 'community-showcase-form');
     await capture(page, '/community/stats', 'community-stats-mobile.png', 'nav-community-stats');
   });

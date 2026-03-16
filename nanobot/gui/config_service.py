@@ -518,7 +518,10 @@ class GUIConfigService:
         document = self.get_markdown_document(key)
         path = Path(document["path"])
         path.parent.mkdir(parents=True, exist_ok=True)
+        previous_content = path.read_text(encoding="utf-8") if path.exists() else ""
         path.write_text(content, encoding="utf-8")
+        if previous_content != content:
+            self.set_markdown_backup(key, previous_content)
         stat = path.stat()
         return {
             **document,
@@ -555,6 +558,50 @@ class GUIConfigService:
         """Reset one markdown file back to the bundled template or a blank file."""
         content = self.get_markdown_template(key)
         return self.save_markdown_document(key, content)
+
+    def get_markdown_backup(self, key: str) -> dict[str, str]:
+        """Return the last saved backup snapshot for one markdown file."""
+        state = self.load_state()
+        backups = state.get("markdown_backups")
+        if not isinstance(backups, dict):
+            return {}
+        payload = backups.get(str(key))
+        return payload if isinstance(payload, dict) else {}
+
+    def set_markdown_backup(self, key: str, content: str) -> None:
+        """Persist a one-level backup for one markdown document."""
+        state = self.load_state()
+        backups = state.get("markdown_backups")
+        if not isinstance(backups, dict):
+            backups = {}
+        backups[str(key)] = {
+            "content": str(content),
+            "saved_at": datetime.now().isoformat(timespec="seconds"),
+        }
+        state["markdown_backups"] = backups
+        self.save_state(state)
+
+    def restore_markdown_backup(self, key: str) -> dict[str, str]:
+        """Restore the last saved version of one markdown document and keep the current version as the new backup."""
+        backup = self.get_markdown_backup(key)
+        if not backup:
+            raise ValueError("No previous saved version is available for this document yet.")
+
+        document = self.get_markdown_document(key)
+        path = Path(document["path"])
+        current_content = path.read_text(encoding="utf-8") if path.exists() else ""
+        restored_content = str(backup.get("content", ""))
+        path.write_text(restored_content, encoding="utf-8")
+        self.set_markdown_backup(key, current_content)
+        stat = path.stat()
+        return {
+            **document,
+            "content": restored_content,
+            "modified_at": self._format_timestamp(stat.st_mtime),
+            "size_bytes": stat.st_size,
+            "size_label": self._format_size(stat.st_size),
+            "template_available": bool(self.get_markdown_template(key)),
+        }
 
     def get_response_style(self) -> str:
         """Return the selected response-length preference from USER.md."""
@@ -637,6 +684,8 @@ class GUIConfigService:
             normalized["active_memory_doc"] = "memory"
         if not isinstance(normalized.get("update_status"), dict):
             normalized["update_status"] = {}
+        if not isinstance(normalized.get("markdown_backups"), dict):
+            normalized["markdown_backups"] = {}
         if not isinstance(normalized.get("community_preferences"), dict):
             normalized["community_preferences"] = {
                 "share_anonymous_metrics": False,

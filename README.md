@@ -1,13 +1,18 @@
 <div align="center">
   <h1>nanobot-webgui</h1>
-  <p><strong>Release 0.3.2</strong></p>
+  <p><strong>Release 0.3.3</strong></p>
   <p>Production-focused web GUI for <a href="https://github.com/HKUDS/nanobot">HKUDS/nanobot</a>.</p>
   <p>
-    <img src="https://img.shields.io/badge/release-0.3.2-f59e0b" alt="Release 0.3.2">
+    <img src="https://img.shields.io/badge/release-0.3.3-f59e0b" alt="Release 0.3.3">
     <a href="https://github.com/HKUDS/nanobot"><img src="https://img.shields.io/badge/upstream-HKUDS%2Fnanobot-c4632c" alt="Upstream"></a>
     <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">
     <img src="https://img.shields.io/badge/gui-FastAPI%20%2B%20Jinja2%20%2B%20HTMX-2c7a5a" alt="GUI stack">
     <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
+  </p>
+  <p>
+    <a href="https://github.com/HKUDS/nanobot/blob/main/COMMUNICATION.md"><img src="https://img.shields.io/badge/Feishu-Group-E9DBFC?style=flat&logo=feishu&logoColor=white" alt="Feishu"></a>
+    <a href="https://github.com/HKUDS/nanobot/blob/main/COMMUNICATION.md"><img src="https://img.shields.io/badge/WeChat-Group-C5EAB4?style=flat&logo=wechat&logoColor=white" alt="WeChat"></a>
+    <a href="https://discord.gg/MnCvHqpUGB"><img src="https://img.shields.io/badge/Discord-Community-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord"></a>
   </p>
 </div>
 
@@ -420,6 +425,10 @@ Useful variants:
 ./scripts/e2e/run_real_mcp_smoke.sh --case chrome-devtools --case playwright
 FIRECRAWL_API_KEY=... GITHUB_MCP_PAT=... ./scripts/e2e/run_real_mcp_smoke.sh
 ```
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=lucmuss/nanobot-webgui&type=Date)](https://www.star-history.com/#lucmuss/nanobot-webgui&Date)
 
 ## Upstream Credits
 This project builds directly on the official `nanobot` work from HKUDS and contributors:

@@ -1,0 +1,121 @@
+<section class="card-list" data-testid="community-mcp-results-list">
+  {% for item in community_items %}
+    <article class="card community-card" data-testid="community-mcp-card-{{ item.slug }}">
+      <div class="split-header">
+        <div>
+          <a class="community-card-title-link" href="/community/mcp/{{ item.slug }}">
+            <h3 class="community-card-title">{{ item.name }}</h3>
+          </a>
+          {% if item.repo_url %}
+            <div class="mono community-card-repo">{{ item.repo_url }}</div>
+          {% endif %}
+          <div class="text-markdown muted" style="margin: 8px 0 0;">{{ render_markdown(item.description) | safe }}</div>
+        </div>
+        <div class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Tracked') }}</div>
+      </div>
+
+      <div class="page-meta-bar">
+        <span class="meta-chip"><strong>Category</strong>{{ item.category }}</span>
+        <span class="meta-chip"><strong>Language</strong>{{ item.language }}</span>
+        <span class="meta-chip {{ item.get('runtime_engine', {}).get('tone', 'muted') }}"><strong>Runtime</strong>{{ item.get("runtime_engine", {}).get("label", "Other") }}</span>
+        <span class="meta-chip"><strong>Install</strong>{{ item.install_method }}</span>
+        <span class="meta-chip {{ item.get('difficulty', {}).get('tone', 'muted') }}"><strong>Difficulty</strong>{{ item.get('difficulty', {}).get('label', 'Unknown') }}</span>
+        {% if item.verified %}<span class="meta-chip good"><strong>Trust</strong>Verified</span>{% endif %}
+      </div>
+
+      <div class="panel-grid two" style="margin-top: 16px;">
+        <div class="insight-panel community">
+          <h4>Community reliability</h4>
+          <div class="reliability-stack" style="margin-top: 10px;">
+            <div class="split-header" style="margin-bottom: 0;">
+              <span class="muted" title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully.">{{ item.get('reliability', {}).get('label', 'Tracked') }}</span>
+              <strong title="Reliability is the smoothed success rate of recent MCP runs. It tells you how often this MCP completes successfully.">{% if item.get('has_live_telemetry') %}{{ item.get('reliability', {}).get('percent', ((item.get('success_rate', 0) or 0) * 100)|int) }}%{% else %}No live data{% endif %}</strong>
+            </div>
+            <div class="reliability-bar">
+              <div class="reliability-fill {{ item.get('reliability', {}).get('tone', 'muted') }}" style="width: {{ item.get('reliability', {}).get('bar_width', ((item.get('success_rate', 0) or 0) * 100)|int) }}%;"></div>
+            </div>
+          </div>
+        </div>
+        <div class="insight-panel local">
+          <h4>Install preview</h4>
+          <div class="compact-multi-meta" style="margin-top: 12px;">
+            <div class="compact-meta-row">
+              <div class="compact-meta-card">
+                <strong>Dependencies</strong>
+                <span class="muted">{{ item.get("dependencies", [])|join(" · ") if item.get("dependencies", []) else "No dependency hint" }}</span>
+              </div>
+              <div class="compact-meta-card">
+                <strong>Tools</strong>
+                <span class="muted">{{ item.tool_count }} tools</span>
+              </div>
+            </div>
+          </div>
+          {% if item.get("permission_hints") %}
+            <div class="compact-multi-meta" style="margin-top: 12px;">
+              <div class="compact-meta-row">
+                <div class="compact-meta-card" style="grid-column: 1 / -1;">
+                  <strong>Security and permissions</strong>
+                  <span class="muted">{{ item.get("permission_hints", [])|join(" · ") }}</span>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="details-grid compact" style="margin-top: 16px;">
+        <div class="meta-pair">
+          <strong>Observed Instances (30d)</strong>
+          <span>{{ item.active_instances }}</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Average Latency</strong>
+          <span>{% if item.avg_latency_ms is not none %}{{ item.avg_latency_ms }} ms{% else %}No live telemetry{% endif %}</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Best used with</strong>
+          <span>{{ item.get("best_for", [])|join(", ") if item.get("best_for", []) else "General MCP workflows" }}</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Confidence | Signals</strong>
+          <span title="Confidence measures how strong the community evidence is. It grows with 30-day run volume and the number of independent instances.">{{ item.get("install_confidence", {}).get("score", "n/a") }}/10 · {{ item.get("install_confidence", {}).get("label", "Tracked") }} · {{ item.get("install_confidence", {}).get("based_on_instances", 0) }} signals</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Votes</strong>
+          <span>{{ item.get("votes", {}).get("score_percent", 0)|round(0)|int }}% · {{ item.get("votes", {}).get("total", 0) }}</span>
+        </div>
+        <div class="meta-pair">
+          <strong>Usage trend</strong>
+          <span>{{ item.get("usage_trend", {}).get("label", "Quiet") }} · {{ item.get("usage_trend", {}).get("runs_24h", 0) }} in 24h</span>
+        </div>
+      </div>
+
+      <details class="tool-disclosure">
+        <summary>Tool preview ({{ item.tool_count }} total)</summary>
+        <div class="tool-chip-strip" style="margin-top: 12px;">
+          {% for tool in item.tools %}
+            <span class="pill tool-pill">{{ tool }}</span>
+          {% endfor %}
+        </div>
+        <p class="muted" style="margin-top: 10px;">The hub currently tracks tool names. Detailed tool descriptions will appear here once they are available from the registry.</p>
+      </details>
+      {% if item.known_fixes %}
+        <div class="insight-panel community" style="margin-top: 14px;">
+          <h4>Known fix</h4>
+          <p class="muted" style="margin: 8px 0 0;">{{ item.known_fixes[0].title }}</p>
+          <p class="muted" style="margin: 6px 0 0;">{{ item.known_fixes[0].summary }}</p>
+        </div>
+      {% endif %}
+      <div class="actions community-card-footer">
+        <a class="button secondary" href="/community/mcp/{{ item.slug }}" data-testid="community-mcp-open-{{ item.slug }}">View Details</a>
+        <form method="post" action="/community/install/mcp/{{ item.slug }}">
+          <button type="submit" data-testid="community-mcp-install-{{ item.slug }}">Install from Community</button>
+        </form>
+      </div>
+    </article>
+  {% else %}
+    <article class="card">
+      <strong>No marketplace entries matched this filter.</strong>
+    </article>
+  {% endfor %}
+</section>

@@ -146,6 +146,32 @@
         white-space: nowrap;
       }
 
+      .sidebar-meta {
+        display: grid;
+        gap: 8px;
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .sidebar-meta-row {
+        display: grid;
+        gap: 4px;
+      }
+
+      .sidebar-meta-row span {
+        color: var(--text-secondary);
+        font-size: 0.76rem;
+      }
+
+      .sidebar-meta-row strong,
+      .sidebar-meta-row a {
+        font-size: 0.84rem;
+        word-break: break-word;
+      }
+
       .nav a {
         display: flex;
         align-items: center;
@@ -232,6 +258,10 @@
       }
 
       .topbar-mobile-toolbar {
+        display: none;
+      }
+
+      .mobile-profile-shortcut {
         display: none;
       }
 
@@ -860,6 +890,12 @@
         gap: 14px;
         align-items: flex-start;
         margin-bottom: 14px;
+      }
+
+      .split-header > div:first-child,
+      .page-header-copy,
+      .list-row-copy {
+        min-width: 0;
       }
 
       .page-header {
@@ -1607,6 +1643,12 @@
         gap: 6px;
       }
 
+      .tool-activity-scroll {
+        max-height: 156px;
+        overflow-y: auto;
+        padding-right: 4px;
+      }
+
       .tool-log-item {
         display: flex;
         justify-content: space-between;
@@ -1621,8 +1663,24 @@
         font-size: 0.82rem;
       }
 
+      .tool-log-copy {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .tool-log-server-link {
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .tool-log-server-link:hover {
+        color: var(--primary-hover);
+      }
+
       .active-tools-scroll {
-        max-height: 112px;
+        max-height: 64px;
         overflow-y: auto;
         padding-right: 4px;
       }
@@ -1695,11 +1753,41 @@
       .memory-layout {
         grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
         align-items: start;
+        min-width: 0;
       }
 
       .memory-panel-preview,
       .memory-panel-help {
         grid-column: 1 / -1;
+      }
+
+      .memory-panel-documents,
+      .memory-panel-editor {
+        min-width: 0;
+      }
+
+      .memory-panel-editor textarea {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        overflow-x: hidden;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .memory-layout .mono {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .memory-actions-row {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .memory-actions-row > * {
+        min-width: 0;
       }
 
       .doc-group {
@@ -1941,6 +2029,26 @@
         flex-shrink: 0;
       }
 
+      .copy-field {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      .copy-field-value {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
+      .copy-inline-button {
+        flex: 0 0 auto;
+        min-height: 32px;
+        white-space: nowrap;
+      }
+
       .mcp-test-checklist {
         display: grid;
         gap: 8px;
@@ -2037,6 +2145,25 @@
         line-height: 1.2;
       }
 
+      .community-card-title-link,
+      .list-row-title-link {
+        color: var(--text-primary);
+        width: fit-content;
+      }
+
+      .community-card-title-link:hover,
+      .list-row-title-link:hover {
+        color: var(--primary-hover);
+      }
+
+      .community-card-repo {
+        margin-top: 6px;
+        font-size: 0.76rem;
+        color: var(--text-secondary);
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
+
       .community-card {
         display: flex;
         flex-direction: column;
@@ -2058,6 +2185,12 @@
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
+      }
+
+      .community-signal-grid .meta-pair span,
+      .community-recommended-grid .meta-pair span {
+        overflow-wrap: anywhere;
+        word-break: break-word;
       }
 
       .tool-disclosure {
@@ -2302,36 +2435,43 @@
         }
 
         .topbar-titlecopy {
-          justify-content: space-between;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr) auto;
           align-items: center;
+          gap: 10px;
           width: 100%;
         }
 
         .topbar-titlecopy h2 {
-          flex: 1 1 auto;
           min-width: 0;
           font-size: 1.25rem;
+          text-align: center;
         }
 
         .topbar-titlecopy .muted {
           display: none;
         }
 
+        .mobile-profile-shortcut {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 42px;
+          height: 42px;
+          border-radius: 12px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+          box-shadow: var(--shadow-sm);
+        }
+
         .topbar-mobile-toolbar {
-          display: flex;
-          align-items: stretch;
+          display: grid;
           gap: 8px;
           width: 100%;
-          justify-content: flex-end;
         }
 
         .topbar-mobile-toolbar > .topbar-menu {
-          flex: 1 1 0;
           min-width: 0;
-        }
-
-        .topbar-mobile-toolbar > .topbar-mobile-user {
-          flex: 0 0 auto;
         }
 
         .topbar-mobile-toolbar .topbar-menu summary {
@@ -2431,15 +2571,6 @@
           transform: rotate(90deg);
         }
 
-        .topbar-mobile-user summary {
-          min-width: 42px;
-          padding: 10px;
-        }
-
-        .topbar-mobile-user summary span:not(.avatar) {
-          display: none;
-        }
-
         .history-entry {
           flex-direction: column;
         }
@@ -2450,8 +2581,58 @@
         }
 
         .recommendation-card {
-          flex-basis: min(300px, 88vw);
-          min-width: min(300px, 88vw);
+          flex-basis: auto;
+          min-width: 0;
+        }
+
+        .recommendation-carousel {
+          display: grid;
+          gap: 12px;
+          overflow-x: visible;
+        }
+
+        .meta-chip {
+          white-space: normal;
+        }
+
+        .page-header-actions {
+          width: 100%;
+        }
+
+        .page-header-actions > .button,
+        .page-header-actions > form,
+        .page-header-actions > form > button {
+          width: 100%;
+        }
+
+        .page-meta-bar .meta-chip {
+          flex: 1 1 calc(50% - 10px);
+          justify-content: space-between;
+        }
+
+        .community-card .page-meta-bar,
+        .community-card .details-grid.compact {
+          gap: 10px;
+        }
+
+        .community-card .meta-chip,
+        .community-card .meta-pair {
+          min-width: 0;
+        }
+
+        .community-signal-grid,
+        .community-recommended-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .copy-field {
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .copy-inline-button {
+          width: fit-content;
         }
 
         .section-tabs {
@@ -2477,6 +2658,10 @@
 
         .tabbed-grid > [data-tab-panel-group].is-active {
           display: block;
+        }
+
+        .memory-actions-row {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
     </style>
@@ -2514,8 +2699,12 @@
               <a href="/chat" class="{% if nav_active == 'chat' %}active{% endif %}" data-testid="nav-chat">Chat</a>
               <a href="/memory" class="{% if nav_active == 'memory' %}active{% endif %}" data-testid="nav-memory">Memory</a>
               <p class="sidebar-label" style="margin-top: 10px;">Community</p>
+              <a href="/community/search/mcp" class="{% if nav_active == 'community-search-mcp' %}active{% endif %}" data-testid="nav-community-search-mcp">Search MCP</a>
               <a href="/community/discover" class="{% if nav_active == 'community-discover' %}active{% endif %}" data-testid="nav-community-discover">Discover MCP</a>
+              <a href="/community/publish/mcp" class="{% if nav_active == 'community-publish-mcp' %}active{% endif %}" data-testid="nav-community-publish-mcp">Publish MCP</a>
+              <a href="/community/search/stacks" class="{% if nav_active == 'community-search-stacks' %}active{% endif %}" data-testid="nav-community-search-stacks">Search Stacks</a>
               <a href="/community/stacks" class="{% if nav_active == 'community-stacks' %}active{% endif %}" data-testid="nav-community-stacks">MCP Stacks</a>
+              <a href="/community/publish/stack" class="{% if nav_active == 'community-publish-stack' %}active{% endif %}" data-testid="nav-community-publish-stack">Publish Stack</a>
               <a href="/community/showcase" class="{% if nav_active == 'community-showcase' %}active{% endif %}" data-testid="nav-community-showcase">Showcase</a>
               <a href="/community/stats" class="{% if nav_active == 'community-stats' %}active{% endif %}" data-testid="nav-community-stats">Community Stats</a>
               <p class="sidebar-label" style="margin-top: 10px;">System</p>
@@ -2541,6 +2730,18 @@
                 <strong>{{ shell_status.provider_label }}</strong>
               </div>
             </div>
+            <div class="sidebar-meta" data-testid="sidebar-meta">
+              <div class="sidebar-meta-row">
+                <span>Release</span>
+                <strong>{{ current_version }}</strong>
+              </div>
+              {% if public_url %}
+                <div class="sidebar-meta-row">
+                  <span>Public URL</span>
+                  <a href="{{ public_url }}" target="_blank" rel="noreferrer">{{ public_url }}</a>
+                </div>
+              {% endif %}
+            </div>
           </div>
         </aside>
 
@@ -2548,10 +2749,21 @@
           <div class="content-inner">
             <div class="topbar">
               <div class="topbar-titlecopy">
+                {% if user %}
+                  <a class="mobile-profile-shortcut" href="/profile" data-testid="mobile-profile-shortcut" aria-label="Open profile">
+                    <span class="avatar">
+                      {% if user.avatar_url %}
+                        <img src="{{ user.avatar_url }}" alt="{{ user.label }}">
+                      {% else %}
+                        {{ user.initials }}
+                      {% endif %}
+                    </span>
+                  </a>
+                {% endif %}
+                <h2>{{ title }}</h2>
                 <label for="mobile-nav-toggle" class="mobile-nav-button" data-testid="mobile-nav-toggle" aria-label="Open navigation">
                   <span aria-hidden="true"></span>
                 </label>
-                <h2>{{ title }}</h2>
                 <p class="muted">{{ instance_name }}</p>
               </div>
               <div class="topbar-toolbar">
@@ -2631,29 +2843,18 @@
                           </button>
                         </form>
                       </div>
+                      {% if user %}
+                        <div class="topbar-menu-section">
+                          <span class="topbar-menu-label">Profile</span>
+                          <a class="button secondary" href="/profile">Profile</a>
+                          <a class="button secondary" href="/settings">Settings</a>
+                          <form class="inline-form" method="post" action="/logout">
+                            <button class="secondary" type="submit">Logout</button>
+                          </form>
+                        </div>
+                      {% endif %}
                     </div>
                   </details>
-                  {% if user %}
-                    <details class="topbar-menu topbar-mobile-user">
-                      <summary>
-                        <span class="avatar">
-                          {% if user.avatar_url %}
-                            <img src="{{ user.avatar_url }}" alt="{{ user.label }}">
-                          {% else %}
-                            {{ user.initials }}
-                          {% endif %}
-                        </span>
-                        <span>{{ user.label }}</span>
-                      </summary>
-                      <div class="topbar-menu-panel">
-                        <a class="button secondary" href="/profile">Profile</a>
-                        <a class="button secondary" href="/settings">Settings</a>
-                        <form class="inline-form" method="post" action="/logout">
-                          <button class="secondary" type="submit">Logout</button>
-                        </form>
-                      </div>
-                    </details>
-                  {% endif %}
                 </div>
               </div>
             </div>

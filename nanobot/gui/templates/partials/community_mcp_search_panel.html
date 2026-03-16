@@ -1,0 +1,72 @@
+<section class="panel" data-testid="community-search-mcp-panel">
+  <div class="split-header">
+    <div>
+      <p class="eyebrow">Search MCP Servers</p>
+      <h3 style="margin: 0;">Marketplace search</h3>
+      <p class="muted">Search by MCP name, repository, or category and sort by reliability, installs, or recent activity.</p>
+      <p class="muted">Reliability filters use live telemetry when available and otherwise fall back to curated catalog baselines for discovery only.</p>
+    </div>
+  </div>
+
+  <form method="get" action="{{ search_action or '/community/search/mcp' }}" class="form-columns" data-testid="community-search-mcp-form">
+    <div class="form-row">
+      <label>
+        Search
+        <input type="text" name="q" value="{{ query }}" placeholder="Search MCP name or repository" data-testid="community-search-mcp-query">
+      </label>
+      <label>
+        Sort
+        <select name="sort" data-testid="community-search-mcp-sort">
+          <option value="trending" {% if sort == "trending" %}selected{% endif %}>Trending</option>
+          <option value="reliable" {% if sort == "reliable" %}selected{% endif %}>Most Reliable</option>
+          <option value="installed" {% if sort == "installed" %}selected{% endif %}>Most Installed</option>
+          <option value="new" {% if sort == "new" %}selected{% endif %}>New</option>
+        </select>
+      </label>
+    </div>
+    <div class="form-row">
+      <label>
+        Category
+        <select name="category" data-testid="community-search-mcp-category">
+          <option value="">All categories</option>
+          {% for item in community_categories %}
+            <option value="{{ item }}" {% if category == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Language
+        <select name="language" data-testid="community-search-mcp-language">
+          <option value="">All languages</option>
+          {% for item in community_languages %}
+            <option value="{{ item }}" {% if language == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="form-row">
+      <label>
+        Runtime
+        <select name="runtime" data-testid="community-search-mcp-runtime">
+          <option value="">Any runtime</option>
+          {% for item in community_runtime_options %}
+            <option value="{{ item }}" {% if runtime == item %}selected{% endif %}>{{ item }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        Reliability
+        <select name="min_reliability" data-testid="community-search-mcp-min-reliability">
+          {% for item in community_reliability_options %}
+            <option value="{{ item }}" {% if min_reliability == item %}selected{% endif %}>
+              {% if item == 0 %}Any reliability{% else %}>={{ item }}% reliability{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="actions" style="align-self: end;">
+      <button type="submit" data-testid="community-search-mcp-submit">Search MCP</button>
+    </div>
+  </form>
+</section>

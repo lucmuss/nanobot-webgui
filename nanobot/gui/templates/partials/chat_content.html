@@ -158,10 +158,19 @@
       <div class="card compact-card" style="margin-top: 14px;" data-testid="chat-recent-tool-activity-card">
         <header><strong>Recent Tool Activity</strong></header>
         {% if recent_tool_activity %}
-          <div class="compact-list compact-tool-log">
+          <div class="compact-list compact-tool-log tool-activity-scroll" data-testid="chat-recent-tool-activity-list">
             {% for item in recent_tool_activity %}
               <div class="tool-log-item">
-                <strong>{{ item.name }}</strong>
+                <div class="tool-log-copy">
+                  {% if item.server_href %}
+                    <a class="tool-log-server-link" href="{{ item.server_href }}">{{ item.server_name }}</a>
+                  {% elif item.server_name %}
+                    <strong>{{ item.server_name }}</strong>
+                  {% else %}
+                    <strong>Unknown MCP</strong>
+                  {% endif %}
+                  <span class="mono">{{ item.name }}</span>
+                </div>
                 <span class="muted">{{ item.compact_timestamp or item.timestamp }}</span>
               </div>
             {% endfor %}
