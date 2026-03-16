@@ -10,9 +10,9 @@ from nanobot.bus.queue import MessageBus
 from nanobot.channels.matrix import (
     MATRIX_HTML_FORMAT,
     TYPING_NOTICE_TIMEOUT_MS,
+    MatrixConfig,
     MatrixChannel,
 )
-from nanobot.config.schema import MatrixConfig
 
 _ROOM_SEND_UNSET = object()
 

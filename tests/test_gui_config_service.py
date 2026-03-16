@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from nanobot.gui.config_service import GUIConfigService
+from nanobot_webgui.config_service import GUIConfigService
 
 
 def test_ensure_instance_syncs_branding_assets(tmp_path: Path):

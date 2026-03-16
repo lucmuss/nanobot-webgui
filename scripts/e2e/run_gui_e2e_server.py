@@ -422,10 +422,10 @@ def _install_e2e_harness(
 
 
 def main() -> None:
-    import nanobot.gui.app as gui_app_module
+    import nanobot_webgui.app as gui_app_module
     from nanobot.config.schema import MCPServerConfig
-    from nanobot.gui.app import GUISettings, create_gui_app
-    from nanobot.gui.mcp_service import _parse_repository_source
+    from nanobot_webgui.app import GUISettings, create_gui_app
+    from nanobot_webgui.mcp_service import _parse_repository_source
     from nanobot.session.manager import SessionManager
 
     temp_root = ROOT / "tmp" / "e2e"

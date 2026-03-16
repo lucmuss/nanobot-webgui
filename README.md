@@ -1,9 +1,9 @@
 <div align="center">
   <h1>nanobot-webgui</h1>
-  <p><strong>Release 0.3.5</strong></p>
+  <p><strong>Release 0.3.6</strong></p>
   <p>Production-focused browser GUI for <a href="https://github.com/HKUDS/nanobot">HKUDS/nanobot</a>.</p>
   <p>
-    <img src="https://img.shields.io/badge/release-0.3.5-f59e0b" alt="Release 0.3.5">
+    <img src="https://img.shields.io/badge/release-0.3.6-f59e0b" alt="Release 0.3.6">
     <a href="https://github.com/HKUDS/nanobot"><img src="https://img.shields.io/badge/upstream-HKUDS%2Fnanobot-c4632c" alt="Upstream"></a>
     <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">
     <img src="https://img.shields.io/badge/gui-FastAPI%20%2B%20Jinja2%20%2B%20HTMX-2c7a5a" alt="GUI stack">
@@ -16,7 +16,7 @@
   </p>
 </div>
 
-`nanobot-webgui` keeps the official `nanobot` runtime and adds a browser-first operations layer for setup, MCP lifecycle management, chat, memory editing, logs, validation, and community-backed discovery.
+`nanobot-webgui` installs the official `nanobot` runtime directly from `HKUDS/nanobot@main` and adds a browser-first operations layer for setup, MCP lifecycle management, chat, memory editing, logs, validation, and community-backed discovery.
 
 This repository is for people who want Nanobot to be easier to install, easier to operate, and easier to explain to a new team member.
 
@@ -31,7 +31,7 @@ Use `nanobot-webgui` when you want:
 - a browser chat with uploads, recent tool activity, and memory editing
 - a self-hosted deployment that still uses the upstream Nanobot core
 
-This repository is not a rewrite of Nanobot. It is a distribution layer and operations GUI on top of the upstream agent.
+This repository is not a rewrite of Nanobot. It is a distribution layer and operations GUI on top of the upstream agent, with installs always pulling the latest upstream `main` branch.
 
 ## Relationship to Upstream
 
@@ -62,6 +62,8 @@ pip install -e .[dev]
 nanobot onboard
 nanobot gui --host 0.0.0.0 --port 18791
 ```
+
+`pip install -e .[dev]` installs the current `HKUDS/nanobot@main` runtime plus this GUI overlay.
 
 Open:
 
@@ -103,6 +105,8 @@ git clone https://github.com/lucmuss/nanobot-webgui.git
 cd nanobot-webgui
 pip install -e .
 ```
+
+This install path also pulls the latest upstream `nanobot` `main` branch.
 
 ### With `uv`
 
@@ -256,7 +260,7 @@ nanobot agent -m "Hello!"
 Quick local checks:
 
 ```bash
-python3 -m compileall nanobot/gui
+python3 -m compileall nanobot_webgui
 python3 -m pytest tests -q
 python3 -m build
 ```

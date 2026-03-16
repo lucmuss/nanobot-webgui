@@ -116,7 +116,7 @@ This workflow runs:
 
 - Python 3.12
 - Node 20
-- `python -m compileall nanobot/gui nanobot/cli tests`
+- `python -m compileall nanobot_webgui tests`
 - `python -m pytest tests -q`
 - `python -m build`
 - Playwright E2E
@@ -156,7 +156,7 @@ prefer extending the current `data-testid` pattern instead of switching tests ba
 Use this exact order:
 
 ```bash
-python3 -m compileall nanobot/gui
+python3 -m compileall nanobot_webgui
 python3 -m pytest tests -q
 python3 -m build
 npm run test:e2e:critical

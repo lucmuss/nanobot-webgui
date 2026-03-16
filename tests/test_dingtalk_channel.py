@@ -3,8 +3,7 @@ from types import SimpleNamespace
 import pytest
 
 from nanobot.bus.queue import MessageBus
-from nanobot.channels.dingtalk import DingTalkChannel
-from nanobot.config.schema import DingTalkConfig
+from nanobot.channels.dingtalk import DingTalkChannel, DingTalkConfig
 
 
 class _FakeResponse:

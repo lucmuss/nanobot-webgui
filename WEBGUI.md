@@ -1,6 +1,6 @@
 # WebGUI Deployment Guide
 
-Current release target: `0.3.5`
+Current release target: `0.3.6`
 
 This guide is the operator-facing companion to the main [README](./README.md). It explains how to run `nanobot-webgui` reliably in standalone mode, attached-to-existing-install mode, and Docker deployments.
 
@@ -17,7 +17,7 @@ It manages:
 - memory documents such as `SOUL.md`, `USER.md`, `AGENTS.md`, and `TOOLS.md`
 - optional Community Hub browsing and publishing flows
 
-It does not replace the upstream Nanobot runtime. It operates it.
+It does not replace the upstream Nanobot runtime. It operates it, and installs now pull `HKUDS/nanobot@main` directly.
 
 ## 2. Two Supported Deployment Modes
 
@@ -30,6 +30,8 @@ pip install -e .
 nanobot onboard
 nanobot gui --host 0.0.0.0 --port 18791
 ```
+
+This editable install fetches the latest upstream `nanobot` `main` branch and layers the GUI package on top.
 
 ### Existing-install mode
 
@@ -58,6 +60,8 @@ pip install -e .[dev]
 nanobot onboard
 nanobot gui --host 0.0.0.0 --port 18791
 ```
+
+That install path also uses the latest upstream `main` branch at install time.
 
 Open:
 

@@ -16,7 +16,7 @@ def _make_loop(tmp_path: Path) -> AgentLoop:
     bus = MessageBus()
     provider = MagicMock()
     provider.get_default_model.return_value = "test-model"
-    return AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model", memory_window=10)
+    return AgentLoop(bus=bus, provider=provider, workspace=tmp_path, model="test-model")
 
 
 class TestMessageToolSuppressLogic:
@@ -34,6 +34,7 @@ class TestMessageToolSuppressLogic:
             LLMResponse(content="Done", tool_calls=[]),
         ])
         loop.provider.chat = AsyncMock(side_effect=lambda *a, **kw: next(calls))
+        loop.provider.chat_with_retry = AsyncMock(side_effect=loop.provider.chat)
         loop.tools.get_definitions = MagicMock(return_value=[])
 
         sent: list[OutboundMessage] = []
@@ -59,6 +60,7 @@ class TestMessageToolSuppressLogic:
             LLMResponse(content="I've sent the email.", tool_calls=[]),
         ])
         loop.provider.chat = AsyncMock(side_effect=lambda *a, **kw: next(calls))
+        loop.provider.chat_with_retry = AsyncMock(side_effect=loop.provider.chat)
         loop.tools.get_definitions = MagicMock(return_value=[])
 
         sent: list[OutboundMessage] = []
@@ -78,6 +80,7 @@ class TestMessageToolSuppressLogic:
     async def test_not_suppress_when_no_message_tool_used(self, tmp_path: Path) -> None:
         loop = _make_loop(tmp_path)
         loop.provider.chat = AsyncMock(return_value=LLMResponse(content="Hello!", tool_calls=[]))
+        loop.provider.chat_with_retry = AsyncMock(side_effect=loop.provider.chat)
         loop.tools.get_definitions = MagicMock(return_value=[])
 
         msg = InboundMessage(channel="feishu", sender_id="user1", chat_id="chat123", content="Hi")
@@ -99,6 +102,7 @@ class TestMessageToolSuppressLogic:
             LLMResponse(content="Done", tool_calls=[]),
         ])
         loop.provider.chat = AsyncMock(side_effect=lambda *a, **kw: next(calls))
+        loop.provider.chat_with_retry = AsyncMock(side_effect=loop.provider.chat)
         loop.tools.get_definitions = MagicMock(return_value=[])
         loop.tools.execute = AsyncMock(return_value="ok")
 

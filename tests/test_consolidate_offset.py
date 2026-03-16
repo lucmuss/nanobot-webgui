@@ -1,10 +1,12 @@
 """Test session management with cache-friendly message handling."""
 
 import asyncio
+import inspect
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pathlib import Path
+from nanobot.agent.loop import AgentLoop
 from nanobot.session.manager import Session, SessionManager
 
 # Test constants
@@ -480,6 +482,10 @@ class TestEmptyAndBoundarySessions:
         assert_messages_content(old_messages, 10, 34)
 
 
+@pytest.mark.skipif(
+    "memory_window" not in inspect.signature(AgentLoop).parameters,
+    reason="Current upstream main uses MemoryConsolidator and no longer exposes legacy memory_window dedup guards.",
+)
 class TestConsolidationDeduplicationGuard:
     """Test that consolidation tasks are deduplicated and serialized."""
 

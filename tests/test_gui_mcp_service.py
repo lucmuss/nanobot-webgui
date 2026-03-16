@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from nanobot.config.schema import MCPServerConfig
-from nanobot.gui.config_service import GUIConfigService
-from nanobot.gui.mcp_service import GUIMCPService, _extract_readme_summary, _parse_repository_source
+from nanobot_webgui.config_service import GUIConfigService
+from nanobot_webgui.mcp_service import GUIMCPService, _extract_readme_summary, _parse_repository_source
 from tests.helpers.mcp_fixtures import FIXTURE_ROOT
 
 
@@ -197,7 +197,7 @@ async def test_install_repository_blocks_when_required_runtime_is_missing(tmp_pa
         return target
 
     monkeypatch.setattr(service, "_clone_repository", fake_clone_repository)
-    monkeypatch.setattr("nanobot.gui.mcp_service.shutil.which", lambda _name: None)
+    monkeypatch.setattr("nanobot_webgui.mcp_service.shutil.which", lambda _name: None)
 
     with pytest.raises(ValueError, match="Missing required runtime tools"):
         await service.install_repository(

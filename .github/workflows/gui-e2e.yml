@@ -56,7 +56,7 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Compile GUI modules
-        run: python -m compileall nanobot/gui nanobot/cli tests
+        run: python -m compileall nanobot_webgui tests
 
       - name: Run full Python test suite
         run: python -m pytest tests -q
@@ -128,7 +128,7 @@ jobs:
         run: npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: Compile GUI modules
-        run: python -m compileall nanobot/gui nanobot/cli tests
+        run: python -m compileall nanobot_webgui tests
 
       - name: Run full Python test suite
         run: python -m pytest tests -q

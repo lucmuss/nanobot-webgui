@@ -47,18 +47,27 @@ test('settings validator fix buttons route to the correct pages across provider,
 
   config = readJson(paths.configPath);
   config.providers.openrouter.apiKey = 'e2e-openrouter-key';
-  config.tools.enabled = false;
+  const hasToolsToggle = Object.prototype.hasOwnProperty.call(config.tools, 'enabled');
+  if (hasToolsToggle) {
+    config.tools.enabled = false;
+  }
   config.tools.exec.timeout = 0;
   writeJson(paths.configPath, config);
 
   await openValidatedSettings(page);
   const toolsCard = page.getByTestId('validation-card-tool-execution');
-  await expect(toolsCard).toContainText('disabled');
+  if (hasToolsToggle) {
+    await expect(toolsCard).toContainText('disabled');
+  } else {
+    await expect(toolsCard).toContainText('timeout 0s');
+  }
   await page.getByTestId('validation-action-tool-execution').click();
   await expect(page).toHaveURL(/\/settings/);
 
   config = readJson(paths.configPath);
-  config.tools.enabled = true;
+  if (hasToolsToggle) {
+    config.tools.enabled = true;
+  }
   config.tools.exec.timeout = 60;
   writeJson(paths.configPath, config);
 

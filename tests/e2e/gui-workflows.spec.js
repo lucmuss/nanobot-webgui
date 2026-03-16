@@ -123,7 +123,9 @@ test('settings and memory editor persist values to config.json and MEMORY.md', a
   await expect(page.getByTestId('flash-message')).toContainText('saved');
 
   const config = readJson(paths.configPath);
-  expect(config.tools.enabled).toBe(true);
+  if (Object.prototype.hasOwnProperty.call(config.tools, 'enabled')) {
+    expect(config.tools.enabled).toBe(true);
+  }
   expect(config.tools.restrictToWorkspace).toBe(true);
   expect(config.tools.exec.timeout).toBe(75);
   expect(config.tools.exec.pathAppend).toBe('/usr/local/bin');

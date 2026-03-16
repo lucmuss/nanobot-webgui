@@ -6,8 +6,8 @@ from fastapi.testclient import TestClient
 
 from nanobot import __version__
 from nanobot.config.schema import MCPServerConfig
-from nanobot.gui.app import GUISettings, _display_summary_text, _render_chat_message_html, create_gui_app
-from nanobot.gui.mcp_service import _parse_repository_source
+from nanobot_webgui.app import GUISettings, _display_summary_text, _render_chat_message_html, create_gui_app
+from nanobot_webgui.mcp_service import _parse_repository_source
 from nanobot.session.manager import SessionManager
 from tests.helpers.mcp_fixtures import build_mcp_fixture_analysis, load_mcp_fixture
 
@@ -18,8 +18,18 @@ PNG_1X1 = base64.b64decode(
 
 
 def _next_patch_version(version: str) -> str:
-    major, minor, patch = version.split(".")
-    return f"{major}.{minor}.{int(patch) + 1}"
+    parts = version.split(".")
+    major = parts[0]
+    minor = parts[1]
+    patch = parts[2]
+    patch_number = patch.split("post", 1)[0]
+    next_patch = int(patch_number) + 1
+    return f"{major}.{minor}.{next_patch}"
+
+
+def _channel_config(config: object, name: str) -> dict[str, object]:
+    value = getattr(getattr(config, "channels", object()), name, {})
+    return value if isinstance(value, dict) else value.model_dump(by_alias=True)
 
 
 def _make_client(
@@ -259,8 +269,9 @@ def test_gui_setup_routes_persist_config_and_templates(tmp_path: Path):
     assert config.agents.defaults.provider == "openrouter"
     assert config.agents.defaults.model == "openai/gpt-4.1-mini"
     assert config.providers.openrouter.api_key == "backend-openrouter-key"
-    assert config.channels.telegram.enabled is True
-    assert config.channels.telegram.allow_from == ["owner-1", "owner-2"]
+    telegram = _channel_config(config, "telegram")
+    assert telegram["enabled"] is True
+    assert telegram["allowFrom"] == ["owner-1", "owner-2"]
     assert app.state.config_service.read_markdown_document("agents")["content"].startswith("# Backend integration")
     assert "- [x] Brief and concise" in app.state.config_service.read_markdown_document("user")["content"]
 
@@ -512,7 +523,8 @@ def test_gui_profile_and_settings_routes_persist_backend_state(tmp_path: Path):
 
     config = app.state.config_service.load()
     admin = app.state.auth_service.get_admin(1)
-    assert config.tools.enabled is True
+    if hasattr(config.tools, "enabled"):
+        assert config.tools.enabled is True
     assert config.tools.restrict_to_workspace is True
     assert config.tools.exec.timeout == 90
     assert config.tools.exec.path_append == "/usr/local/bin:/custom/bin"
@@ -1620,7 +1632,7 @@ def test_gui_mcp_repair_route_dispatches_configured_worker(tmp_path: Path, monke
             "supported": True,
         }
 
-    monkeypatch.setattr("nanobot.gui.app._run_mcp_repair_command", fake_repair_runner)
+    monkeypatch.setattr("nanobot_webgui.app._run_mcp_repair_command", fake_repair_runner)
     app.state.mcp_service.build_repair_plan = fake_build_repair_plan  # type: ignore[method-assign]
 
     response = client.post(
@@ -1660,7 +1672,7 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
             "source": "github_release",
         }
 
-    monkeypatch.setattr("nanobot.gui.app._fetch_latest_release_info", fake_fetch)
+    monkeypatch.setattr("nanobot_webgui.app._fetch_latest_release_info", fake_fetch)
 
     login_response = client.post(
         "/login",
@@ -1723,9 +1735,9 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     def fake_run(command: str, logger, config_service, target_version: str) -> None:
         calls.append((command, target_version))
 
-    monkeypatch.setattr("nanobot.gui.app._run_update_command", fake_run)
+    monkeypatch.setattr("nanobot_webgui.app._run_update_command", fake_run)
     monkeypatch.setattr(
-        "nanobot.gui.app._fetch_latest_release_info",
+        "nanobot_webgui.app._fetch_latest_release_info",
         lambda _repo: {
             "tag_name": newer_tag,
             "latest_version": newer_version,

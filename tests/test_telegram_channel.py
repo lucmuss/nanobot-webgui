@@ -4,8 +4,7 @@ import pytest
 
 from nanobot.bus.events import OutboundMessage
 from nanobot.bus.queue import MessageBus
-from nanobot.channels.telegram import TelegramChannel
-from nanobot.config.schema import TelegramConfig
+from nanobot.channels.telegram import TelegramChannel, TelegramConfig
 
 
 class _FakeHTTPXRequest:

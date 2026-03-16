@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from nanobot.cli.commands import app
 from nanobot.config.schema import Config
 from nanobot.providers.litellm_provider import LiteLLMProvider
 from nanobot.providers.openai_codex_provider import _strip_model_prefix
 from nanobot.providers.registry import find_by_model
+from nanobot_webgui.cli import app
 
 runner = CliRunner()
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
@@ -32,6 +32,7 @@ class _StopGateway(RuntimeError):
 def mock_paths():
     """Mock config/workspace paths for test isolation."""
     with patch("nanobot.config.loader.get_config_path") as mock_cp, \
+         patch("nanobot.cli.commands.get_workspace_path") as mock_wp, \
          patch("nanobot.config.loader.save_config") as mock_sc, \
          patch("nanobot.config.loader.load_config") as mock_lc:
 
@@ -44,6 +45,7 @@ def mock_paths():
         workspace_dir = base_dir / "workspace"
 
         mock_cp.return_value = config_file
+        mock_wp.return_value = workspace_dir
         mock_sc.side_effect = lambda config, _path=None: config_file.write_text("{}")
         mock_lc.return_value = Config()
 
@@ -57,7 +59,7 @@ def test_onboard_fresh_install(mock_paths):
     """No existing config — should create from scratch."""
     config_file, workspace_dir = mock_paths
 
-    result = runner.invoke(app, ["onboard", "-w", str(workspace_dir)])
+    result = runner.invoke(app, ["onboard"])
 
     assert result.exit_code == 0
     assert "Created config" in result.stdout
@@ -73,7 +75,7 @@ def test_onboard_existing_config_refresh(mock_paths):
     config_file, workspace_dir = mock_paths
     config_file.write_text('{"existing": true}')
 
-    result = runner.invoke(app, ["onboard", "-w", str(workspace_dir)], input="n\n")
+    result = runner.invoke(app, ["onboard"], input="n\n")
 
     assert result.exit_code == 0
     assert "Config already exists" in result.stdout
@@ -87,7 +89,7 @@ def test_onboard_existing_config_overwrite(mock_paths):
     config_file, workspace_dir = mock_paths
     config_file.write_text('{"existing": true}')
 
-    result = runner.invoke(app, ["onboard", "-w", str(workspace_dir)], input="y\n")
+    result = runner.invoke(app, ["onboard"], input="y\n")
 
     assert result.exit_code == 0
     assert "Config already exists" in result.stdout
@@ -101,7 +103,7 @@ def test_onboard_existing_workspace_safe_create(mock_paths):
     workspace_dir.mkdir(parents=True)
     config_file.write_text("{}")
 
-    result = runner.invoke(app, ["onboard", "-w", str(workspace_dir)], input="n\n")
+    result = runner.invoke(app, ["onboard"], input="n\n")
 
     assert result.exit_code == 0
     assert "Created workspace" not in result.stdout
@@ -220,7 +222,7 @@ def test_gui_starts_uvicorn_with_expected_settings(monkeypatch, tmp_path: Path):
         captured["host"] = host
         captured["port"] = port
 
-    monkeypatch.setattr("nanobot.gui.app.create_gui_app", fake_create_gui_app)
+    monkeypatch.setattr("nanobot_webgui.app.create_gui_app", fake_create_gui_app)
     monkeypatch.setattr("uvicorn.run", fake_uvicorn_run)
 
     result = runner.invoke(
@@ -300,7 +302,7 @@ def test_repair_worker_executes_bounded_recipe(monkeypatch):
         assert shell_command == ""
         return {"ok": True, "log": "installed node", "error": ""}
 
-    monkeypatch.setattr("nanobot.cli.commands.run_repair_recipe", fake_run)
+    monkeypatch.setattr("nanobot_webgui.cli.run_repair_recipe", fake_run)
 
     result = runner.invoke(app, ["repair-worker", "--recipe", "install_node"])
 

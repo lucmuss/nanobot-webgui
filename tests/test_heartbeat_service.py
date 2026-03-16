@@ -15,6 +15,9 @@ class DummyProvider:
             return self._responses.pop(0)
         return LLMResponse(content="", tool_calls=[])
 
+    async def chat_with_retry(self, *args, **kwargs) -> LLMResponse:
+        return await self.chat(*args, **kwargs)
+
 
 @pytest.mark.asyncio
 async def test_start_is_idempotent(tmp_path) -> None:

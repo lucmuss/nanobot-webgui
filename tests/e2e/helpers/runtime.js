@@ -59,7 +59,7 @@ function createAdminUser(
     'import sqlite3',
     'from pathlib import Path',
     'sys.path.insert(0, sys.argv[1])',
-    'from nanobot.gui.auth import AuthService, _hash_password',
+    'from nanobot_webgui.auth import AuthService, _hash_password',
     'db_path = Path(sys.argv[2])',
     'service = AuthService(db_path, db_path.with_name("gui-secret.txt"))',
     'service.init_db()',

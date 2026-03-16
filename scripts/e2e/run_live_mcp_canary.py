@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from nanobot.gui.config_service import GUIConfigService
-from nanobot.gui.mcp_service import GUIMCPService
+from nanobot_webgui.config_service import GUIConfigService
+from nanobot_webgui.mcp_service import GUIMCPService
 
 
 @dataclass(frozen=True, slots=True)
