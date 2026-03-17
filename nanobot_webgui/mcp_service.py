@@ -715,6 +715,7 @@ class GUIMCPService:
         process = await asyncio.create_subprocess_exec(
             cfg.command,
             *cfg.args,
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
             env=env,

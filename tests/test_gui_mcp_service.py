@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import shutil
@@ -16,6 +17,33 @@ def _build_service(tmp_path: Path) -> GUIMCPService:
     workspace_path = tmp_path / "workspace"
     config_service = GUIConfigService(config_path, str(workspace_path))
     return GUIMCPService(config_service, logging.getLogger("test.gui.mcp"))
+
+
+class _FakeStream:
+    def __init__(self, payload: bytes = b"") -> None:
+        self._payload = payload
+
+    async def read(self) -> bytes:
+        return self._payload
+
+
+class _FakeProcess:
+    def __init__(self, *, returncode: int | None = None, stderr: bytes = b"") -> None:
+        self.returncode = returncode
+        self.stderr = _FakeStream(stderr)
+        self.terminated = False
+        self.killed = False
+
+    def terminate(self) -> None:
+        self.terminated = True
+        self.returncode = 0
+
+    def kill(self) -> None:
+        self.killed = True
+        self.returncode = -9
+
+    async def wait(self) -> int:
+        return 0 if self.returncode is None else self.returncode
 
 
 def test_inspect_checkout_prefers_server_manifest_npm_package(tmp_path: Path):
@@ -137,6 +165,40 @@ def test_enrich_analysis_adds_repo_type_runtime_checks_and_next_step(tmp_path: P
     assert "npx" in enriched["required_runtimes"]
     assert isinstance(enriched["runtime_status"], list)
     assert enriched["next_action"]
+
+
+@pytest.mark.asyncio
+async def test_preflight_server_keeps_stdio_stdin_open_for_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    service = _build_service(tmp_path)
+    process = _FakeProcess(returncode=None, stderr=b"[INFO] waiting on stdio")
+    cfg = MCPServerConfig(
+        type="stdio",
+        command="node",
+        args=["build/index.js"],
+        env={"OPENAI_API_KEY": "dummy-test-key"},
+        url="",
+        headers={},
+        tool_timeout=30,
+    )
+
+    async def fake_create_subprocess_exec(*args, **kwargs):
+        assert args == ("node", "build/index.js")
+        assert kwargs["stdin"] is asyncio.subprocess.PIPE
+        assert kwargs["stdout"] is asyncio.subprocess.DEVNULL
+        assert kwargs["stderr"] is asyncio.subprocess.PIPE
+        return process
+
+    async def fake_sleep(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("nanobot_webgui.mcp_service.asyncio.create_subprocess_exec", fake_create_subprocess_exec)
+    monkeypatch.setattr("nanobot_webgui.mcp_service.asyncio.sleep", fake_sleep)
+
+    result = await service._preflight_server(cfg)
+
+    assert result == ""
+    assert process.terminated is True
+    assert process.killed is False
 
 
 @pytest.mark.asyncio
