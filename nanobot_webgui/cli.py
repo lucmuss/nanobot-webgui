@@ -81,7 +81,7 @@ def gui(
     community_public_url: str | None = typer.Option(
         None,
         "--community-public-url",
-        help="Optional public community hub URL shown in the GUI, for example https://nanobot-community-hub.kolibri-kollektiv.eu",
+        help="Optional public community hub URL shown in the GUI, for example https://nanobot-hub.eu",
     ),
     community_api_token: str | None = typer.Option(
         None,
@@ -112,7 +112,10 @@ def gui(
     repair_mode_value = (repair_mode or os.getenv("NANOBOT_GUI_REPAIR_MODE", "")).strip().lower()
     repair_command_value = (repair_command or os.getenv("NANOBOT_GUI_REPAIR_COMMAND", "")).strip()
     community_api_url_value = (community_api_url or os.getenv("NANOBOT_GUI_COMMUNITY_API_URL", "")).strip()
-    community_public_url_value = (community_public_url or os.getenv("NANOBOT_GUI_COMMUNITY_PUBLIC_URL", "")).strip()
+    community_public_url_value = (
+        (community_public_url or os.getenv("NANOBOT_GUI_COMMUNITY_PUBLIC_URL", "")).strip()
+        or "https://nanobot-hub.eu"
+    )
     community_api_token_value = (community_api_token or os.getenv("NANOBOT_GUI_COMMUNITY_API_TOKEN", "")).strip()
 
     if not restart_mode_value:

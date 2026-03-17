@@ -26,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from nanobot import __version__
+import nanobot
 from nanobot.config.schema import MCPServerConfig
 from nanobot_webgui.agent_service import GUIAgentService
 from nanobot_webgui.auth import AdminUser, AuthService
@@ -45,6 +45,10 @@ from nanobot_webgui.mcp_service import GUIMCPService, _append_log
 from nanobot_webgui.repair_worker import REPAIR_RECIPE_DETAILS, supported_repair_recipes
 from nanobot.providers.registry import PROVIDERS
 from nanobot.utils.helpers import safe_filename
+from nanobot_webgui.version import GUI_VERSION
+
+
+NANOBOT_VERSION = nanobot.__version__
 
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
@@ -174,7 +178,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         api_token=settings.community_api_token,
     )
 
-    app = FastAPI(title="nanobot GUI", version=__version__)
+    app = FastAPI(title="nanobot GUI", version=GUI_VERSION)
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,
@@ -646,7 +650,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "timeout_bucket": _community_timeout_bucket(record.get("tool_timeout")),
                     "retries": 0,
                     "instance_hash": settings.instance_name,
-                    "nanobot_version": __version__,
+                    "nanobot_version": NANOBOT_VERSION,
                 }
             )
         except Exception:
@@ -937,7 +941,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         return JSONResponse(
             {
                 "ok": True,
-                "version": __version__,
+                "version": GUI_VERSION,
+                "nanobotVersion": NANOBOT_VERSION,
                 "instance": settings.instance_name,
                 "configPath": str(settings.config_path),
                 "workspace": str(config.workspace_path),
@@ -3761,7 +3766,7 @@ def _render(
     update_status = _ensure_update_status(settings, config_service, gui_logger, user_present=bool(context.get("user")))
     shell_context = {
         "instance_name": settings.instance_name,
-        "current_version": __version__,
+        "current_version": GUI_VERSION,
         "gui_host": settings.host,
         "gui_port": settings.port,
         "config_path": str(config_service.config_path),
@@ -4830,7 +4835,7 @@ def _ensure_update_status(
     cached = config_service.get_update_status()
     base_status = {
         "enabled": bool(settings.update_check_enabled and repo),
-        "current_version": __version__,
+        "current_version": GUI_VERSION,
         "latest_version": str(cached.get("latest_version", "")),
         "tag_name": str(cached.get("tag_name", "")),
         "available": bool(cached.get("available", False)),
@@ -4853,7 +4858,7 @@ def _ensure_update_status(
         return base_status
 
     if base_status["latest_version"]:
-        base_status["available"] = _is_newer_version(base_status["latest_version"], __version__)
+        base_status["available"] = _is_newer_version(base_status["latest_version"], GUI_VERSION)
         if not base_status["available"]:
             base_status["updating"] = False
 
@@ -4877,12 +4882,12 @@ def _ensure_update_status(
             **base_status,
             **fetched,
             "enabled": True,
-            "available": _is_newer_version(str(fetched.get("latest_version", "")), __version__),
+            "available": _is_newer_version(str(fetched.get("latest_version", "")), GUI_VERSION),
             "checked_at": _utc_now(),
             "repo": repo,
             "error": "",
             "updating": bool(base_status["updating"])
-            and _is_newer_version(str(fetched.get("latest_version", "")), __version__),
+            and _is_newer_version(str(fetched.get("latest_version", "")), GUI_VERSION),
             "last_update_error": str(base_status.get("last_update_error", "")),
         }
         return config_service.set_update_status(refreshed)

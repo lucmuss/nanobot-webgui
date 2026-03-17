@@ -1,6 +1,6 @@
 # WebGUI Deployment Guide
 
-Current release target: `0.3.6`
+Current release target: `0.3.7`
 
 This guide is the operator-facing companion to the main [README](./README.md). It explains how to run `nanobot-webgui` reliably in standalone mode, attached-to-existing-install mode, and Docker deployments.
 
@@ -152,7 +152,7 @@ Typical URLs:
 
 - internal API URL: `http://nanobot-community-hub:18811/api/v1`
 - GUI public URL: `https://your-nanobot-gui.example.com`
-- Hub public URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
+- Hub public URL: `https://nanobot-hub.eu`
 
 Required GUI-side settings:
 
@@ -172,7 +172,7 @@ That must match the Hub-side:
 If you use `cloudflared`, a typical mapping is:
 
 - `your-nanobot-gui.example.com` -> `http://host.docker.internal:18791`
-- `nanobot-community-hub.kolibri-kollektiv.eu` -> `http://host.docker.internal:18811`
+- `nanobot-hub.eu` -> `http://host.docker.internal:18811`
 
 ## 9. Update Banner and Controlled Updates
 

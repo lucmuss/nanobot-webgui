@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from nanobot import __version__
 from nanobot.config.schema import MCPServerConfig
 from nanobot_webgui.app import GUISettings, _display_summary_text, _render_chat_message_html, create_gui_app
 from nanobot_webgui.mcp_service import _parse_repository_source
+from nanobot_webgui.version import GUI_VERSION
 from nanobot.session.manager import SessionManager
 from tests.helpers.mcp_fixtures import build_mcp_fixture_analysis, load_mcp_fixture
 
@@ -1647,7 +1647,7 @@ def test_gui_mcp_repair_route_dispatches_configured_worker(tmp_path: Path, monke
 
 
 def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    newer_version = _next_patch_version(__version__)
+    newer_version = _next_patch_version(GUI_VERSION)
     newer_tag = f"v{newer_version}"
     client, app = _make_client(
         tmp_path,
@@ -1681,6 +1681,7 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
     )
     assert login_response.status_code == 200
     assert f"New version available: {newer_tag}" in login_response.text
+    assert f"You are running {GUI_VERSION}." in login_response.text
     assert "View release notes" in login_response.text
     assert "Update now" in login_response.text
     assert calls == ["lucmuss/nanobot-webgui"]
@@ -1699,7 +1700,7 @@ def test_gui_update_banner_checks_github_once_per_day_and_renders_actions(tmp_pa
 
 
 def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    newer_version = _next_patch_version(__version__)
+    newer_version = _next_patch_version(GUI_VERSION)
     newer_tag = f"v{newer_version}"
     client, app = _make_client(
         tmp_path,
@@ -1712,7 +1713,7 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     app.state.config_service.set_update_status(
         {
             "enabled": True,
-            "current_version": __version__,
+            "current_version": GUI_VERSION,
             "latest_version": newer_version,
             "tag_name": newer_tag,
             "available": True,
@@ -1761,3 +1762,13 @@ def test_gui_update_action_runs_only_configured_command(tmp_path: Path, monkeypa
     assert "Updating GUI" in update_response.text
     assert calls == [("/usr/local/bin/nanobot-webgui-update.sh", newer_version)]
     assert app.state.config_service.get_update_status()["updating"] is True
+
+
+def test_gui_health_reports_webgui_version(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["version"] == GUI_VERSION

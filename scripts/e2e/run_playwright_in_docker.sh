@@ -23,7 +23,7 @@ docker run --rm \
   -e PLAYWRIGHT_BROWSERS_PATH=/app/.playwright-browsers \
   -e NANOBOT_GUI_E2E_BROWSERS="${NANOBOT_GUI_E2E_BROWSERS:-chromium}" \
   -e NANOBOT_GUI_COMMUNITY_API_URL="${NANOBOT_GUI_COMMUNITY_API_URL:-http://host.docker.internal:18811/api/v1}" \
-  -e NANOBOT_GUI_COMMUNITY_PUBLIC_URL="${NANOBOT_GUI_COMMUNITY_PUBLIC_URL:-https://nanobot-community-hub.kolibri-kollektiv.eu}" \
+  -e NANOBOT_GUI_COMMUNITY_PUBLIC_URL="${NANOBOT_GUI_COMMUNITY_PUBLIC_URL:-https://nanobot-hub.eu}" \
   -e NANOBOT_GUI_COMMUNITY_API_TOKEN="${NANOBOT_GUI_COMMUNITY_API_TOKEN:-}" \
   -e NANOBOT_GUI_PUBLIC_URL="${NANOBOT_GUI_PUBLIC_URL:-}" \
   -v "${REPO_ROOT}:/app" \

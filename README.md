@@ -1,9 +1,9 @@
 <div align="center">
   <h1>nanobot-webgui</h1>
-  <p><strong>Release 0.3.6</strong></p>
+  <p><strong>Release 0.3.7</strong></p>
   <p>Production-focused browser GUI for <a href="https://github.com/HKUDS/nanobot">HKUDS/nanobot</a>.</p>
   <p>
-    <img src="https://img.shields.io/badge/release-0.3.6-f59e0b" alt="Release 0.3.6">
+    <img src="https://img.shields.io/badge/release-0.3.7-f59e0b" alt="Release 0.3.7">
     <a href="https://github.com/HKUDS/nanobot"><img src="https://img.shields.io/badge/upstream-HKUDS%2Fnanobot-c4632c" alt="Upstream"></a>
     <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python">
     <img src="https://img.shields.io/badge/gui-FastAPI%20%2B%20Jinja2%20%2B%20HTMX-2c7a5a" alt="GUI stack">
@@ -209,13 +209,13 @@ Recommended split in this environment:
 Typical wiring:
 
 - internal community API: `http://nanobot-community-hub:18811/api/v1`
-- public hub URL: `https://nanobot-community-hub.kolibri-kollektiv.eu`
+- public hub URL: `https://nanobot-hub.eu`
 - public GUI URL: `https://your-nanobot-gui.example.com`
 
 Cloudflare tunnel example:
 
 - `your-nanobot-gui.example.com` -> `http://host.docker.internal:18791`
-- `nanobot-community-hub.kolibri-kollektiv.eu` -> `http://host.docker.internal:18811`
+- `nanobot-hub.eu` -> `http://host.docker.internal:18811`
 
 ## Common Commands
 
