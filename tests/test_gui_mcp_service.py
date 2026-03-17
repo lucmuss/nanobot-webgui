@@ -167,6 +167,48 @@ def test_enrich_analysis_adds_repo_type_runtime_checks_and_next_step(tmp_path: P
     assert enriched["next_action"]
 
 
+def test_inspect_checkout_uses_pyproject_console_script_for_python_mcp(tmp_path: Path):
+    checkout_dir = tmp_path / "caldav-mcp"
+    (checkout_dir / "src" / "mcp_caldav").mkdir(parents=True)
+    (checkout_dir / "README.md").write_text(
+        "Python MCP server for CalDAV integrations.",
+        encoding="utf-8",
+    )
+    (checkout_dir / "pyproject.toml").write_text(
+        """
+[project]
+name = "mcp-caldav"
+version = "0.1.0"
+description = "CalDAV MCP"
+
+[project.scripts]
+mcp-caldav = "mcp_caldav:main"
+""".strip(),
+        encoding="utf-8",
+    )
+    (checkout_dir / "src" / "mcp_caldav" / "__init__.py").write_text(
+        "def main():\n    raise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "madbonez",
+            "repo": "caldav-mcp",
+            "repo_url": "https://github.com/madbonez/caldav-mcp",
+            "clone_url": "https://github.com/madbonez/caldav-mcp.git",
+        },
+    )
+
+    assert analysis["install_mode"] == "source"
+    assert analysis["run_command"] == "uv"
+    assert analysis["run_args"] == ["run", "--directory", "./", "mcp-caldav"]
+    assert any(step["display"] == "uv pip install -e ." for step in analysis["install_steps"])
+    assert "pyproject.toml" in analysis["evidence"]
+
+
 @pytest.mark.asyncio
 async def test_preflight_server_keeps_stdio_stdin_open_for_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     service = _build_service(tmp_path)

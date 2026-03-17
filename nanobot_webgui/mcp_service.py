@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import tempfile
+import tomllib
 from contextlib import AsyncExitStack
 from datetime import datetime, timezone
 from pathlib import Path
@@ -431,6 +432,7 @@ class GUIMCPService:
         """Build a best-effort install plan from the repository contents."""
         package_json = _read_json(checkout_dir / "package.json")
         pyproject = _read_text(checkout_dir / "pyproject.toml")
+        pyproject_data = _read_toml(checkout_dir / "pyproject.toml")
         server_manifest = _load_server_manifest(checkout_dir)
         workspace_package = _find_workspace_mcp_package(checkout_dir)
         readme_summary = _extract_readme_summary(checkout_dir / "README.md")
@@ -536,7 +538,7 @@ class GUIMCPService:
             )
             evidence.append("pyproject.toml")
             if not run_command:
-                run_command, run_args = _derive_python_entry(checkout_dir)
+                run_command, run_args = _derive_python_entry(checkout_dir, pyproject_data)
         elif not run_command and not run_url:
             raise ValueError("Could not derive an install plan for this repository.")
 
@@ -833,6 +835,17 @@ def _read_json(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _read_toml(path: Path) -> dict[str, Any]:
+    """Read one TOML file if it exists and is valid."""
+    if not path.exists():
+        return {}
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except (tomllib.TOMLDecodeError, OSError):
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -1548,8 +1561,22 @@ def _derive_node_entry(checkout_dir: Path, package_json: dict[str, Any]) -> tupl
     return "", []
 
 
-def _derive_python_entry(checkout_dir: Path) -> tuple[str, list[str]]:
+def _derive_python_entry(checkout_dir: Path, pyproject_data: dict[str, Any]) -> tuple[str, list[str]]:
     """Best-effort runtime command for Python-based MCP servers."""
+    project = pyproject_data.get("project") if isinstance(pyproject_data, dict) else {}
+    scripts = project.get("scripts") if isinstance(project, dict) else {}
+    if isinstance(scripts, dict) and scripts:
+        preferred = next(
+            (
+                str(name).strip()
+                for name in scripts.keys()
+                if str(name).strip() and "mcp" in str(name).strip().lower()
+            ),
+            "",
+        )
+        script_name = preferred or next((str(name).strip() for name in scripts.keys() if str(name).strip()), "")
+        if script_name:
+            return "uv", ["run", "--directory", "./", script_name]
     if (checkout_dir / "src" / "main.py").exists():
         return "python", [str(checkout_dir / "src" / "main.py")]
     if (checkout_dir / "main.py").exists():
