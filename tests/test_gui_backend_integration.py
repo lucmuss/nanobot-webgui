@@ -632,6 +632,47 @@ def test_gui_mcp_analyze_preview_shows_pipeline_metadata(tmp_path: Path):
     assert "Deterministic install pipeline" in response.text
     assert "Required runtimes" in response.text
     assert "Next step" in response.text
+    assert '<div class="mono copy-field-value">fixture-echo-mcp serve</div>' in response.text
+
+
+def test_gui_mcp_detail_publish_uses_category_select_and_visible_env_fields(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    _install_fixture_mcp_backend(app)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=True,
+    )
+
+    async def fake_marketplace(**_kwargs):
+        return {"categories": ["Knowledge workflows", "Research"]}
+
+    app.state.community_service.marketplace = fake_marketplace  # type: ignore[method-assign]
+
+    install_response = client.post(
+        "/mcp/install",
+        data={"source": "https://github.com/example/secret-mcp"},
+        follow_redirects=True,
+    )
+    assert install_response.status_code == 200
+
+    response = client.get("/mcp/secret")
+
+    assert response.status_code == 200
+    assert '<select name="category" data-testid="mcp-community-publish-category">' in response.text
+    assert '<option value="Knowledge workflows"' in response.text
+    assert (
+        '<input type="text" name="env__FAKE_API_KEY" value="" autocomplete="off" spellcheck="false" '
+        'data-testid="mcp-env-FAKE_API_KEY">'
+    ) in response.text
 
 
 def test_gui_community_detail_and_install_flow_persist_recommendations(tmp_path: Path):

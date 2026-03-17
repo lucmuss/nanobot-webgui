@@ -1,6 +1,6 @@
 # WebGUI Deployment Guide
 
-Current release target: `0.3.8`
+Current release target: `0.3.9`
 
 This guide is the operator-facing companion to the main [README](./README.md). It explains how to run `nanobot-webgui` reliably in standalone mode, attached-to-existing-install mode, and Docker deployments.
 

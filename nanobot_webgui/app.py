@@ -388,6 +388,18 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         )
         return payload, overview, recommendations, error
 
+    async def load_community_mcp_categories() -> list[str]:
+        """Load MCP category choices for publish forms, with offline fallbacks."""
+        categories = _community_category_options()
+        if not community_service.enabled:
+            return categories
+        try:
+            payload = await community_service.marketplace()
+        except Exception:
+            gui_logger.warning("community_marketplace_categories_failed", exc_info=True)
+            return categories
+        return _community_category_options(payload.get("categories", []))
+
     async def load_community_stack_state(*, query: str = "") -> tuple[dict[str, Any], str]:
         """Load reusable stack data from the community hub."""
         payload: dict[str, Any] = {}
@@ -854,6 +866,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         server_name: str,
         community_item: dict[str, Any] | None = None,
         community_fixes: list[dict[str, Any]] | None = None,
+        community_categories: list[str] | None = None,
         mcp_test_history: list[dict[str, Any]] | None = None,
         error: str | None = None,
         status_code: int = 200,
@@ -912,6 +925,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "community_item": community_item or {},
                 "community_fixes": community_fixes or [],
                 "community_recommended_fix": recommended_config_fix or {},
+                "community_categories": community_categories or _community_category_options(),
                 "community_preferences": community_preferences,
                 "community_write_enabled": community_service.can_write,
                 "publish_form": _default_mcp_publish_form(card, user),
@@ -2822,6 +2836,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         record = config_service.get_mcp_record(server_name)
         community_item: dict[str, Any] = {}
         community_fixes: list[dict[str, Any]] = []
+        community_categories = await load_community_mcp_categories()
         community_slug = str(record.get("community_slug", "")).strip()
         if community_slug and community_service.enabled:
             try:
@@ -2836,6 +2851,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             server_name=server_name,
             community_item=community_item,
             community_fixes=community_fixes,
+            community_categories=community_categories,
             mcp_test_history=history,
         )
 
@@ -2868,6 +2884,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             record = config_service.get_mcp_record(server_name)
             community_item: dict[str, Any] = {}
             community_fixes: list[dict[str, Any]] = []
+            community_categories = await load_community_mcp_categories()
             community_slug = str(record.get("community_slug", "")).strip()
             if community_slug and community_service.enabled:
                 try:
@@ -2882,6 +2899,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 server_name=server_name,
                 community_item=community_item,
                 community_fixes=community_fixes,
+                community_categories=community_categories,
                 mcp_test_history=history,
                 error=str(exc),
                 status_code=400,
@@ -4128,6 +4146,28 @@ def _guess_community_category(card: dict[str, Any]) -> str:
     if any(token in haystack for token in ("search", "crawl", "extract", "browser", "doc", "context")):
         return "Research"
     return "Automation"
+
+
+def _community_category_options(*sources: Any) -> list[str]:
+    """Return stable category choices for MCP publish forms."""
+    options = [
+        "Automation",
+        "Coding",
+        "Research",
+        "Knowledge workflows",
+        "Security",
+        "Monitoring",
+        "DevOps",
+    ]
+    seen = {item.lower() for item in options}
+    for source in sources:
+        values = source if isinstance(source, list) else [source]
+        for value in values:
+            normalized = str(value or "").strip()
+            if normalized and normalized.lower() not in seen:
+                options.append(normalized)
+                seen.add(normalized.lower())
+    return options
 
 
 def _guess_community_install_method(card: dict[str, Any]) -> str:

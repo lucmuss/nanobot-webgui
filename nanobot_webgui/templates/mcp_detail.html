@@ -295,7 +295,12 @@
                 </label>
                 <label>
                   Category
-                  <input type="text" name="category" value="{{ publish_form.category }}" data-testid="mcp-community-publish-category">
+                  <select name="category" data-testid="mcp-community-publish-category">
+                    <option value="">Select a category</option>
+                    {% for item in community_categories %}
+                      <option value="{{ item }}" {% if publish_form.category == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                  </select>
                 </label>
               </div>
               <label style="margin-top: 12px; display: block;">
@@ -345,7 +350,7 @@
             {% for field in env_fields %}
               <label>
                 {{ field.name }}{% if field.required %} (required){% endif %}
-                <input type="password" name="env__{{ field.name }}" value="{{ field.value }}" data-testid="mcp-env-{{ field.name }}">
+                <input type="text" name="env__{{ field.name }}" value="{{ field.value }}" autocomplete="off" spellcheck="false" data-testid="mcp-env-{{ field.name }}">
               </label>
             {% endfor %}
           </div>

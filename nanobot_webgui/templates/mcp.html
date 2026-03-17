@@ -97,18 +97,17 @@
             </div>
             <div>
               <strong>{{ "Remote endpoint" if preview.run_url else "Start command" }}</strong>
+              {% if preview.run_url %}
+                {% set preview_launch_target = preview.run_url %}
+              {% else %}
+                {% set preview_launch_target = ([preview.run_command] + (preview.run_args or [])) | reject("equalto", "") | list | join(" ") %}
+              {% endif %}
               <div class="copy-field">
-                <div class="mono copy-field-value">
-                {% if preview.run_url %}
-                  {{ preview.run_url }}
-                {% else %}
-                  {{ preview.run_command }}{% if preview.run_args %} {{ preview.run_args|join(' ') }}{% endif %}
-                {% endif %}
-                </div>
+                <div class="mono copy-field-value">{{ preview_launch_target }}</div>
                 <button
                   class="secondary copy-inline-button"
                   type="button"
-                  data-copy-text="{% if preview.run_url %}{{ preview.run_url }}{% else %}{{ preview.run_command }}{% if preview.run_args %} {{ preview.run_args|join(' ') }}{% endif %}{% endif %}"
+                  data-copy-text="{{ preview_launch_target }}"
                   data-testid="mcp-preview-copy-command"
                 >
                   Copy
