@@ -205,7 +205,7 @@ mcp-caldav = "mcp_caldav:main"
     assert analysis["install_mode"] == "source"
     assert analysis["run_command"] == "uv"
     assert analysis["run_args"] == ["run", "--directory", "./", "mcp-caldav"]
-    assert any(step["display"] == "uv pip install -e ." for step in analysis["install_steps"])
+    assert any(step["display"] == "uv pip install --system -e ." for step in analysis["install_steps"])
     assert "pyproject.toml" in analysis["evidence"]
 
 

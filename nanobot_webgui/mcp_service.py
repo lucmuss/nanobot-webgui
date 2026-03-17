@@ -534,7 +534,11 @@ class GUIMCPService:
                 evidence.append(f"package.json name={package_name or repo['repo']}")
         elif not run_command and not run_url and pyproject:
             install_steps.append(
-                {"command": ["uv", "pip", "install", "-e", "."], "display": "uv pip install -e .", "timeout": 900}
+                {
+                    "command": ["uv", "pip", "install", "--system", "-e", "."],
+                    "display": "uv pip install --system -e .",
+                    "timeout": 900,
+                }
             )
             evidence.append("pyproject.toml")
             if not run_command:
@@ -1414,6 +1418,7 @@ def _command_from_known_display(display: str) -> list[str]:
         "npm ci": ["npm", "ci"],
         "npm install": ["npm", "install"],
         "npm run build": ["npm", "run", "build"],
+        "uv pip install --system -e .": ["uv", "pip", "install", "--system", "-e", "."],
         "uv pip install -e .": ["uv", "pip", "install", "-e", "."],
         "uv sync": ["uv", "sync"],
         "pip install -e .": ["pip", "install", "-e", "."],
@@ -1429,6 +1434,7 @@ def _is_allowed_install_command(command: list[str]) -> bool:
         ("npm", "ci"),
         ("npm", "install"),
         ("npm", "run", "build"),
+        ("uv", "pip", "install", "--system", "-e", "."),
         ("uv", "pip", "install", "-e", "."),
         ("uv", "sync"),
         ("pip", "install", "-e", "."),
