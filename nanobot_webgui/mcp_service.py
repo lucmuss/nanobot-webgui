@@ -535,8 +535,8 @@ class GUIMCPService:
         elif not run_command and not run_url and pyproject:
             install_steps.append(
                 {
-                    "command": ["uv", "pip", "install", "--system", "-e", "."],
-                    "display": "uv pip install --system -e .",
+                    "command": ["uv", "sync"],
+                    "display": "uv sync",
                     "timeout": 900,
                 }
             )
@@ -1584,9 +1584,9 @@ def _derive_python_entry(checkout_dir: Path, pyproject_data: dict[str, Any]) -> 
         if script_name:
             return "uv", ["run", "--directory", "./", script_name]
     if (checkout_dir / "src" / "main.py").exists():
-        return "python", [str(checkout_dir / "src" / "main.py")]
+        return "uv", ["run", "--directory", "./", "python", "./src/main.py"]
     if (checkout_dir / "main.py").exists():
-        return "python", [str(checkout_dir / "main.py")]
+        return "uv", ["run", "--directory", "./", "python", "./main.py"]
     return "", []
 
 

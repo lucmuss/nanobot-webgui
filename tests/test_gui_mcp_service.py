@@ -205,8 +205,37 @@ mcp-caldav = "mcp_caldav:main"
     assert analysis["install_mode"] == "source"
     assert analysis["run_command"] == "uv"
     assert analysis["run_args"] == ["run", "--directory", "./", "mcp-caldav"]
-    assert any(step["display"] == "uv pip install --system -e ." for step in analysis["install_steps"])
+    assert any(step["display"] == "uv sync" for step in analysis["install_steps"])
     assert "pyproject.toml" in analysis["evidence"]
+
+
+def test_inspect_checkout_uses_uv_run_for_python_entry_files(tmp_path: Path):
+    checkout_dir = tmp_path / "python-mcp"
+    (checkout_dir / "src").mkdir(parents=True)
+    (checkout_dir / "pyproject.toml").write_text(
+        """
+[project]
+name = "calendar-mcp"
+version = "0.1.0"
+""".strip(),
+        encoding="utf-8",
+    )
+    (checkout_dir / "src" / "main.py").write_text("print('hello')\n", encoding="utf-8")
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "example",
+            "repo": "calendar-mcp",
+            "repo_url": "https://github.com/example/calendar-mcp",
+            "clone_url": "https://github.com/example/calendar-mcp.git",
+        },
+    )
+
+    assert analysis["run_command"] == "uv"
+    assert analysis["run_args"] == ["run", "--directory", "./", "python", "./src/main.py"]
+    assert any(step["display"] == "uv sync" for step in analysis["install_steps"])
 
 
 @pytest.mark.asyncio
