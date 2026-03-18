@@ -628,6 +628,43 @@ async def test_preflight_server_keeps_stdio_stdin_open_for_probe(tmp_path: Path,
 
 
 @pytest.mark.asyncio
+async def test_test_server_replaces_generic_connection_closed_with_stdio_diagnostics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+    config.tools.mcp_servers["email-mcp"] = MCPServerConfig(
+        type="stdio",
+        command="node",
+        args=["npx-cli.js", "-y", "@codefuturist/email-mcp"],
+        env={},
+        url="",
+        headers={},
+        tool_timeout=30,
+    )
+    service.config_service.save(config)
+    service.config_service.set_mcp_record("email-mcp", {"required_env": []})
+
+    async def fake_preflight(_cfg, *, settle_seconds: float = 2.0):
+        if settle_seconds > 2:
+            return "Fatal error: No configuration found."
+        return ""
+
+    async def fake_list_tools(_cfg):
+        raise RuntimeError("Connection closed")
+
+    monkeypatch.setattr(service, "_preflight_server", fake_preflight)
+    monkeypatch.setattr(service, "_list_server_tools", fake_list_tools)
+
+    result = await service.test_server("email-mcp")
+
+    assert result["status"] == "error"
+    assert result["last_error"] == "Fatal error: No configuration found."
+    assert result["last_test_checks"][2]["detail"] == "Fatal error: No configuration found."
+
+
+@pytest.mark.asyncio
 async def test_analyze_repository_uses_ai_fallback_for_unknown_repo(tmp_path: Path):
     repo_dir = tmp_path / "unknown-repo"
     repo_dir.mkdir(parents=True)

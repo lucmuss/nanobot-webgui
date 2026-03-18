@@ -286,6 +286,7 @@ class GUIMCPService:
             tool_names = await self._list_server_tools(cfg)
         except Exception as exc:
             message = _summarize_exception(exc)
+            message = await self._diagnose_probe_failure(cfg, message)
             result["last_test_checks"] = [
                 {"label": "Secrets provided", "ok": True, "detail": "Required env vars are present."},
                 {"label": "Startup preflight", "ok": True, "detail": "The MCP process started."},
@@ -329,6 +330,15 @@ class GUIMCPService:
         self.config_service.set_mcp_record(server_name, result)
         self.logger.info("mcp_probe_ok server=%s tools=%s", server_name, len(tool_names))
         return result
+
+    async def _diagnose_probe_failure(self, cfg: MCPServerConfig, message: str) -> str:
+        """Replace generic stdio handshake errors with a more actionable startup failure when possible."""
+        if _resolve_transport(cfg) != "stdio":
+            return message
+        if not _looks_like_generic_stdio_failure(message):
+            return message
+        detail = await self._preflight_server(cfg, settle_seconds=8)
+        return detail or message
 
     async def build_repair_plan(self, server_name: str, *, allow_unrestricted: bool = False) -> dict[str, Any]:
         """Build a bounded repair plan for one installed MCP server."""
@@ -885,7 +895,7 @@ class GUIMCPService:
             "PATH": f"{node_bin_dir}{os.pathsep}{current_path}" if current_path else node_bin_dir,
         }
 
-    async def _preflight_server(self, cfg: MCPServerConfig) -> str:
+    async def _preflight_server(self, cfg: MCPServerConfig, *, settle_seconds: float = 2.0) -> str:
         """Run a short stdio preflight so hard startup failures surface with stderr."""
         if _resolve_transport(cfg) != "stdio" or not cfg.command:
             return ""
@@ -901,7 +911,7 @@ class GUIMCPService:
             env=env,
         )
         try:
-            await asyncio.sleep(2)
+            await asyncio.sleep(settle_seconds)
             if process.returncode is None:
                 process.terminate()
                 try:
@@ -1453,7 +1463,7 @@ def _analysis_needs_local_node_runtime(analysis: dict[str, Any]) -> bool:
 
 def _required_runtime_version(runtime: str, constraints: dict[str, str]) -> str:
     """Map runtime families to the constraint that should validate them."""
-    if runtime in {"node", "npm", "npx"}:
+    if runtime == "node":
         return str(constraints.get("node", "")).strip()
     return str(constraints.get(runtime, "")).strip()
 
@@ -1564,6 +1574,17 @@ def _read_runtime_version(runtime: str, executable: list[str]) -> str:
     output = (completed.stdout or completed.stderr or "").strip()
     match = re.search(r"v?(\d+(?:\.\d+){0,2})", output)
     return match.group(1) if match else ""
+
+
+def _looks_like_generic_stdio_failure(message: str) -> bool:
+    """Return whether one MCP handshake error is too generic and worth re-diagnosing."""
+    normalized = str(message).strip().lower()
+    return normalized in {
+        "connection closed",
+        "stream closed",
+        "broken pipe",
+        "eof",
+    }
 
 
 def _runtime_version_satisfies(installed_version: str, constraint: str) -> bool:
