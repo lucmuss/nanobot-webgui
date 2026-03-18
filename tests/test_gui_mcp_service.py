@@ -837,6 +837,170 @@ async def test_install_repository_uses_local_node_runtime_for_engine_constrained
     assert record["missing_runtimes"] == []
 
 
+@pytest.mark.asyncio
+async def test_install_repository_falls_back_to_source_checkout_after_npm_module_resolution_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = _build_service(tmp_path)
+    source_repo = tmp_path / "email-mcp-source"
+    (source_repo / "dist").mkdir(parents=True)
+    (source_repo / "README.md").write_text("Email MCP source checkout.", encoding="utf-8")
+    (source_repo / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "@codefuturist/email-mcp",
+                "version": "0.2.1",
+                "bin": {"email-mcp": "./dist/main.js"},
+                "scripts": {"build": "tsc"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (source_repo / "dist" / "main.js").write_text("console.log('email-mcp');\n", encoding="utf-8")
+
+    async def fake_analyze(_source: str, *, allow_ai_fallback: bool = False) -> dict[str, object]:
+        assert allow_ai_fallback is False
+        return {
+            "server_name": "email-mcp",
+            "title": "codefuturist/email-mcp",
+            "summary": "Email MCP package.",
+            "repo_url": "https://github.com/codefuturist/email-mcp",
+            "clone_url": "https://github.com/codefuturist/email-mcp.git",
+            "install_slug": "codefuturist__email-mcp",
+            "install_mode": "npm",
+            "transport": "stdio",
+            "run_command": "npx",
+            "run_args": ["-y", "@codefuturist/email-mcp"],
+            "run_url": "",
+            "install_steps": [
+                {
+                    "command": [],
+                    "display": "Register npm package runtime via npx @codefuturist/email-mcp",
+                    "timeout": 0,
+                }
+            ],
+            "required_env": [],
+            "optional_env": [],
+            "healthcheck": "list tools",
+            "evidence": ["server.json npm=@codefuturist/email-mcp"],
+            "repo_type": "server_json",
+            "analysis_mode": "deterministic",
+            "analysis_confidence": 0.75,
+            "required_runtimes": ["node", "npx"],
+            "runtime_constraints": {"node": ">=24.0.0"},
+            "runtime_status": [
+                {
+                    "name": "node",
+                    "available": False,
+                    "executable": "node",
+                    "version": "20.20.1",
+                    "required_version": ">=24.0.0",
+                    "reason": "version_mismatch",
+                    "provisionable": True,
+                }
+            ],
+            "missing_runtimes": [],
+            "can_install": True,
+            "next_action": "Install the MCP and Nanobot will provision a matching local Node runtime for this server (>=24.0.0).",
+        }
+
+    async def fake_prepare(_analysis: dict[str, object], _record: dict[str, object]) -> dict[str, object]:
+        return {
+            "node": {
+                "constraint": ">=24.0.0",
+                "resolved_version": "24.10.0",
+                "root_dir": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64",
+                "node_executable": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+                "npm_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+                "npx_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npx-cli.js",
+            }
+        }
+
+    async def fake_clone(_clone_url: str, target_dir: Path | None = None) -> Path:
+        assert target_dir is not None
+        shutil.copytree(source_repo, target_dir)
+        (target_dir / ".git").mkdir()
+        return target_dir
+
+    executed_commands: list[list[str]] = []
+
+    async def fake_run_command(command: list[str], *, cwd: Path, timeout: int, env: dict[str, str] | None = None):
+        executed_commands.append(list(command))
+        return "", ""
+
+    test_calls: list[tuple[str, list[str]]] = []
+
+    async def fake_test(server_name: str) -> dict[str, object]:
+        cfg = service.config_service.load().tools.mcp_servers[server_name]
+        test_calls.append((cfg.command, list(cfg.args)))
+        if len(test_calls) == 1:
+            return {
+                "server_name": server_name,
+                "status": "error",
+                "status_label": "Probe failed",
+                "last_test_status": "error",
+                "last_test_label": "Probe failed",
+                "last_error": (
+                    "Error: Cannot find package '/tmp/node_modules/zod-to-json-schema/index.js' "
+                    "code: ERR_MODULE_NOT_FOUND"
+                ),
+                "tool_names": [],
+                "last_test_checks": [],
+                "enabled": False,
+            }
+        return {
+            "server_name": server_name,
+            "status": "active",
+            "status_label": "Active",
+            "last_test_status": "active",
+            "last_test_label": "Active",
+            "last_error": "",
+            "tool_names": ["send_email"],
+            "last_test_checks": [],
+            "enabled": False,
+        }
+
+    class _Completed:
+        stdout = "v24.10.0\n"
+        stderr = ""
+
+    monkeypatch.setattr(service, "analyze_repository", fake_analyze)
+    monkeypatch.setattr(service, "_prepare_runtime_bindings", fake_prepare)
+    monkeypatch.setattr(service, "_clone_repository", fake_clone)
+    monkeypatch.setattr(service, "_run_command", fake_run_command)
+    monkeypatch.setattr(service, "test_server", fake_test)
+    monkeypatch.setattr(mcp_service_module.subprocess, "run", lambda *args, **kwargs: _Completed())
+
+    record = await service.install_repository("https://github.com/codefuturist/email-mcp")
+
+    install_dir = tmp_path / "workspace" / "mcp-installs" / "codefuturist__email-mcp"
+    cfg = service.config_service.load().tools.mcp_servers["email-mcp"]
+    assert record["status"] == "active"
+    assert record["install_dir"] == str(install_dir)
+    assert cfg.command == "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node"
+    assert cfg.args == [str(install_dir / "dist" / "main.js")]
+    assert any(
+        command == [
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+            "install",
+        ]
+        for command in executed_commands
+    )
+    assert any(
+        command == [
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+            "run",
+            "build",
+        ]
+        for command in executed_commands
+    )
+    assert any("fallback:source_checkout_after_npm_runtime_error" == item for item in record["evidence"])
+    assert "Automatic source-checkout fallback was applied" in record["log_tail"]
+
+
 def test_refresh_runtime_requirements_uses_bound_node_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     service = _build_service(tmp_path)
     service.config_service.set_mcp_record(

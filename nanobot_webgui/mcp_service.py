@@ -73,9 +73,6 @@ class GUIMCPService:
         """Install and register a GitHub-hosted MCP server."""
         analysis = await self.analyze_repository(source, allow_ai_fallback=allow_ai_fallback)
         server_name = analysis["server_name"]
-        install_logs: list[str] = []
-        install_mode = str(analysis.get("install_mode", "source")).strip() or "source"
-        install_dir: Path | None = None
         normalized_repo_url = _normalize_repo_url(str(analysis.get("repo_url", "")))
 
         version_mismatches = [
@@ -118,6 +115,49 @@ class GUIMCPService:
             )
 
         runtime_bindings = await self._prepare_runtime_bindings(analysis, existing_record)
+        install_dir, install_logs = await self._execute_install_plan(analysis, runtime_bindings)
+        provisional = self._register_install_plan(
+            analysis=analysis,
+            install_dir=install_dir,
+            install_logs=install_logs,
+            runtime_bindings=runtime_bindings,
+            existing=existing,
+            existing_record=existing_record,
+            normalized_repo_url=normalized_repo_url,
+        )
+        self.config_service.set_mcp_record(server_name, provisional)
+
+        record = await self.test_server(server_name)
+        record.update(provisional)
+        if self._should_attempt_source_checkout_fallback(analysis, record):
+            record = await self._fallback_npm_probe_to_source_checkout(
+                analysis=analysis,
+                existing=existing,
+                existing_record=existing_record,
+                normalized_repo_url=normalized_repo_url,
+                failed_record=record,
+            )
+        if not existing and record.get("status") == "active" and not record.get("enabled"):
+            self.config_service.set_mcp_enabled(server_name, True)
+            record["enabled"] = True
+            record["auto_enabled"] = True
+            record["log_tail"] = _append_log(
+                str(record.get("log_tail", "")).strip(),
+                "Auto-enabled for chat after a successful first install test.",
+            )
+        self.config_service.set_mcp_record(server_name, record)
+        self.logger.info("mcp_installed server=%s source=%s", server_name, analysis["repo_url"])
+        return record
+
+    async def _execute_install_plan(
+        self,
+        analysis: dict[str, Any],
+        runtime_bindings: dict[str, Any],
+    ) -> tuple[Path | None, list[str]]:
+        """Execute one install plan and return the managed checkout path plus operator logs."""
+        install_logs: list[str] = []
+        install_mode = str(analysis.get("install_mode", "source")).strip() or "source"
+        install_dir: Path | None = None
         runtime_env = self._runtime_step_env(runtime_bindings)
         if "node" in runtime_bindings:
             node_binding = runtime_bindings["node"]
@@ -151,7 +191,21 @@ class GUIMCPService:
         else:
             for step in analysis["install_steps"]:
                 install_logs.append(f"$ {step['display']}\nRegistered without a managed checkout.")
+        return install_dir, install_logs
 
+    def _register_install_plan(
+        self,
+        *,
+        analysis: dict[str, Any],
+        install_dir: Path | None,
+        install_logs: list[str],
+        runtime_bindings: dict[str, Any],
+        existing: MCPServerConfig | None,
+        existing_record: dict[str, Any],
+        normalized_repo_url: str,
+    ) -> dict[str, Any]:
+        """Persist one install plan into config and return its provisional GUI record."""
+        config = self.config_service.load()
         server_cfg = self._build_server_config(
             analysis,
             install_dir,
@@ -159,7 +213,7 @@ class GUIMCPService:
             config,
             runtime_bindings=runtime_bindings,
         )
-        config.tools.mcp_servers[server_name] = server_cfg
+        config.tools.mcp_servers[analysis["server_name"]] = server_cfg
         self.config_service.save(config)
 
         resolved_runtime_status = _check_runtime_requirements(
@@ -178,9 +232,8 @@ class GUIMCPService:
             "missing_runtimes": resolved_missing_runtimes,
             "can_install": not resolved_missing_runtimes,
         }
-
-        provisional = {
-            "server_name": server_name,
+        return {
+            "server_name": analysis["server_name"],
             "title": analysis["title"],
             "summary": analysis["summary"],
             "repo_url": analysis["repo_url"],
@@ -207,21 +260,109 @@ class GUIMCPService:
             "auto_enabled": False,
             "log_tail": "\n\n".join(install_logs)[-4000:],
         }
-        self.config_service.set_mcp_record(server_name, provisional)
 
-        record = await self.test_server(server_name)
-        record.update(provisional)
-        if not existing and record.get("status") == "active" and not record.get("enabled"):
-            self.config_service.set_mcp_enabled(server_name, True)
-            record["enabled"] = True
-            record["auto_enabled"] = True
+    def _should_attempt_source_checkout_fallback(
+        self,
+        analysis: dict[str, Any],
+        record: dict[str, Any],
+    ) -> bool:
+        """Return whether a failed npm package install should retry via source checkout."""
+        if str(analysis.get("install_mode", "")).strip() != "npm":
+            return False
+        if str(record.get("status", "")).strip() != "error":
+            return False
+        return _looks_like_npm_package_resolution_failure(str(record.get("last_error", "")))
+
+    async def _fallback_npm_probe_to_source_checkout(
+        self,
+        *,
+        analysis: dict[str, Any],
+        existing: MCPServerConfig | None,
+        existing_record: dict[str, Any],
+        normalized_repo_url: str,
+        failed_record: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Retry a broken npm package MCP via repo checkout plus local npm install/build."""
+        repo = _parse_repository_source(str(analysis.get("repo_url", "")))
+        install_dir = self.config_service.mcp_installs_dir / analysis["install_slug"]
+        fallback_logs = [
+            "Automatic fallback activated because the published npm runtime failed with a module-resolution error.",
+            str(failed_record.get("last_error", "")).strip(),
+        ]
+        if install_dir.exists() and not (install_dir / ".git").exists():
+            shutil.rmtree(install_dir, ignore_errors=True)
+
+        source_analysis: dict[str, Any] | None = None
+        try:
+            if install_dir.exists():
+                await self._update_checkout(install_dir)
+                fallback_logs.append("$ git pull --ff-only\nUpdated existing checkout for source fallback.")
+            else:
+                install_dir.parent.mkdir(parents=True, exist_ok=True)
+                await self._clone_repository(analysis["clone_url"], target_dir=install_dir)
+                fallback_logs.append(
+                    f"$ git clone --depth 1 {analysis['clone_url']} {install_dir}\nCloned checkout for source fallback."
+                )
+
+            source_analysis = self._inspect_checkout(install_dir, repo, prefer_source_checkout=True)
+            source_analysis["server_name"] = analysis["server_name"]
+            source_analysis["title"] = analysis["title"]
+            source_analysis["summary"] = str(source_analysis.get("summary", "")).strip() or analysis["summary"]
+            source_analysis["repo_url"] = analysis["repo_url"]
+            source_analysis["clone_url"] = analysis["clone_url"]
+            source_analysis["install_slug"] = analysis["install_slug"]
+            source_analysis["analysis_mode"] = "deterministic_source_fallback"
+            source_analysis["analysis_confidence"] = max(
+                float(source_analysis.get("analysis_confidence", 0.0) or 0.0),
+                float(analysis.get("analysis_confidence", 0.0) or 0.0),
+            )
+            source_analysis["evidence"] = [
+                *[str(item) for item in source_analysis.get("evidence", []) if str(item).strip()],
+                "fallback:source_checkout_after_npm_runtime_error",
+            ]
+            source_analysis = self._enrich_analysis(source_analysis)
+
+            version_mismatches = [
+                item
+                for item in source_analysis.get("runtime_status", [])
+                if (
+                    isinstance(item, dict)
+                    and str(item.get("reason", "")) == "version_mismatch"
+                    and not bool(item.get("provisionable", False))
+                )
+            ]
+            if version_mismatches:
+                raise ValueError(_describe_runtime_version_mismatches(version_mismatches))
+
+            fallback_bindings = await self._prepare_runtime_bindings(source_analysis, failed_record)
+            executed_install_dir, executed_logs = await self._execute_install_plan(source_analysis, fallback_bindings)
+            fallback_logs.extend(executed_logs)
+            provisional = self._register_install_plan(
+                analysis=source_analysis,
+                install_dir=executed_install_dir,
+                install_logs=fallback_logs,
+                runtime_bindings=fallback_bindings,
+                existing=existing,
+                existing_record=failed_record,
+                normalized_repo_url=normalized_repo_url,
+            )
+            self.config_service.set_mcp_record(source_analysis["server_name"], provisional)
+            record = await self.test_server(source_analysis["server_name"])
+            record.update(provisional)
             record["log_tail"] = _append_log(
                 str(record.get("log_tail", "")).strip(),
-                "Auto-enabled for chat after a successful first install test.",
+                "Automatic source-checkout fallback was applied after the npm package runtime failed.",
             )
-        self.config_service.set_mcp_record(server_name, record)
-        self.logger.info("mcp_installed server=%s source=%s", server_name, analysis["repo_url"])
-        return record
+            self.config_service.set_mcp_record(source_analysis["server_name"], record)
+            return record
+        except Exception as exc:
+            message = f"Automatic source-checkout fallback failed: {_summarize_exception(exc)}"
+            failed_record["log_tail"] = _append_log(
+                str(failed_record.get("log_tail", "")).strip(),
+                "\n\n".join([*fallback_logs, message]),
+            )
+            self.config_service.set_mcp_record(analysis["server_name"], failed_record)
+            return failed_record
 
     async def test_server(self, server_name: str) -> dict[str, Any]:
         """Probe one registered MCP server and persist its status."""
@@ -511,7 +652,13 @@ class GUIMCPService:
             )
         return output, error
 
-    def _inspect_checkout(self, checkout_dir: Path, repo: dict[str, str]) -> dict[str, Any]:
+    def _inspect_checkout(
+        self,
+        checkout_dir: Path,
+        repo: dict[str, str],
+        *,
+        prefer_source_checkout: bool = False,
+    ) -> dict[str, Any]:
         """Build a best-effort install plan from the repository contents."""
         package_json = _read_json(checkout_dir / "package.json")
         pyproject = _read_text(checkout_dir / "pyproject.toml")
@@ -544,7 +691,7 @@ class GUIMCPService:
             else:
                 evidence.append("Example MCP config runtime ignored because it contains placeholder values.")
 
-        manifest_choice = _select_server_manifest_install(server_manifest)
+        manifest_choice = None if prefer_source_checkout else _select_server_manifest_install(server_manifest)
         if manifest_choice:
             install_mode = str(manifest_choice.get("type", "")).strip() or install_mode
             transport = str(manifest_choice.get("transport", "")).strip() or transport
@@ -1585,6 +1732,16 @@ def _looks_like_generic_stdio_failure(message: str) -> bool:
         "broken pipe",
         "eof",
     }
+
+
+def _looks_like_npm_package_resolution_failure(message: str) -> bool:
+    """Return whether one npm package runtime failed due to missing published modules."""
+    normalized = str(message).strip()
+    return (
+        "ERR_MODULE_NOT_FOUND" in normalized
+        or "Cannot find package" in normalized
+        or "Cannot find module" in normalized
+    )
 
 
 def _runtime_version_satisfies(installed_version: str, constraint: str) -> bool:
