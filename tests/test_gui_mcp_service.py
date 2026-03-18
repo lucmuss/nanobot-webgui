@@ -8,7 +8,7 @@ import pytest
 
 from nanobot.config.schema import MCPServerConfig
 from nanobot_webgui.config_service import GUIConfigService
-from nanobot_webgui.mcp_service import GUIMCPService, _extract_readme_summary, _parse_repository_source
+from nanobot_webgui.mcp_service import GUIMCPService, _extract_readme_summary, _guess_env_defaults, _parse_repository_source
 from tests.helpers.mcp_fixtures import FIXTURE_ROOT
 
 
@@ -447,6 +447,44 @@ def test_build_server_config_expands_relative_node_command(tmp_path: Path):
 
     assert cfg.command == "node"
     assert cfg.args == [str(install_dir / "build/index.js")]
+
+
+def test_guess_env_defaults_prefills_workspace_path_like_env_names(tmp_path: Path):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+    workspace = tmp_path / "workspace"
+
+    defaults = _guess_env_defaults(
+        config=config,
+        server_name="elevenlabs",
+        required_env=["ELEVENLABS_MCP_BASE_PATH"],
+        optional_env=["SAVE_DIR", "CACHE_DIR"],
+        workspace=workspace,
+    )
+
+    expected = str(workspace / "mcp-output" / "elevenlabs")
+    assert defaults["ELEVENLABS_MCP_BASE_PATH"] == expected
+    assert defaults["SAVE_DIR"] == expected
+    assert defaults["CACHE_DIR"] == expected
+    assert (workspace / "mcp-output" / "elevenlabs").exists()
+
+
+def test_guess_env_defaults_skips_generic_and_non_filesystem_path_names(tmp_path: Path):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+
+    defaults = _guess_env_defaults(
+        config=config,
+        server_name="example",
+        required_env=["PATH", "PYTHONPATH", "MCP_ENDPOINT_PATH"],
+        optional_env=["NODE_PATH"],
+        workspace=tmp_path / "workspace",
+    )
+
+    assert "PATH" not in defaults
+    assert "PYTHONPATH" not in defaults
+    assert "NODE_PATH" not in defaults
+    assert "MCP_ENDPOINT_PATH" not in defaults
 
 
 @pytest.mark.asyncio

@@ -1854,11 +1854,40 @@ def _guess_env_defaults(
         if value:
             defaults[env_name] = value
 
-    if "SAVE_DIR" in required_env or "SAVE_DIR" in optional_env:
+    path_env_names = [
+        env_name
+        for env_name in [*required_env, *optional_env]
+        if _should_prefill_workspace_path(env_name)
+    ]
+    if path_env_names:
         save_dir = workspace / "mcp-output" / server_name
         save_dir.mkdir(parents=True, exist_ok=True)
-        defaults.setdefault("SAVE_DIR", str(save_dir))
+        for env_name in path_env_names:
+            defaults.setdefault(env_name, str(save_dir))
     return defaults
+
+
+def _should_prefill_workspace_path(env_name: str) -> bool:
+    """Return whether one env name likely expects a writable filesystem path."""
+    normalized = str(env_name).strip().upper()
+    if not normalized:
+        return False
+    if normalized in {"PATH", "PYTHONPATH", "NODE_PATH", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"}:
+        return False
+    path_suffixes = (
+        "BASE_PATH",
+        "OUTPUT_PATH",
+        "SAVE_PATH",
+        "DATA_PATH",
+        "CACHE_PATH",
+        "OUTPUT_DIR",
+        "SAVE_DIR",
+        "DATA_DIR",
+        "CACHE_DIR",
+        "TEMP_DIR",
+        "TEMP_PATH",
+    )
+    return any(normalized.endswith(suffix) for suffix in path_suffixes)
 
 
 def _missing_env_vars(required_env: list[str], current_env: dict[str, str]) -> list[str]:
