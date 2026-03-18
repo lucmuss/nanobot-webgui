@@ -538,16 +538,10 @@ class GUIMCPService:
                     run_command, run_args = _derive_node_entry(checkout_dir, package_json)
                 evidence.append(f"package.json name={package_name or repo['repo']}")
         elif not run_command and not run_url and pyproject:
-            install_steps.append(
-                {
-                    "command": ["uv", "sync"],
-                    "display": "uv sync",
-                    "timeout": 900,
-                }
-            )
-            evidence.append("pyproject.toml")
             if not run_command:
                 run_command, run_args = _derive_python_entry(checkout_dir, pyproject_data)
+            install_steps.extend(_derive_python_install_steps(pyproject_data, run_args))
+            evidence.append("pyproject.toml")
         elif not run_command and not run_url and requirements_txt:
             install_steps.extend(
                 [
@@ -1674,10 +1668,134 @@ def _derive_python_entry(checkout_dir: Path, pyproject_data: dict[str, Any]) -> 
         script_name = preferred or next((str(name).strip() for name in scripts.keys() if str(name).strip()), "")
         if script_name:
             return "uv", ["run", "--directory", "./", script_name]
+    django_manage_entry = _derive_django_manage_entry(checkout_dir, pyproject_data)
+    if django_manage_entry:
+        return "uv", ["run", "--directory", "./", "python", f"./{django_manage_entry}", "stdio_server"]
     script_entry = _derive_python_file_entry(checkout_dir)
     if script_entry:
         return "uv", ["run", "--directory", "./", "python", f"./{script_entry}"]
     return "", []
+
+
+def _derive_python_install_steps(pyproject_data: dict[str, Any], run_args: list[str]) -> list[dict[str, Any]]:
+    """Pick the safest install steps for one Python MCP source checkout."""
+    steps = [
+        {
+            "command": ["uv", "sync"],
+            "display": "uv sync",
+            "timeout": 900,
+        }
+    ]
+    extra_deps = _derive_python_group_dependency_specs(pyproject_data, run_args)
+    if extra_deps:
+        steps.append(
+            {
+                "command": ["uv", "pip", "install", "--python", ".venv/bin/python", *extra_deps],
+                "display": "uv pip install --python .venv/bin/python " + " ".join(extra_deps),
+                "timeout": 900,
+            }
+        )
+    return steps
+
+
+def _derive_python_group_dependency_specs(pyproject_data: dict[str, Any], run_args: list[str]) -> list[str]:
+    """Collect extra dependency specs for runnable example-based Python MCPs."""
+    if not any(str(arg).endswith("manage.py") for arg in run_args):
+        return []
+
+    specs: list[str] = []
+    tool = pyproject_data.get("tool") if isinstance(pyproject_data, dict) else {}
+    if isinstance(tool, dict):
+        poetry = tool.get("poetry")
+        if isinstance(poetry, dict):
+            groups = poetry.get("group")
+            if isinstance(groups, dict):
+                for group in groups.values():
+                    if not isinstance(group, dict):
+                        continue
+                    dependencies = group.get("dependencies")
+                    if isinstance(dependencies, dict):
+                        for name in dependencies.keys():
+                            value = str(name).strip()
+                            if value and value not in specs:
+                                specs.append(value)
+
+        uv_tool = tool.get("uv")
+        if isinstance(uv_tool, dict):
+            dev_dependencies = uv_tool.get("dev-dependencies")
+            if isinstance(dev_dependencies, list):
+                for item in dev_dependencies:
+                    value = str(item).strip()
+                    if value and value not in specs:
+                        specs.append(value)
+
+    dependency_groups = pyproject_data.get("dependency-groups") if isinstance(pyproject_data, dict) else {}
+    if isinstance(dependency_groups, dict):
+        for group_specs in dependency_groups.values():
+            if not isinstance(group_specs, list):
+                continue
+            for item in group_specs:
+                value = str(item).strip()
+                if value and value not in specs:
+                    specs.append(value)
+    return specs
+
+
+def _derive_django_manage_entry(checkout_dir: Path, pyproject_data: dict[str, Any]) -> str:
+    """Pick a Django manage.py entry when the repo exposes a stdio MCP management command."""
+    if not _pyproject_mentions_django(pyproject_data):
+        return ""
+    if not any(checkout_dir.rglob("management/commands/stdio_server.py")):
+        return ""
+
+    candidates: list[tuple[int, int, str]] = []
+    for manage_path in checkout_dir.rglob("manage.py"):
+        relative = manage_path.relative_to(checkout_dir)
+        if any(part in {"site-packages", ".venv", "venv", "node_modules"} for part in relative.parts):
+            continue
+        score = 0
+        rel_lower = str(relative).lower()
+        if len(relative.parts) == 1:
+            score += 6
+        if "examples/" in rel_lower or rel_lower.startswith("examples/"):
+            score += 5
+        if "/test/" in rel_lower or rel_lower.startswith("test/"):
+            score -= 3
+        if "/tests/" in rel_lower or rel_lower.startswith("tests/"):
+            score -= 3
+        if "example" in rel_lower:
+            score += 2
+        candidates.append((score, -len(relative.parts), str(relative)))
+
+    if not candidates:
+        return ""
+    candidates.sort(reverse=True)
+    return candidates[0][2]
+
+
+def _pyproject_mentions_django(pyproject_data: dict[str, Any]) -> bool:
+    """Return whether a pyproject declares Django in modern or Poetry metadata."""
+    if not isinstance(pyproject_data, dict):
+        return False
+
+    project = pyproject_data.get("project")
+    if isinstance(project, dict):
+        dependencies = project.get("dependencies")
+        if isinstance(dependencies, list):
+            for item in dependencies:
+                if "django" in str(item).lower():
+                    return True
+
+    tool = pyproject_data.get("tool")
+    if isinstance(tool, dict):
+        poetry = tool.get("poetry")
+        if isinstance(poetry, dict):
+            dependencies = poetry.get("dependencies")
+            if isinstance(dependencies, dict):
+                for name in dependencies.keys():
+                    if "django" in str(name).lower():
+                        return True
+    return False
 
 
 def _derive_server_name(

@@ -238,6 +238,70 @@ version = "0.1.0"
     assert any(step["display"] == "uv sync" for step in analysis["install_steps"])
 
 
+def test_inspect_checkout_uses_django_stdio_manage_command_for_pyproject_repo(tmp_path: Path):
+    checkout_dir = tmp_path / "django-mcp-server"
+    (checkout_dir / "examples" / "mcpexample" / "mcpexample").mkdir(parents=True)
+    (checkout_dir / "mcp_server" / "management" / "commands").mkdir(parents=True)
+    (checkout_dir / "README.md").write_text(
+        "Django MCP server.",
+        encoding="utf-8",
+    )
+    (checkout_dir / "pyproject.toml").write_text(
+        """
+[project]
+name = "django-mcp-server"
+version = "0.1.0"
+dependencies = ["django>=4.0", "mcp>=1.8.0"]
+
+[tool.poetry.group.dev.dependencies]
+rest-framework-csv = "^3.0.2"
+""".strip(),
+        encoding="utf-8",
+    )
+    (checkout_dir / "mcp_server" / "management" / "commands" / "stdio_server.py").write_text(
+        "print('placeholder')\n",
+        encoding="utf-8",
+    )
+    (checkout_dir / "examples" / "mcpexample" / "manage.py").write_text(
+        "print('manage')\n",
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "gts360",
+            "repo": "django-mcp-server",
+            "repo_url": "https://github.com/gts360/django-mcp-server",
+            "clone_url": "https://github.com/gts360/django-mcp-server.git",
+        },
+    )
+
+    assert analysis["install_mode"] == "source"
+    assert analysis["run_command"] == "uv"
+    assert analysis["run_args"] == [
+        "run",
+        "--directory",
+        "./",
+        "python",
+        "./examples/mcpexample/manage.py",
+        "stdio_server",
+    ]
+    assert any(step["display"] == "uv sync" for step in analysis["install_steps"])
+    assert any(
+        step["display"] == (
+            "uv pip install --python .venv/bin/python "
+            "rest-framework-csv"
+        )
+        or step["display"].startswith(
+            "uv pip install --python .venv/bin/python "
+        )
+        for step in analysis["install_steps"]
+    )
+    assert "pyproject.toml" in analysis["evidence"]
+
+
 def test_inspect_checkout_uses_requirements_python_fallback_for_flat_repo(tmp_path: Path):
     checkout_dir = tmp_path / "curl-mcp"
     checkout_dir.mkdir(parents=True)
