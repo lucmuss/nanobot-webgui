@@ -450,12 +450,16 @@ class GUIMCPService:
 
         if example_config:
             evidence.append(f"Example MCP config: {example_config['source_file']}")
-            if example_config.get("transport") == "stdio":
-                run_command = str(example_config.get("command", "")).strip()
-                run_args = list(example_config.get("args", []))
-            elif example_config.get("transport") in {"sse", "streamableHttp"}:
-                run_url = str(example_config.get("url", "")).strip()
-            transport = str(example_config.get("transport", "stdio"))
+            example_transport = str(example_config.get("transport", "stdio")).strip() or "stdio"
+            transport = example_transport
+            if _example_runtime_is_actionable(example_config):
+                if example_transport == "stdio":
+                    run_command = str(example_config.get("command", "")).strip()
+                    run_args = [str(item).strip() for item in example_config.get("args", []) if str(item).strip()]
+                elif example_transport in {"sse", "streamableHttp"}:
+                    run_url = str(example_config.get("url", "")).strip()
+            else:
+                evidence.append("Example MCP config runtime ignored because it contains placeholder values.")
 
         manifest_choice = _select_server_manifest_install(server_manifest)
         if manifest_choice:
@@ -1579,22 +1583,58 @@ def _collect_env_requirements(
     return _unique(required), _unique(optional)
 
 
+def _example_runtime_is_actionable(example_config: dict[str, Any]) -> bool:
+    """Return whether an example MCP config contains a runnable startup target."""
+    transport = str(example_config.get("transport", "")).strip()
+    if transport == "stdio":
+        command = str(example_config.get("command", "")).strip()
+        args = [str(item).strip() for item in example_config.get("args", []) if str(item).strip()]
+        return bool(command) and not any(_looks_like_placeholder_runtime_value(arg) for arg in args)
+    if transport in {"sse", "streamableHttp"}:
+        url = str(example_config.get("url", "")).strip()
+        return bool(url) and not _looks_like_placeholder_runtime_value(url)
+    return False
+
+
+def _looks_like_placeholder_runtime_value(value: str) -> bool:
+    """Detect placeholder paths and URLs from documentation-only MCP examples."""
+    raw = str(value).strip()
+    if not raw:
+        return False
+    if raw.startswith("/path/to/"):
+        return True
+    if raw.startswith("<") and raw.endswith(">"):
+        return True
+    if "{path}" in raw.lower():
+        return True
+    return False
+
+
+def _relative_runtime_path(value: str) -> str:
+    """Normalize a repo-local runtime path so it can later expand against install_dir."""
+    raw = str(value).strip()
+    if not raw or raw.startswith("/path/to/") or Path(raw).is_absolute():
+        return raw
+    normalized = raw[2:] if raw.startswith("./") else raw.lstrip("/")
+    return f"./{normalized}" if normalized else raw
+
+
 def _derive_node_entry(checkout_dir: Path, package_json: dict[str, Any]) -> tuple[str, list[str]]:
     """Best-effort runtime command for Node-based MCP servers."""
     scripts = package_json.get("scripts") or {}
     bin_map = package_json.get("bin") or {}
 
     if isinstance(bin_map, dict) and bin_map:
-        entry = next(iter(bin_map.values()))
-        entry_path = Path(str(entry))
-        return "node", [str(_expand_install_path(str(entry_path), checkout_dir))]
+        entry = next((str(item).strip() for item in bin_map.values() if str(item).strip()), "")
+        if entry:
+            return "node", [_relative_runtime_path(entry)]
 
     if "start" in scripts and (checkout_dir / "build" / "index.js").exists():
-        return "node", [str(checkout_dir / "build" / "index.js")]
+        return "node", ["./build/index.js"]
     if (checkout_dir / "build" / "index.js").exists():
-        return "node", [str(checkout_dir / "build" / "index.js")]
+        return "node", ["./build/index.js"]
     if (checkout_dir / "dist" / "index.js").exists():
-        return "node", [str(checkout_dir / "dist" / "index.js")]
+        return "node", ["./dist/index.js"]
     for candidate in (
         "build/main.js",
         "dist/main.js",
@@ -1605,7 +1645,7 @@ def _derive_node_entry(checkout_dir: Path, package_json: dict[str, Any]) -> tupl
     ):
         path = checkout_dir / candidate
         if path.exists():
-            return "node", [str(path)]
+            return "node", [_relative_runtime_path(candidate)]
 
     return "", []
 

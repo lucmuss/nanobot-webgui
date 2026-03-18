@@ -281,6 +281,62 @@ def test_inspect_checkout_uses_requirements_python_fallback_for_flat_repo(tmp_pa
     assert "uv.lock" in analysis["evidence"]
 
 
+def test_inspect_checkout_ignores_placeholder_example_runtime_for_built_node_repo(tmp_path: Path):
+    checkout_dir = tmp_path / "dalle-mcp"
+    checkout_dir.mkdir(parents=True)
+    (checkout_dir / "README.md").write_text(
+        "DALL-E MCP server.",
+        encoding="utf-8",
+    )
+    (checkout_dir / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "dalle-mcp-server",
+                "version": "0.1.0",
+                "bin": {"dalle-mcp-server": "./build/index.js"},
+                "scripts": {
+                    "build": "tsc",
+                    "start": "node build/index.js",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (checkout_dir / "mcp-settings-example.json").write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "dalle": {
+                        "command": "node",
+                        "args": ["/path/to/dalle-mcp-server/build/index.js"],
+                        "env": {"OPENAI_API_KEY": "sk-example"},
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "Garoth",
+            "repo": "dalle-mcp",
+            "repo_url": "https://github.com/Garoth/dalle-mcp",
+            "clone_url": "https://github.com/Garoth/dalle-mcp.git",
+        },
+    )
+
+    assert analysis["run_command"] == "node"
+    assert analysis["run_args"] == ["./build/index.js"]
+    assert any(step["display"] == "npm install" for step in analysis["install_steps"])
+    assert any(step["display"] == "npm run build" for step in analysis["install_steps"])
+    assert "OPENAI_API_KEY" in analysis["required_env"]
+    assert any("Example MCP config: mcp-settings-example.json" == item for item in analysis["evidence"])
+    assert any("placeholder values" in item for item in analysis["evidence"])
+
+
 def test_build_server_config_expands_relative_venv_command(tmp_path: Path):
     service = _build_service(tmp_path)
     config = service.config_service.ensure_instance()
@@ -303,6 +359,30 @@ def test_build_server_config_expands_relative_venv_command(tmp_path: Path):
 
     assert cfg.command == str(install_dir / ".venv/bin/python")
     assert cfg.args == [str(install_dir / "main.py")]
+
+
+def test_build_server_config_expands_relative_node_command(tmp_path: Path):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+    install_dir = tmp_path / "workspace" / "mcp-installs" / "garoth__dalle-mcp"
+
+    cfg = service._build_server_config(
+        {
+            "server_name": "dalle",
+            "transport": "stdio",
+            "run_command": "node",
+            "run_args": ["./build/index.js"],
+            "run_url": "",
+            "required_env": ["OPENAI_API_KEY"],
+            "optional_env": ["SAVE_DIR"],
+        },
+        install_dir,
+        existing=None,
+        config=config,
+    )
+
+    assert cfg.command == "node"
+    assert cfg.args == [str(install_dir / "build/index.js")]
 
 
 @pytest.mark.asyncio
