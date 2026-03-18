@@ -433,6 +433,7 @@ class GUIMCPService:
         package_json = _read_json(checkout_dir / "package.json")
         pyproject = _read_text(checkout_dir / "pyproject.toml")
         pyproject_data = _read_toml(checkout_dir / "pyproject.toml")
+        requirements_txt = _read_text(checkout_dir / "requirements.txt")
         server_manifest = _load_server_manifest(checkout_dir)
         workspace_package = _find_workspace_mcp_package(checkout_dir)
         readme_summary = _extract_readme_summary(checkout_dir / "README.md")
@@ -543,6 +544,28 @@ class GUIMCPService:
             evidence.append("pyproject.toml")
             if not run_command:
                 run_command, run_args = _derive_python_entry(checkout_dir, pyproject_data)
+        elif not run_command and not run_url and requirements_txt:
+            install_steps.extend(
+                [
+                    {
+                        "command": ["uv", "venv", ".venv"],
+                        "display": "uv venv .venv",
+                        "timeout": 900,
+                    },
+                    {
+                        "command": ["uv", "pip", "install", "--python", ".venv/bin/python", "-r", "requirements.txt"],
+                        "display": "uv pip install --python .venv/bin/python -r requirements.txt",
+                        "timeout": 900,
+                    },
+                ]
+            )
+            evidence.append("requirements.txt")
+            if (checkout_dir / "uv.lock").exists():
+                evidence.append("uv.lock")
+            script_entry = _derive_python_file_entry(checkout_dir)
+            if script_entry:
+                run_command = ".venv/bin/python"
+                run_args = [f"./{script_entry}"]
         elif not run_command and not run_url:
             raise ValueError("Could not derive an install plan for this repository.")
 
@@ -577,6 +600,7 @@ class GUIMCPService:
                 install_mode=install_mode,
                 package_json=package_json,
                 pyproject=pyproject,
+                requirements_txt=requirements_txt,
                 server_manifest=server_manifest,
                 workspace_package=workspace_package,
                 run_url=run_url,
@@ -590,6 +614,7 @@ class GUIMCPService:
                 workspace_package=workspace_package,
                 package_json=package_json,
                 pyproject=pyproject,
+                requirements_txt=requirements_txt,
                 run_url=run_url,
             ),
         }
@@ -698,12 +723,14 @@ class GUIMCPService:
             )
 
         if install_dir is None:
+            command = str(analysis["run_command"])
             args = [str(arg) for arg in analysis["run_args"]]
         else:
+            command = _expand_install_path(str(analysis["run_command"]), install_dir)
             args = [_expand_install_path(str(arg), install_dir) for arg in analysis["run_args"]]
         return MCPServerConfig(
             type=analysis["transport"] or None,
-            command=analysis["run_command"],
+            command=command,
             args=args,
             env=env,
             url="",
@@ -1072,6 +1099,7 @@ def _detect_repo_type(
     install_mode: str,
     package_json: dict[str, Any],
     pyproject: str,
+    requirements_txt: str,
     server_manifest: dict[str, Any],
     workspace_package: dict[str, str],
     run_url: str,
@@ -1086,7 +1114,7 @@ def _detect_repo_type(
         return "remote"
     if package_json:
         return "npm"
-    if pyproject:
+    if pyproject or requirements_txt:
         return "python"
     if (checkout_dir / "Dockerfile").exists() or install_mode == "oci":
         return "docker"
@@ -1101,6 +1129,7 @@ def _estimate_analysis_confidence(
     workspace_package: dict[str, str],
     package_json: dict[str, Any],
     pyproject: str,
+    requirements_txt: str,
     run_url: str,
 ) -> float:
     """Return a coarse confidence score for deterministic MCP analysis."""
@@ -1115,6 +1144,8 @@ def _estimate_analysis_confidence(
         score += 0.1
     if pyproject:
         score += 0.1
+    if requirements_txt:
+        score += 0.2
     if run_url:
         score += 0.05
     if install_mode in {"remote", "npm", "workspace_package"}:
@@ -1420,6 +1451,16 @@ def _command_from_known_display(display: str) -> list[str]:
         "npm run build": ["npm", "run", "build"],
         "uv pip install --system -e .": ["uv", "pip", "install", "--system", "-e", "."],
         "uv pip install -e .": ["uv", "pip", "install", "-e", "."],
+        "uv venv .venv": ["uv", "venv", ".venv"],
+        "uv pip install --python .venv/bin/python -r requirements.txt": [
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            ".venv/bin/python",
+            "-r",
+            "requirements.txt",
+        ],
         "uv sync": ["uv", "sync"],
         "pip install -e .": ["pip", "install", "-e", "."],
         "python -m pip install -e .": ["python", "-m", "pip", "install", "-e", "."],
@@ -1434,6 +1475,8 @@ def _is_allowed_install_command(command: list[str]) -> bool:
         ("npm", "ci"),
         ("npm", "install"),
         ("npm", "run", "build"),
+        ("uv", "venv", ".venv"),
+        ("uv", "pip", "install", "--python", ".venv/bin/python", "-r", "requirements.txt"),
         ("uv", "pip", "install", "--system", "-e", "."),
         ("uv", "pip", "install", "-e", "."),
         ("uv", "sync"),
@@ -1567,6 +1610,14 @@ def _derive_node_entry(checkout_dir: Path, package_json: dict[str, Any]) -> tupl
     return "", []
 
 
+def _derive_python_file_entry(checkout_dir: Path) -> str:
+    """Pick a direct Python entry file from a simple source checkout."""
+    for candidate in ("src/main.py", "main.py", "__main__.py"):
+        if (checkout_dir / candidate).exists():
+            return candidate
+    return ""
+
+
 def _derive_python_entry(checkout_dir: Path, pyproject_data: dict[str, Any]) -> tuple[str, list[str]]:
     """Best-effort runtime command for Python-based MCP servers."""
     project = pyproject_data.get("project") if isinstance(pyproject_data, dict) else {}
@@ -1583,10 +1634,9 @@ def _derive_python_entry(checkout_dir: Path, pyproject_data: dict[str, Any]) -> 
         script_name = preferred or next((str(name).strip() for name in scripts.keys() if str(name).strip()), "")
         if script_name:
             return "uv", ["run", "--directory", "./", script_name]
-    if (checkout_dir / "src" / "main.py").exists():
-        return "uv", ["run", "--directory", "./", "python", "./src/main.py"]
-    if (checkout_dir / "main.py").exists():
-        return "uv", ["run", "--directory", "./", "python", "./main.py"]
+    script_entry = _derive_python_file_entry(checkout_dir)
+    if script_entry:
+        return "uv", ["run", "--directory", "./", "python", f"./{script_entry}"]
     return "", []
 
 
@@ -1674,7 +1724,11 @@ def _expand_install_path(value: str, install_dir: Path) -> str:
         return str(install_dir / Path(value).name)
     if value.startswith("./"):
         return str(install_dir / value[2:])
+    if value.startswith(".venv/"):
+        return str(install_dir / value)
     if value.startswith("build/") or value.startswith("dist/"):
+        return str(install_dir / value)
+    if "/" in value and not Path(value).is_absolute():
         return str(install_dir / value)
     return value
 

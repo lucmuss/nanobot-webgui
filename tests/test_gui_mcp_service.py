@@ -238,6 +238,73 @@ version = "0.1.0"
     assert any(step["display"] == "uv sync" for step in analysis["install_steps"])
 
 
+def test_inspect_checkout_uses_requirements_python_fallback_for_flat_repo(tmp_path: Path):
+    checkout_dir = tmp_path / "curl-mcp"
+    checkout_dir.mkdir(parents=True)
+    (checkout_dir / "README.md").write_text(
+        "Natural language curl MCP server.",
+        encoding="utf-8",
+    )
+    (checkout_dir / "requirements.txt").write_text(
+        "httpx>=0.28.1\nmcp[cli]>=1.6.0\nrich>=10.0.0\n",
+        encoding="utf-8",
+    )
+    (checkout_dir / "uv.lock").write_text("version = 1\n", encoding="utf-8")
+    (checkout_dir / "main.py").write_text(
+        "from mcp.server.fastmcp import FastMCP\nmcp = FastMCP('curl-mcp')\n"
+        "if __name__ == '__main__':\n    mcp.run(transport='stdio')\n",
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "MartinPSDev",
+            "repo": "curl-mcp",
+            "repo_url": "https://github.com/MartinPSDev/curl-mcp",
+            "clone_url": "https://github.com/MartinPSDev/curl-mcp.git",
+        },
+    )
+
+    assert analysis["install_mode"] == "source"
+    assert analysis["repo_type"] == "python"
+    assert analysis["analysis_confidence"] >= 0.55
+    assert analysis["run_command"] == ".venv/bin/python"
+    assert analysis["run_args"] == ["./main.py"]
+    assert any(step["display"] == "uv venv .venv" for step in analysis["install_steps"])
+    assert any(
+        step["display"] == "uv pip install --python .venv/bin/python -r requirements.txt"
+        for step in analysis["install_steps"]
+    )
+    assert "requirements.txt" in analysis["evidence"]
+    assert "uv.lock" in analysis["evidence"]
+
+
+def test_build_server_config_expands_relative_venv_command(tmp_path: Path):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+    install_dir = tmp_path / "workspace" / "mcp-installs" / "martinpsdev__curl-mcp"
+
+    cfg = service._build_server_config(
+        {
+            "server_name": "curl-mcp",
+            "transport": "stdio",
+            "run_command": ".venv/bin/python",
+            "run_args": ["./main.py"],
+            "run_url": "",
+            "required_env": [],
+            "optional_env": [],
+        },
+        install_dir,
+        existing=None,
+        config=config,
+    )
+
+    assert cfg.command == str(install_dir / ".venv/bin/python")
+    assert cfg.args == [str(install_dir / "main.py")]
+
+
 @pytest.mark.asyncio
 async def test_preflight_server_keeps_stdio_stdin_open_for_probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     service = _build_service(tmp_path)
