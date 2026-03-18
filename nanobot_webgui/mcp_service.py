@@ -7,9 +7,11 @@ import html
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import tomllib
 from contextlib import AsyncExitStack
@@ -17,6 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from urllib.request import urlopen
 
 from nanobot.config.schema import MCPServerConfig
 from nanobot_webgui.config_service import GUIConfigService
@@ -78,7 +81,11 @@ class GUIMCPService:
         version_mismatches = [
             item
             for item in analysis.get("runtime_status", [])
-            if isinstance(item, dict) and str(item.get("reason", "")) == "version_mismatch"
+            if (
+                isinstance(item, dict)
+                and str(item.get("reason", "")) == "version_mismatch"
+                and not bool(item.get("provisionable", False))
+            )
         ]
         if version_mismatches:
             raise ValueError(_describe_runtime_version_mismatches(version_mismatches))
@@ -110,6 +117,16 @@ class GUIMCPService:
                 "Open the existing MCP entry instead of installing it again."
             )
 
+        runtime_bindings = await self._prepare_runtime_bindings(analysis, existing_record)
+        runtime_env = self._runtime_step_env(runtime_bindings)
+        if "node" in runtime_bindings:
+            node_binding = runtime_bindings["node"]
+            install_logs.append(
+                "Prepared local Node runtime "
+                f"{node_binding.get('resolved_version', '').strip() or node_binding.get('version', '').strip() or 'unknown'} "
+                f"for this MCP ({node_binding.get('constraint', '').strip() or 'repo constraint'})."
+            )
+
         if install_mode == "source":
             install_dir = self.config_service.mcp_installs_dir / analysis["install_slug"]
             install_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -122,16 +139,45 @@ class GUIMCPService:
                 install_logs.append(f"$ git clone --depth 1 {analysis['clone_url']} {install_dir}\nClone completed.")
 
             for step in analysis["install_steps"]:
-                output, error = await self._run_command(step["command"], cwd=install_dir, timeout=step["timeout"])
+                command = self._resolve_install_step_command(step["command"], runtime_bindings)
+                output, error = await self._run_command(
+                    command,
+                    cwd=install_dir,
+                    timeout=step["timeout"],
+                    env=runtime_env,
+                )
                 tail = "\n".join((output or error or "(no output)").splitlines()[-12:])
-                install_logs.append(f"$ {step['display']}\n{tail}")
+                install_logs.append(f"$ {' '.join(command)}\n{tail}")
         else:
             for step in analysis["install_steps"]:
                 install_logs.append(f"$ {step['display']}\nRegistered without a managed checkout.")
 
-        server_cfg = self._build_server_config(analysis, install_dir, existing, config)
+        server_cfg = self._build_server_config(
+            analysis,
+            install_dir,
+            existing,
+            config,
+            runtime_bindings=runtime_bindings,
+        )
         config.tools.mcp_servers[server_name] = server_cfg
         self.config_service.save(config)
+
+        resolved_runtime_status = _check_runtime_requirements(
+            [str(item) for item in analysis.get("required_runtimes", []) if str(item).strip()],
+            analysis.get("runtime_constraints", {}),
+            runtime_bindings=runtime_bindings,
+        )
+        resolved_missing_runtimes = [
+            item["name"]
+            for item in resolved_runtime_status
+            if not item["available"] and not bool(item.get("provisionable", False))
+        ]
+        resolved_analysis = {
+            **analysis,
+            "runtime_status": resolved_runtime_status,
+            "missing_runtimes": resolved_missing_runtimes,
+            "can_install": not resolved_missing_runtimes,
+        }
 
         provisional = {
             "server_name": server_name,
@@ -151,9 +197,11 @@ class GUIMCPService:
             "analysis_confidence": analysis.get("analysis_confidence", 0.0),
             "required_runtimes": analysis.get("required_runtimes", []),
             "runtime_constraints": analysis.get("runtime_constraints", {}),
-            "runtime_status": analysis.get("runtime_status", []),
-            "missing_runtimes": analysis.get("missing_runtimes", []),
-            "next_action": analysis.get("next_action", ""),
+            "runtime_bindings": runtime_bindings,
+            "runtime_status": resolved_runtime_status,
+            "missing_runtimes": resolved_missing_runtimes,
+            "can_install": not resolved_missing_runtimes,
+            "next_action": _describe_next_mcp_action(resolved_analysis),
             "last_installed_at": _utc_now(),
             "enabled": bool(existing_record.get("enabled", False)),
             "auto_enabled": False,
@@ -341,18 +389,28 @@ class GUIMCPService:
         """Re-evaluate runtime availability for one stored MCP record."""
         record = self.config_service.get_mcp_record(server_name)
         required_runtimes = [str(item) for item in record.get("required_runtimes", []) if str(item).strip()]
-        runtime_status = _check_runtime_requirements(required_runtimes, record.get("runtime_constraints", {}))
-        missing_runtimes = [item["name"] for item in runtime_status if not item["available"]]
-        updated = {
+        runtime_bindings = _normalize_runtime_bindings(record.get("runtime_bindings", {}))
+        runtime_status = _check_runtime_requirements(
+            required_runtimes,
+            record.get("runtime_constraints", {}),
+            runtime_bindings=runtime_bindings,
+        )
+        missing_runtimes = [
+            item["name"]
+            for item in runtime_status
+            if not item["available"] and not bool(item.get("provisionable", False))
+        ]
+        refreshed = {
             **record,
             "runtime_status": runtime_status,
             "missing_runtimes": missing_runtimes,
             "runtime_constraints": dict(record.get("runtime_constraints", {}) or {}),
+            "runtime_bindings": runtime_bindings,
             "can_install": not missing_runtimes,
-            "next_action": _describe_repair_next_step(
-                missing_runtimes=missing_runtimes,
-                missing_env=[str(item) for item in record.get("missing_env", []) if str(item).strip()],
-            ),
+        }
+        updated = {
+            **refreshed,
+            "next_action": _describe_next_mcp_action(refreshed),
         }
         self.config_service.set_mcp_record(server_name, updated)
         return updated
@@ -413,11 +471,16 @@ class GUIMCPService:
         *,
         cwd: Path,
         timeout: int,
+        env: dict[str, str] | None = None,
     ) -> tuple[str, str]:
         """Run one installation command and raise a concise error on failure."""
+        merged_env = os.environ.copy()
+        if env:
+            merged_env.update({key: value for key, value in env.items() if value})
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=str(cwd),
+            env=merged_env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -698,7 +761,11 @@ class GUIMCPService:
         enriched = dict(analysis)
         required_runtimes = _derive_required_runtimes(enriched)
         runtime_status = _check_runtime_requirements(required_runtimes, enriched.get("runtime_constraints", {}))
-        missing_runtimes = [item["name"] for item in runtime_status if not item["available"]]
+        missing_runtimes = [
+            item["name"]
+            for item in runtime_status
+            if not item["available"] and not bool(item.get("provisionable", False))
+        ]
         enriched["required_runtimes"] = required_runtimes
         enriched["runtime_status"] = runtime_status
         enriched["missing_runtimes"] = missing_runtimes
@@ -712,6 +779,8 @@ class GUIMCPService:
         install_dir: Path | None,
         existing: MCPServerConfig | None,
         config,
+        *,
+        runtime_bindings: dict[str, Any] | None = None,
     ) -> MCPServerConfig:
         """Create the MCP config entry using the derived install plan."""
         env_defaults = _guess_env_defaults(
@@ -735,12 +804,22 @@ class GUIMCPService:
                 tool_timeout=existing.tool_timeout if existing else 30,
             )
 
+        runtime_bindings = _normalize_runtime_bindings(runtime_bindings or {})
         if install_dir is None:
-            command = str(analysis["run_command"])
-            args = [str(arg) for arg in analysis["run_args"]]
+            command, args = _resolve_runtime_command_and_args(
+                command=str(analysis["run_command"]),
+                args=[str(arg) for arg in analysis["run_args"]],
+                runtime_bindings=runtime_bindings,
+            )
         else:
-            command = _expand_install_path(str(analysis["run_command"]), install_dir)
-            args = [_expand_install_path(str(arg), install_dir) for arg in analysis["run_args"]]
+            expanded_command = _expand_install_path(str(analysis["run_command"]), install_dir)
+            expanded_args = [_expand_install_path(str(arg), install_dir) for arg in analysis["run_args"]]
+            command, args = _resolve_runtime_command_and_args(
+                command=expanded_command,
+                args=expanded_args,
+                runtime_bindings=runtime_bindings,
+            )
+        env = _merge_runtime_env(env, runtime_bindings)
         return MCPServerConfig(
             type=analysis["transport"] or None,
             command=command,
@@ -750,6 +829,61 @@ class GUIMCPService:
             headers=headers,
             tool_timeout=existing.tool_timeout if existing else 30,
         )
+
+    async def _prepare_runtime_bindings(
+        self,
+        analysis: dict[str, Any],
+        existing_record: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Provision MCP-local runtimes when the repository declares strict engine constraints."""
+        bindings = _normalize_runtime_bindings(existing_record.get("runtime_bindings", {}))
+        node_constraint = _node_runtime_constraint(analysis.get("runtime_constraints", {}))
+        if not _analysis_needs_local_node_runtime(analysis):
+            return bindings
+
+        current_binding = bindings.get("node", {})
+        if _node_runtime_binding_satisfies(current_binding, node_constraint):
+            return bindings
+
+        node_binding = await asyncio.to_thread(
+            _ensure_local_node_runtime,
+            self.config_service.default_workspace / "mcp-runtimes" / "node",
+            node_constraint,
+        )
+        bindings["node"] = node_binding
+        return bindings
+
+    def _resolve_install_step_command(
+        self,
+        command: list[str],
+        runtime_bindings: dict[str, Any],
+    ) -> list[str]:
+        """Rewrite install commands to the MCP-local runtime when needed."""
+        if not command:
+            return []
+        normalized = [str(part) for part in command]
+        head = normalized[0]
+        if head == "npm":
+            prefix = _runtime_prefix_for("npm", runtime_bindings)
+            if prefix:
+                return [*prefix, *normalized[1:]]
+        if head == "npx":
+            prefix = _runtime_prefix_for("npx", runtime_bindings)
+            if prefix:
+                return [*prefix, *normalized[1:]]
+        return normalized
+
+    def _runtime_step_env(self, runtime_bindings: dict[str, Any]) -> dict[str, str]:
+        """Return environment overrides for install steps that use local runtimes."""
+        node_binding = runtime_bindings.get("node", {}) if isinstance(runtime_bindings, dict) else {}
+        node_bin = str(node_binding.get("node_executable", "")).strip()
+        if not node_bin:
+            return {}
+        node_bin_dir = str(Path(node_bin).parent)
+        current_path = os.environ.get("PATH", "")
+        return {
+            "PATH": f"{node_bin_dir}{os.pathsep}{current_path}" if current_path else node_bin_dir,
+        }
 
     async def _preflight_server(self, cfg: MCPServerConfig) -> str:
         """Run a short stdio preflight so hard startup failures surface with stderr."""
@@ -1238,22 +1372,37 @@ def _derive_runtime_constraints(
     return constraints
 
 
-def _check_runtime_requirements(required_runtimes: list[str], runtime_constraints: dict[str, str] | None = None) -> list[dict[str, Any]]:
+def _check_runtime_requirements(
+    required_runtimes: list[str],
+    runtime_constraints: dict[str, str] | None = None,
+    *,
+    runtime_bindings: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     """Check whether the container host currently exposes the required runtimes."""
     constraints = runtime_constraints or {}
+    bindings = _normalize_runtime_bindings(runtime_bindings or {})
     results: list[dict[str, Any]] = []
     for runtime in required_runtimes:
-        checks = _runtime_exec_candidates(runtime)
-        available_exec = next((candidate for candidate in checks if shutil.which(candidate)), "")
-        installed_version = _read_runtime_version(runtime, available_exec) if available_exec else ""
-        required_version = str(constraints.get(runtime, "")).strip()
+        invocation = _runtime_invocation(runtime, bindings)
+        available_exec = ""
+        if invocation:
+            available_exec = " ".join(invocation)
+            installed_version = _read_runtime_version(runtime, invocation)
+        else:
+            checks = _runtime_exec_candidates(runtime)
+            available_exec = next((candidate for candidate in checks if shutil.which(candidate)), "")
+            installed_version = _read_runtime_version(runtime, [available_exec]) if available_exec else ""
+        required_version = _required_runtime_version(runtime, constraints)
         available = bool(available_exec)
         reason = ""
+        provisionable = False
         if available and required_version and not _runtime_version_satisfies(installed_version, required_version):
             available = False
             reason = "version_mismatch"
+            provisionable = _runtime_is_locally_provisionable(runtime, constraints)
         elif not available:
             reason = "missing"
+            provisionable = _runtime_is_locally_provisionable(runtime, constraints)
         results.append(
             {
                 "name": runtime,
@@ -1262,25 +1411,148 @@ def _check_runtime_requirements(required_runtimes: list[str], runtime_constraint
                 "version": installed_version,
                 "required_version": required_version,
                 "reason": reason,
+                "provisionable": provisionable,
             }
         )
     return results
 
 
-def _read_runtime_version(runtime: str, executable: str) -> str:
+def _normalize_runtime_bindings(value: Any) -> dict[str, dict[str, str]]:
+    """Normalize persisted runtime binding metadata into a predictable mapping."""
+    if not isinstance(value, dict):
+        return {}
+    normalized: dict[str, dict[str, str]] = {}
+    for runtime_name, payload in value.items():
+        if not isinstance(payload, dict):
+            continue
+        cleaned = {
+            str(key): str(raw_value)
+            for key, raw_value in payload.items()
+            if str(raw_value).strip()
+        }
+        if cleaned:
+            normalized[str(runtime_name)] = cleaned
+    return normalized
+
+
+def _node_runtime_constraint(runtime_constraints: Any) -> str:
+    """Return the declared Node constraint when present."""
+    if not isinstance(runtime_constraints, dict):
+        return ""
+    return str(runtime_constraints.get("node", "")).strip()
+
+
+def _analysis_needs_local_node_runtime(analysis: dict[str, Any]) -> bool:
+    """Return whether one analysis should get an MCP-local Node runtime."""
+    constraint = _node_runtime_constraint(analysis.get("runtime_constraints", {}))
+    if not constraint:
+        return False
+    required_runtimes = [str(item) for item in analysis.get("required_runtimes", []) if str(item).strip()]
+    return any(runtime in {"node", "npm", "npx"} for runtime in required_runtimes)
+
+
+def _required_runtime_version(runtime: str, constraints: dict[str, str]) -> str:
+    """Map runtime families to the constraint that should validate them."""
+    if runtime in {"node", "npm", "npx"}:
+        return str(constraints.get("node", "")).strip()
+    return str(constraints.get(runtime, "")).strip()
+
+
+def _runtime_is_locally_provisionable(runtime: str, constraints: dict[str, str]) -> bool:
+    """Return whether Nanobot can provision this runtime locally for one MCP."""
+    return runtime in {"node", "npm", "npx"} and bool(str(constraints.get("node", "")).strip())
+
+
+def _runtime_invocation(runtime: str, runtime_bindings: dict[str, Any]) -> list[str]:
+    """Return the bound runtime invocation when this MCP uses a local runtime."""
+    return _runtime_prefix_for(runtime, runtime_bindings)
+
+
+def _runtime_prefix_for(runtime: str, runtime_bindings: dict[str, Any]) -> list[str]:
+    """Return the command prefix for a possibly bound runtime."""
+    node_binding = runtime_bindings.get("node", {}) if isinstance(runtime_bindings, dict) else {}
+    node_exec = str(node_binding.get("node_executable", "")).strip()
+    if not node_exec:
+        return []
+    if runtime == "node":
+        return [node_exec]
+    if runtime == "npm":
+        npm_cli = str(node_binding.get("npm_cli_path", "")).strip()
+        if npm_cli:
+            return [node_exec, npm_cli]
+    if runtime == "npx":
+        npx_cli = str(node_binding.get("npx_cli_path", "")).strip()
+        if npx_cli:
+            return [node_exec, npx_cli]
+    return []
+
+
+def _node_runtime_binding_satisfies(binding: Any, constraint: str) -> bool:
+    """Return whether one persisted local Node binding is still usable."""
+    if not isinstance(binding, dict):
+        return False
+    node_exec = str(binding.get("node_executable", "")).strip()
+    npm_cli = str(binding.get("npm_cli_path", "")).strip()
+    npx_cli = str(binding.get("npx_cli_path", "")).strip()
+    resolved_version = str(binding.get("resolved_version", "")).strip()
+    if not node_exec or not npm_cli or not npx_cli:
+        return False
+    if not Path(node_exec).exists() or not Path(npm_cli).exists() or not Path(npx_cli).exists():
+        return False
+    if constraint and not _runtime_version_satisfies(resolved_version, constraint):
+        return False
+    return True
+
+
+def _resolve_runtime_command_and_args(
+    *,
+    command: str,
+    args: list[str],
+    runtime_bindings: dict[str, Any],
+) -> tuple[str, list[str]]:
+    """Replace global Node launchers with the MCP-local runtime when configured."""
+    if command == "node":
+        prefix = _runtime_prefix_for("node", runtime_bindings)
+        if prefix:
+            return prefix[0], list(args)
+    if command == "npx":
+        prefix = _runtime_prefix_for("npx", runtime_bindings)
+        if prefix:
+            return prefix[0], [*prefix[1:], *args]
+    return command, list(args)
+
+
+def _merge_runtime_env(env: dict[str, str], runtime_bindings: dict[str, Any]) -> dict[str, str]:
+    """Inject runtime-specific PATH overrides so child processes resolve the bound Node."""
+    merged = dict(env)
+    node_binding = runtime_bindings.get("node", {}) if isinstance(runtime_bindings, dict) else {}
+    node_exec = str(node_binding.get("node_executable", "")).strip()
+    if not node_exec:
+        return merged
+
+    node_bin_dir = str(Path(node_exec).parent)
+    existing_path = str(merged.get("PATH", "")).strip() or os.environ.get("PATH", "")
+    path_parts = [part for part in existing_path.split(os.pathsep) if part]
+    if node_bin_dir not in path_parts:
+        path_parts.insert(0, node_bin_dir)
+    merged["PATH"] = os.pathsep.join(path_parts) if path_parts else node_bin_dir
+    return merged
+
+
+def _read_runtime_version(runtime: str, executable: list[str]) -> str:
     """Read one runtime version string when the executable is present."""
     if not executable:
         return ""
 
     version_commands = {
-        "node": [executable, "--version"],
-        "npm": [executable, "--version"],
-        "npx": [executable, "--version"],
-        "python": [executable, "--version"],
-        "pip": [executable, "--version"],
-        "uv": [executable, "--version"],
-        "uvx": [executable, "--version"],
-        "docker": [executable, "--version"],
+        "node": [*executable, "--version"],
+        "npm": [*executable, "--version"],
+        "npx": [*executable, "--version"],
+        "python": [*executable, "--version"],
+        "pip": [*executable, "--version"],
+        "uv": [*executable, "--version"],
+        "uvx": [*executable, "--version"],
+        "docker": [*executable, "--version"],
     }
     command = version_commands.get(runtime)
     if not command:
@@ -1321,6 +1593,143 @@ def _version_tuple(value: str) -> tuple[int, ...]:
     return tuple(parts)
 
 
+def _ensure_local_node_runtime(runtime_root: Path, constraint: str) -> dict[str, str]:
+    """Download and cache one Node runtime that satisfies the repository constraint."""
+    if not constraint:
+        raise ValueError("Cannot provision a local Node runtime without an engines.node constraint.")
+
+    runtime_root.mkdir(parents=True, exist_ok=True)
+    required = _version_tuple(_minimum_required_version(constraint))
+    cached = _find_cached_node_runtime(runtime_root, required)
+    if cached:
+        target_dir, version = cached
+        return _node_runtime_binding(target_dir, constraint, version)
+
+    release = _select_node_release(constraint)
+    archive_name = release["archive_name"]
+    target_dir = runtime_root / release["dirname"]
+    if not target_dir.exists():
+        tmp_dir = runtime_root / f".tmp-{release['dirname']}"
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = tmp_dir / archive_name
+        with urlopen(release["download_url"], timeout=60) as response:
+            archive_path.write_bytes(response.read())
+        with tarfile.open(archive_path, mode="r:xz") as tar:
+            tar.extractall(path=tmp_dir)
+        extracted_dir = tmp_dir / release["dirname"]
+        if not extracted_dir.exists():
+            raise ValueError(f"Downloaded Node runtime is missing expected directory: {release['dirname']}")
+        os.replace(extracted_dir, target_dir)
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    return _node_runtime_binding(target_dir, constraint, release["version"])
+
+
+def _find_cached_node_runtime(runtime_root: Path, required: tuple[int, ...]) -> tuple[Path, str] | None:
+    """Reuse the newest cached Node runtime that already satisfies the constraint."""
+    candidates: list[tuple[tuple[int, ...], Path]] = []
+    for child in runtime_root.iterdir():
+        if not child.is_dir():
+            continue
+        match = re.match(r"node-v(\d+(?:\.\d+){0,2})-", child.name)
+        if not match:
+            continue
+        version_tuple = _version_tuple(match.group(1))
+        if version_tuple and version_tuple >= required:
+            candidates.append((version_tuple, child))
+    if not candidates:
+        return None
+    candidates.sort(reverse=True)
+    version_tuple, target_dir = candidates[0]
+    version = ".".join(str(part) for part in version_tuple)
+    return target_dir, version
+
+
+def _minimum_required_version(constraint: str) -> str:
+    """Extract the minimum version from a simple >= Node constraint."""
+    match = re.match(r"^\s*>=\s*v?(\d+(?:\.\d+){0,2})\s*$", constraint)
+    if not match:
+        raise ValueError(f"Unsupported Node version constraint: {constraint}")
+    return match.group(1)
+
+
+def _select_node_release(constraint: str) -> dict[str, str]:
+    """Pick one downloadable Node distribution that satisfies the repo constraint."""
+    minimum = _version_tuple(_minimum_required_version(constraint))
+    target_platform = _node_distribution_suffix()
+    with urlopen("https://nodejs.org/dist/index.json", timeout=30) as response:
+        releases = json.loads(response.read().decode("utf-8"))
+
+    same_major: list[dict[str, Any]] = []
+    newer_major: list[dict[str, Any]] = []
+    for item in releases:
+        if not isinstance(item, dict):
+            continue
+        version = str(item.get("version", "")).strip().lstrip("v")
+        version_tuple = _version_tuple(version)
+        if not version_tuple or version_tuple < minimum:
+            continue
+        files = item.get("files")
+        if not isinstance(files, list) or target_platform not in files:
+            continue
+        bucket = same_major if version_tuple[0] == minimum[0] else newer_major
+        bucket.append({**item, "parsed_version": version_tuple, "plain_version": version})
+
+    candidates = same_major or newer_major
+    if not candidates:
+        raise ValueError(f"No downloadable Node runtime found for constraint {constraint} on {target_platform}.")
+
+    lts_candidates = [item for item in candidates if item.get("lts")]
+    selected = sorted(lts_candidates or candidates, key=lambda item: item["parsed_version"], reverse=True)[0]
+    version = str(selected["plain_version"])
+    dirname = f"node-v{version}-{target_platform}"
+    return {
+        "version": version,
+        "dirname": dirname,
+        "archive_name": f"{dirname}.tar.xz",
+        "download_url": f"https://nodejs.org/dist/v{version}/{dirname}.tar.xz",
+    }
+
+
+def _node_distribution_suffix() -> str:
+    """Map the current container platform to the Node distribution suffix."""
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    os_map = {
+        "linux": "linux",
+        "darwin": "darwin",
+    }
+    arch_map = {
+        "x86_64": "x64",
+        "amd64": "x64",
+        "aarch64": "arm64",
+        "arm64": "arm64",
+        "armv7l": "armv7l",
+    }
+    os_part = os_map.get(system)
+    arch_part = arch_map.get(machine)
+    if not os_part or not arch_part:
+        raise ValueError(f"Unsupported platform for local Node runtimes: {system}/{machine}")
+    return f"{os_part}-{arch_part}"
+
+
+def _node_runtime_binding(target_dir: Path, constraint: str, resolved_version: str) -> dict[str, str]:
+    """Return the persisted metadata for one provisioned Node runtime."""
+    node_exec = target_dir / "bin" / "node"
+    npm_cli = target_dir / "lib" / "node_modules" / "npm" / "bin" / "npm-cli.js"
+    npx_cli = target_dir / "lib" / "node_modules" / "npm" / "bin" / "npx-cli.js"
+    return {
+        "constraint": constraint,
+        "resolved_version": resolved_version,
+        "root_dir": str(target_dir),
+        "node_executable": str(node_exec),
+        "npm_cli_path": str(npm_cli),
+        "npx_cli_path": str(npx_cli),
+    }
+
+
 def _runtime_exec_candidates(runtime: str) -> list[str]:
     """Map one runtime family to concrete executables on the host."""
     mapping = {
@@ -1338,6 +1747,23 @@ def _runtime_exec_candidates(runtime: str) -> list[str]:
 
 def _describe_next_mcp_action(analysis: dict[str, Any]) -> str:
     """Give the GUI a simple next-step message for the install preview."""
+    provisionable_node_items = [
+        item
+        for item in analysis.get("runtime_status", [])
+        if (
+            isinstance(item, dict)
+            and str(item.get("reason", "")).strip() in {"version_mismatch", "missing"}
+            and bool(item.get("provisionable", False))
+        )
+    ]
+    if provisionable_node_items:
+        constraint = _node_runtime_constraint(analysis.get("runtime_constraints", {}))
+        if constraint:
+            return (
+                "Install the MCP and Nanobot will provision a matching local Node runtime "
+                f"for this server ({constraint})."
+            )
+        return "Install the MCP and Nanobot will provision a matching local runtime for this server."
     version_mismatches = [
         item
         for item in analysis.get("runtime_status", [])

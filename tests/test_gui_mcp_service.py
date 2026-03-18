@@ -212,9 +212,11 @@ def test_enrich_analysis_detects_node_engine_version_mismatch(tmp_path: Path, mo
     node_status = next(item for item in enriched["runtime_status"] if item["name"] == "node")
     assert node_status["available"] is False
     assert node_status["reason"] == "version_mismatch"
+    assert node_status["provisionable"] is True
     assert node_status["required_version"] == ">=99.0.0"
-    assert enriched["missing_runtimes"] == ["node"]
-    assert "requires >=99.0.0" in enriched["next_action"]
+    assert enriched["missing_runtimes"] == []
+    assert enriched["can_install"] is True
+    assert "will provision a matching local Node runtime" in enriched["next_action"]
 
 
 def test_inspect_checkout_uses_pyproject_console_script_for_python_mcp(tmp_path: Path):
@@ -499,6 +501,60 @@ def test_build_server_config_expands_relative_node_command(tmp_path: Path):
     assert cfg.args == [str(install_dir / "build/index.js")]
 
 
+def test_build_server_config_uses_bound_node_runtime_for_npx_packages(tmp_path: Path):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+
+    cfg = service._build_server_config(
+        {
+            "server_name": "email-mcp",
+            "transport": "stdio",
+            "run_command": "npx",
+            "run_args": ["-y", "@codefuturist/email-mcp"],
+            "run_url": "",
+            "required_env": [],
+            "optional_env": [],
+        },
+        install_dir=None,
+        existing=None,
+        config=config,
+        runtime_bindings={
+            "node": {
+                "node_executable": "/workspace/mcp-runtimes/node/bin/node",
+                "npx_cli_path": "/workspace/mcp-runtimes/node/lib/node_modules/npm/bin/npx-cli.js",
+            }
+        },
+    )
+
+    assert cfg.command == "/workspace/mcp-runtimes/node/bin/node"
+    assert cfg.args == [
+        "/workspace/mcp-runtimes/node/lib/node_modules/npm/bin/npx-cli.js",
+        "-y",
+        "@codefuturist/email-mcp",
+    ]
+    assert cfg.env["PATH"].split(":")[0] == "/workspace/mcp-runtimes/node/bin"
+
+
+def test_resolve_install_step_command_uses_bound_node_runtime_for_npm(tmp_path: Path):
+    service = _build_service(tmp_path)
+
+    command = service._resolve_install_step_command(
+        ["npm", "ci"],
+        {
+            "node": {
+                "node_executable": "/workspace/mcp-runtimes/node/bin/node",
+                "npm_cli_path": "/workspace/mcp-runtimes/node/lib/node_modules/npm/bin/npm-cli.js",
+            }
+        },
+    )
+
+    assert command == [
+        "/workspace/mcp-runtimes/node/bin/node",
+        "/workspace/mcp-runtimes/node/lib/node_modules/npm/bin/npm-cli.js",
+        "ci",
+    ]
+
+
 def test_guess_env_defaults_prefills_workspace_path_like_env_names(tmp_path: Path):
     service = _build_service(tmp_path)
     config = service.config_service.ensure_instance()
@@ -636,6 +692,143 @@ async def test_install_repository_blocks_when_required_runtime_is_missing(tmp_pa
             "https://github.com/firecrawl/firecrawl-mcp-server",
             allow_ai_fallback=False,
         )
+
+
+@pytest.mark.asyncio
+async def test_install_repository_uses_local_node_runtime_for_engine_constrained_npm_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = _build_service(tmp_path)
+
+    async def fake_analyze(_source: str, *, allow_ai_fallback: bool = False) -> dict[str, object]:
+        assert allow_ai_fallback is False
+        return {
+            "server_name": "email-mcp",
+            "title": "codefuturist/email-mcp",
+            "summary": "Email MCP package.",
+            "repo_url": "https://github.com/codefuturist/email-mcp",
+            "clone_url": "https://github.com/codefuturist/email-mcp.git",
+            "install_slug": "codefuturist__email-mcp",
+            "install_mode": "npm",
+            "transport": "stdio",
+            "run_command": "npx",
+            "run_args": ["-y", "@codefuturist/email-mcp"],
+            "run_url": "",
+            "install_steps": [],
+            "required_env": [],
+            "optional_env": [],
+            "healthcheck": "list tools",
+            "evidence": [],
+            "repo_type": "npm",
+            "analysis_mode": "deterministic",
+            "analysis_confidence": 0.95,
+            "required_runtimes": ["node", "npx"],
+            "runtime_constraints": {"node": ">=24.0.0"},
+            "runtime_status": [
+                {
+                    "name": "node",
+                    "available": False,
+                    "executable": "node",
+                    "version": "20.20.1",
+                    "required_version": ">=24.0.0",
+                    "reason": "version_mismatch",
+                    "provisionable": True,
+                },
+                {
+                    "name": "npx",
+                    "available": True,
+                    "executable": "npx",
+                    "version": "10.8.2",
+                    "required_version": ">=24.0.0",
+                    "reason": "",
+                    "provisionable": True,
+                },
+            ],
+            "missing_runtimes": [],
+            "can_install": True,
+            "next_action": "Install the MCP and Nanobot will provision a matching local Node runtime for this server (>=24.0.0).",
+        }
+
+    async def fake_prepare(_analysis: dict[str, object], _record: dict[str, object]) -> dict[str, object]:
+        return {
+            "node": {
+                "constraint": ">=24.0.0",
+                "resolved_version": "24.10.0",
+                "root_dir": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64",
+                "node_executable": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+                "npm_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+                "npx_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npx-cli.js",
+            }
+        }
+
+    async def fake_test(server_name: str) -> dict[str, object]:
+        record = service.config_service.get_mcp_record(server_name)
+        return {
+            **record,
+            "server_name": server_name,
+            "status": "active",
+            "status_label": "Active",
+            "last_test_status": "active",
+            "last_test_label": "Active",
+            "tool_names": ["send_email"],
+            "last_test_checks": [
+                {"label": "Connection established", "ok": True, "detail": "Fixture package responded."}
+            ],
+            "enabled": False,
+        }
+
+    class _Completed:
+        stdout = "v24.10.0\n"
+        stderr = ""
+
+    monkeypatch.setattr(service, "analyze_repository", fake_analyze)
+    monkeypatch.setattr(service, "_prepare_runtime_bindings", fake_prepare)
+    monkeypatch.setattr(service, "test_server", fake_test)
+    monkeypatch.setattr(mcp_service_module.subprocess, "run", lambda *args, **kwargs: _Completed())
+
+    record = await service.install_repository("https://github.com/codefuturist/email-mcp")
+
+    cfg = service.config_service.load().tools.mcp_servers["email-mcp"]
+    assert cfg.command == "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node"
+    assert cfg.args == [
+        "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npx-cli.js",
+        "-y",
+        "@codefuturist/email-mcp",
+    ]
+    assert record["runtime_bindings"]["node"]["resolved_version"] == "24.10.0"
+    assert record["missing_runtimes"] == []
+
+
+def test_refresh_runtime_requirements_uses_bound_node_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    service = _build_service(tmp_path)
+    service.config_service.set_mcp_record(
+        "email-mcp",
+        {
+            "required_runtimes": ["node", "npx"],
+            "runtime_constraints": {"node": ">=24.0.0"},
+            "runtime_bindings": {
+                "node": {
+                    "constraint": ">=24.0.0",
+                    "resolved_version": "24.10.0",
+                    "node_executable": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+                    "npm_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+                    "npx_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npx-cli.js",
+                }
+            },
+        },
+    )
+
+    class _Completed:
+        stdout = "v24.10.0\n"
+        stderr = ""
+
+    monkeypatch.setattr(mcp_service_module.subprocess, "run", lambda *args, **kwargs: _Completed())
+
+    refreshed = service.refresh_runtime_requirements("email-mcp")
+
+    assert refreshed["missing_runtimes"] == []
+    assert all(item["available"] is True for item in refreshed["runtime_status"])
 
 
 def test_extract_readme_summary_skips_html_image_blocks(tmp_path: Path):
