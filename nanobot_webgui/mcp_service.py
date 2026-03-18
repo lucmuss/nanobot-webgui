@@ -2507,24 +2507,35 @@ def _iter_env_scan_files(checkout_dir: Path) -> list[Path]:
 def _collect_js_env_requirements(content: str, relative_path: str) -> list[dict[str, Any]]:
     """Collect env names from JS and TS source code."""
     requirements: list[dict[str, Any]] = []
+    lines = content.splitlines()
+    guard_required_envs = _collect_js_guard_required_envs(lines)
     patterns = [
         re.compile(r"process\.env(?:\?\.)?\.([A-Z][A-Z0-9_]*)"),
         re.compile(r"process\.env\s*\[\s*[\"']([A-Z][A-Z0-9_]*)[\"']\s*\]"),
     ]
-    for line in content.splitlines():
+    for line in lines:
         for pattern in patterns:
             for match in pattern.finditer(line):
-                optional = bool(re.match(r"\s*(?:\?\?|\|\|)\s*[^,\])};]+", line[match.end() :]))
+                env_name = match.group(1)
+                required = env_name in guard_required_envs
+                optional = (
+                    not required
+                    or bool(re.match(r"\s*(?:\?\?|\|\|)\s*[^,\])};]+", line[match.end() :]))
+                    or _js_env_line_looks_toggle_optional(line, env_name, match.end())
+                    or _env_name_prefers_optional(env_name)
+                )
                 requirements.append(
                     _build_env_requirement(
-                        match.group(1),
-                        required=not optional,
+                        env_name,
+                        required=required and not optional,
                         confidence="medium",
                         source=f"source_scan:{relative_path}",
                         reason=(
-                            f"Referenced via process.env with an inline default in {relative_path}."
+                            f"Checked by a startup guard in {relative_path}."
+                            if required and not optional
+                            else f"Referenced via process.env with a default or toggle pattern in {relative_path}."
                             if optional
-                            else f"Referenced via process.env in {relative_path}."
+                            else f"Referenced via process.env without a strict startup guard in {relative_path}."
                         ),
                     )
                 )
@@ -2549,13 +2560,13 @@ def _collect_python_env_requirements(content: str, relative_path: str) -> list[d
             requirements.append(
                 _build_env_requirement(
                     match.group(1),
-                    required=not bool(match.group(2)),
+                    required=False,
                     confidence="medium",
                     source=f"source_scan:{relative_path}",
                     reason=(
                         f"Referenced via os.getenv with a fallback in {relative_path}."
                         if match.group(2)
-                        else f"Referenced via os.getenv in {relative_path}."
+                        else f"Referenced via os.getenv without a strict startup guard in {relative_path}."
                     ),
                 )
             )
@@ -2563,13 +2574,13 @@ def _collect_python_env_requirements(content: str, relative_path: str) -> list[d
             requirements.append(
                 _build_env_requirement(
                     match.group(1),
-                    required=not bool(match.group(2)),
+                    required=False,
                     confidence="medium",
                     source=f"source_scan:{relative_path}",
                     reason=(
                         f"Referenced via environ.get with a fallback in {relative_path}."
                         if match.group(2)
-                        else f"Referenced via environ.get in {relative_path}."
+                        else f"Referenced via environ.get without a strict startup guard in {relative_path}."
                     ),
                 )
             )
@@ -2584,10 +2595,10 @@ def _collect_go_env_requirements(content: str, relative_path: str) -> list[dict[
             requirements.append(
                 _build_env_requirement(
                     match.group(1),
-                    required=True,
+                    required=False,
                     confidence="medium",
                     source=f"source_scan:{relative_path}",
-                    reason=f"Referenced via os.Getenv in {relative_path}.",
+                    reason=f"Referenced via os.Getenv without a strict startup guard in {relative_path}.",
                 )
             )
         for match in re.finditer(r"os\.LookupEnv\(\s*\"([A-Z][A-Z0-9_]*)\"\s*\)", line):
@@ -2601,6 +2612,72 @@ def _collect_go_env_requirements(content: str, relative_path: str) -> list[dict[
                 )
             )
     return requirements
+
+
+def _collect_js_guard_required_envs(lines: list[str]) -> set[str]:
+    """Detect env vars that are explicitly checked in a startup guard."""
+    alias_to_env: dict[str, str] = {}
+    assignment_patterns = [
+        re.compile(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*process\.env(?:\?\.)?\.([A-Z][A-Z0-9_]*)"),
+        re.compile(r"(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*process\.env\s*\[\s*[\"']([A-Z][A-Z0-9_]*)[\"']\s*\]"),
+    ]
+    for line in lines:
+        for pattern in assignment_patterns:
+            for match in pattern.finditer(line):
+                alias_to_env[match.group(1)] = match.group(2)
+
+    required_envs: set[str] = set()
+    for index, line in enumerate(lines):
+        if "if" not in line or "!" not in line:
+            continue
+        match = re.search(r"if\s*\(([^)]*)\)", line)
+        if not match:
+            continue
+        condition = match.group(1)
+        negated_aliases = [alias for alias in re.findall(r"!\s*([A-Za-z_$][\w$]*)", condition) if alias in alias_to_env]
+        if not negated_aliases:
+            continue
+        lookahead = "\n".join(lines[index : min(index + 5, len(lines))])
+        if "return null" not in lookahead and "return;" not in lookahead and "throw" not in lookahead:
+            continue
+        if "||" in condition and "&&" not in condition:
+            required_envs.update(alias_to_env[alias] for alias in negated_aliases)
+    return required_envs
+
+
+def _js_env_line_looks_toggle_optional(line: str, env_name: str, match_end: int) -> bool:
+    """Return whether one JS env access looks like a toggle or non-critical option."""
+    if _env_name_prefers_optional(env_name):
+        return True
+    tail = line[match_end:]
+    return bool(
+        re.search(r"\s*(?:===|==)\s*[\"']true[\"']", tail)
+        or re.search(r"\s*(?:!==|!=)\s*[\"']false[\"']", tail)
+        or re.search(r"\s*(?:===|==)\s*[\"']false[\"']", tail)
+        or re.search(r"\s*(?:!==|!=)\s*[\"']true[\"']", tail)
+    )
+
+
+def _env_name_prefers_optional(env_name: str) -> bool:
+    """Return whether one env name usually represents a toggle or tuning knob."""
+    normalized = str(env_name).strip().upper()
+    if not normalized:
+        return False
+    optional_suffixes = (
+        "_ENABLED",
+        "_DISABLED",
+        "_TLS",
+        "_STARTTLS",
+        "_VERIFY_SSL",
+        "_READ_ONLY",
+        "_POOL_ENABLED",
+    )
+    optional_fragments = (
+        "_AUTO_",
+        "_HOOK_",
+        "_ALERT_",
+    )
+    return normalized.endswith(optional_suffixes) or any(fragment in normalized for fragment in optional_fragments)
 
 
 def _collect_env_requirements_from_runtime_error(message: str) -> list[dict[str, Any]]:

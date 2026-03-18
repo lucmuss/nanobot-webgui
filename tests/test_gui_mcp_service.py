@@ -694,7 +694,13 @@ def test_inspect_checkout_collects_env_requirements_from_source_and_readme_fallb
     (checkout_dir / "src" / "config.ts").write_text(
         """
 const emailAddress = process.env.MCP_EMAIL_ADDRESS;
+const imapHost = process.env.MCP_EMAIL_IMAP_HOST;
+if (!emailAddress || !imapHost) {
+  return null;
+}
 const timeout = process.env.MCP_TIMEOUT ?? "10";
+const readOnly = process.env.MCP_EMAIL_READ_ONLY === "true";
+const fullName = process.env.MCP_EMAIL_FULL_NAME;
 """.strip(),
         encoding="utf-8",
     )
@@ -711,11 +717,58 @@ const timeout = process.env.MCP_TIMEOUT ?? "10";
     )
 
     assert "MCP_EMAIL_ADDRESS" in analysis["required_env"]
+    assert "MCP_EMAIL_IMAP_HOST" in analysis["required_env"]
     assert "MCP_TIMEOUT" in analysis["optional_env"]
+    assert "MCP_EMAIL_READ_ONLY" in analysis["optional_env"]
+    assert "MCP_EMAIL_FULL_NAME" in analysis["optional_env"]
     assert any(
         item["name"] == "README_ONLY_TOKEN" and item["confidence"] == "low"
         for item in analysis["env_requirements"]
     )
+
+
+def test_inspect_checkout_keeps_conditional_auth_envs_optional(tmp_path: Path):
+    checkout_dir = tmp_path / "email-mcp"
+    (checkout_dir / "src").mkdir(parents=True)
+    (checkout_dir / "dist").mkdir(parents=True)
+    (checkout_dir / "README.md").write_text("Email MCP.", encoding="utf-8")
+    (checkout_dir / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "@codefuturist/email-mcp",
+                "version": "0.2.1",
+                "bin": {"email-mcp": "./dist/main.js"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (checkout_dir / "dist" / "main.js").write_text("console.log('start')\n", encoding="utf-8")
+    (checkout_dir / "src" / "loader.ts").write_text(
+        """
+const password = process.env.MCP_EMAIL_PASSWORD;
+const oauth2Provider = process.env.MCP_EMAIL_OAUTH2_PROVIDER;
+if (!password && !oauth2Provider) {
+  return null;
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "codefuturist",
+            "repo": "email-mcp",
+            "repo_url": "https://github.com/codefuturist/email-mcp",
+            "clone_url": "https://github.com/codefuturist/email-mcp.git",
+        },
+    )
+
+    assert "MCP_EMAIL_PASSWORD" in analysis["optional_env"]
+    assert "MCP_EMAIL_OAUTH2_PROVIDER" in analysis["optional_env"]
+    assert "MCP_EMAIL_PASSWORD" not in analysis["required_env"]
+    assert "MCP_EMAIL_OAUTH2_PROVIDER" not in analysis["required_env"]
 
 
 @pytest.mark.asyncio
@@ -726,6 +779,9 @@ async def test_test_server_refreshes_env_requirements_from_install_dir_before_pr
         """
 const emailAddress = process.env.MCP_EMAIL_ADDRESS;
 const emailPassword = process.env.MCP_EMAIL_PASSWORD;
+if (!emailAddress || !emailPassword) {
+  return null;
+}
 """.strip(),
         encoding="utf-8",
     )
