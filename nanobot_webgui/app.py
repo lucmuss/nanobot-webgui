@@ -925,6 +925,34 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     }
                     for field in card.get("env_requirements", [])
                 ],
+                "required_env_fields": [
+                    {
+                        "name": str(field.get("name", "")).strip(),
+                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), ""),
+                        "required": bool(field.get("required", False)),
+                        "reason": str(field.get("reason", "")).strip(),
+                        "confidence": str(field.get("confidence", "")).strip(),
+                        "sources": [str(source).strip() for source in field.get("sources", []) if str(source).strip()]
+                        if isinstance(field.get("sources"), list)
+                        else [],
+                    }
+                    for field in card.get("env_requirements", [])
+                    if bool(field.get("required", False))
+                ],
+                "optional_env_fields": [
+                    {
+                        "name": str(field.get("name", "")).strip(),
+                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), ""),
+                        "required": bool(field.get("required", False)),
+                        "reason": str(field.get("reason", "")).strip(),
+                        "confidence": str(field.get("confidence", "")).strip(),
+                        "sources": [str(source).strip() for source in field.get("sources", []) if str(source).strip()]
+                        if isinstance(field.get("sources"), list)
+                        else [],
+                    }
+                    for field in card.get("env_requirements", [])
+                    if not bool(field.get("required", False))
+                ],
                 "mcp_test_history": mcp_test_history or [],
                 "mcp_last_error": last_error,
                 "community_item": community_item or {},

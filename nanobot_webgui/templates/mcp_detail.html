@@ -341,19 +341,41 @@
         <p class="muted">Keep the missing secrets and essential transport settings on top. Raw JSON remains available below for advanced fixes.</p>
       </div>
       <form method="post" action="/mcp/{{ server.name }}" data-testid="mcp-detail-form">
-        {% if env_fields %}
+        {% if required_env_fields or optional_env_fields %}
           <div class="highlight-panel">
             <strong>Fix Configuration</strong>
             <p class="muted">Use the simple fields below first. The raw JSON section stays available for advanced cases.</p>
           </div>
-          <div class="details-grid" style="margin-top: 16px;">
-            {% for field in env_fields %}
+        {% endif %}
+
+        {% if required_env_fields %}
+          <div class="hero-callout compact" style="margin-top: 16px;">
+            <strong>Required</strong>
+            <p class="muted">These are the minimum values this MCP needs before the runtime test can pass.</p>
+          </div>
+          <div class="details-grid" style="margin-top: 16px;" data-testid="mcp-required-env-fields">
+            {% for field in required_env_fields %}
               <label>
                 {{ field.name }}{% if field.required %} (required){% endif %}
                 <input type="text" name="env__{{ field.name }}" value="{{ field.value }}" autocomplete="off" spellcheck="false" data-testid="mcp-env-{{ field.name }}">
               </label>
             {% endfor %}
           </div>
+        {% endif %}
+
+        {% if optional_env_fields %}
+          <details style="margin-top: 16px;" data-testid="mcp-env-advanced">
+            <summary>Advanced tuning</summary>
+            <p class="muted" style="margin-top: 12px;">Optional MCP variables stay out of the way until you need them.</p>
+            <div class="details-grid" style="margin-top: 14px;" data-testid="mcp-optional-env-fields">
+              {% for field in optional_env_fields %}
+                <label>
+                  {{ field.name }}
+                  <input type="text" name="env__{{ field.name }}" value="{{ field.value }}" autocomplete="off" spellcheck="false" data-testid="mcp-env-{{ field.name }}">
+                </label>
+              {% endfor %}
+            </div>
+          </details>
         {% endif %}
 
         <div class="details-grid">

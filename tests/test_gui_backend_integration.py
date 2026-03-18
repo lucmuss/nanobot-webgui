@@ -669,9 +669,17 @@ def test_gui_mcp_detail_publish_uses_category_select_and_visible_env_fields(tmp_
     assert response.status_code == 200
     assert '<select name="category" data-testid="mcp-community-publish-category">' in response.text
     assert '<option value="Knowledge workflows"' in response.text
+    assert '<div class="hero-callout compact" style="margin-top: 16px;">' in response.text
+    assert '<div class="details-grid" style="margin-top: 16px;" data-testid="mcp-required-env-fields">' in response.text
     assert (
         '<input type="text" name="env__FAKE_API_KEY" value="" autocomplete="off" spellcheck="false" '
         'data-testid="mcp-env-FAKE_API_KEY">'
+    ) in response.text
+    assert '<details style="margin-top: 16px;" data-testid="mcp-env-advanced">' in response.text
+    assert '<summary>Advanced tuning</summary>' in response.text
+    assert (
+        '<input type="text" name="env__FAKE_REGION" value="" autocomplete="off" spellcheck="false" '
+        'data-testid="mcp-env-FAKE_REGION">'
     ) in response.text
 
 
