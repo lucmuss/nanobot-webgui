@@ -60,7 +60,7 @@ git clone https://github.com/lucmuss/nanobot-webgui.git
 cd nanobot-webgui
 pip install -e .[dev]
 nanobot onboard
-nanobot gui --host 0.0.0.0 --port 18791
+nanobot-webgui gui --host 0.0.0.0 --port 18791
 ```
 
 `pip install -e .[dev]` installs the current `HKUDS/nanobot@main` runtime plus this GUI overlay.
@@ -83,7 +83,7 @@ First-run flow:
 If you already have a Nanobot workspace and config, point the GUI at those files directly:
 
 ```bash
-nanobot gui --config /path/to/config.json --workspace /path/to/workspace
+nanobot-webgui gui --config /path/to/config.json --workspace /path/to/workspace
 ```
 
 The GUI will read and write the selected Nanobot config and create GUI-specific state beside it:
@@ -222,19 +222,19 @@ Cloudflare tunnel example:
 ### Start GUI
 
 ```bash
-nanobot gui --host 0.0.0.0 --port 18791
+nanobot-webgui gui --host 0.0.0.0 --port 18791
 ```
 
 ### Start GUI with secure cookies
 
 ```bash
-nanobot gui --host 0.0.0.0 --port 18791 --secure-cookies
+nanobot-webgui gui --host 0.0.0.0 --port 18791 --secure-cookies
 ```
 
 ### Start GUI with release checks
 
 ```bash
-nanobot gui \
+nanobot-webgui gui \
   --host 0.0.0.0 \
   --port 18791 \
   --update-check \

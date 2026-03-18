@@ -35,5 +35,5 @@ RUN mkdir -p /root/.nanobot
 # Default gateway and GUI ports
 EXPOSE 18790 18791
 
-ENTRYPOINT ["nanobot"]
+ENTRYPOINT ["nanobot-webgui"]
 CMD ["status"]

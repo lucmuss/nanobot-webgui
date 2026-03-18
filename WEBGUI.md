@@ -28,7 +28,7 @@ Use this if you want a fresh install:
 ```bash
 pip install -e .
 nanobot onboard
-nanobot gui --host 0.0.0.0 --port 18791
+nanobot-webgui gui --host 0.0.0.0 --port 18791
 ```
 
 This editable install fetches the latest upstream `nanobot` `main` branch and layers the GUI package on top.
@@ -38,7 +38,7 @@ This editable install fetches the latest upstream `nanobot` `main` branch and la
 Use this if you already have a Nanobot workspace and config:
 
 ```bash
-nanobot gui --config /path/to/config.json --workspace /path/to/workspace
+nanobot-webgui gui --config /path/to/config.json --workspace /path/to/workspace
 ```
 
 The GUI reads and writes the selected Nanobot config and stores GUI-specific state nearby:
@@ -58,7 +58,7 @@ git clone https://github.com/lucmuss/nanobot-webgui.git
 cd nanobot-webgui
 pip install -e .[dev]
 nanobot onboard
-nanobot gui --host 0.0.0.0 --port 18791
+nanobot-webgui gui --host 0.0.0.0 --port 18791
 ```
 
 That install path also uses the latest upstream `main` branch at install time.
@@ -127,7 +127,7 @@ For public or semi-public use:
 Example:
 
 ```bash
-nanobot gui --host 0.0.0.0 --port 18791 --secure-cookies
+nanobot-webgui gui --host 0.0.0.0 --port 18791 --secure-cookies
 ```
 
 ## 7. Community Hub Wiring
@@ -181,7 +181,7 @@ The GUI can check GitHub releases and show a banner when a new version is availa
 Example:
 
 ```bash
-nanobot gui \
+nanobot-webgui gui \
   --host 0.0.0.0 \
   --port 18791 \
   --update-check \
@@ -213,7 +213,7 @@ The GUI can offload MCP runtime repair to a bounded worker command.
 Example:
 
 ```bash
-nanobot gui \
+nanobot-webgui gui \
   --host 0.0.0.0 \
   --port 18791 \
   --repair-mode command \
