@@ -241,6 +241,7 @@ class GUIMCPService:
             "clone_url": analysis["clone_url"],
             "install_dir": str(install_dir) if install_dir is not None else "",
             "install_steps": [step["display"] for step in analysis["install_steps"]],
+            "env_requirements": analysis.get("env_requirements", []),
             "required_env": analysis["required_env"],
             "optional_env": analysis["optional_env"],
             "healthcheck": analysis["healthcheck"],
@@ -372,7 +373,16 @@ class GUIMCPService:
             raise ValueError(f"MCP server '{server_name}' is not registered.")
 
         existing = self.config_service.get_mcp_record(server_name)
-        missing_env = _missing_env_vars(existing.get("required_env", []), cfg.env)
+        env_requirements = _merge_env_requirements(
+            _normalize_env_requirements(
+                existing.get("env_requirements", []),
+                fallback_required=existing.get("required_env", []),
+                fallback_optional=existing.get("optional_env", []),
+            ),
+            _collect_env_requirements_from_install_dir(existing.get("install_dir", "")),
+        )
+        required_env, optional_env = _split_env_requirements(env_requirements)
+        missing_env = _missing_env_vars(required_env, cfg.env)
         result: dict[str, Any] = {
             **existing,
             "server_name": server_name,
@@ -381,6 +391,9 @@ class GUIMCPService:
             "args": list(cfg.args),
             "url": cfg.url,
             "tool_timeout": cfg.tool_timeout,
+            "env_requirements": env_requirements,
+            "required_env": required_env,
+            "optional_env": optional_env,
             "missing_env": missing_env,
             "tool_names": [],
             "last_checked_at": _utc_now(),
@@ -408,6 +421,24 @@ class GUIMCPService:
 
         preflight = await self._preflight_server(cfg)
         if preflight:
+            result = _merge_runtime_error_env_requirements(result, cfg.env, preflight)
+            missing_env = [str(item) for item in result.get("missing_env", []) if str(item).strip()]
+            if missing_env:
+                result["last_test_checks"] = [
+                    {"label": "Secrets provided", "ok": False, "detail": ", ".join(missing_env)},
+                    {"label": "Startup preflight", "ok": False, "detail": preflight},
+                    {"label": "Connection established", "ok": False, "detail": "The MCP process exited before the handshake completed."},
+                    {"label": "Tool discovery", "ok": False, "detail": "Tool listing was skipped because startup failed."},
+                ]
+                result["status"] = "needs_configuration"
+                result["status_label"] = "Needs configuration"
+                result["last_test_status"] = result["status"]
+                result["last_test_label"] = result["status_label"]
+                result["last_error"] = "Missing required environment variables: " + ", ".join(missing_env)
+                result["log_tail"] = _append_log(result["log_tail"], preflight)
+                result["log_tail"] = _append_log(result["log_tail"], result["last_error"])
+                self.config_service.set_mcp_record(server_name, result)
+                return result
             result["last_test_checks"] = [
                 {"label": "Secrets provided", "ok": True, "detail": "Required env vars are present."},
                 {"label": "Startup preflight", "ok": False, "detail": preflight},
@@ -428,6 +459,25 @@ class GUIMCPService:
         except Exception as exc:
             message = _summarize_exception(exc)
             message = await self._diagnose_probe_failure(cfg, message)
+            result = _merge_runtime_error_env_requirements(result, cfg.env, message)
+            missing_env = [str(item) for item in result.get("missing_env", []) if str(item).strip()]
+            if missing_env:
+                result["last_test_checks"] = [
+                    {"label": "Secrets provided", "ok": False, "detail": ", ".join(missing_env)},
+                    {"label": "Startup preflight", "ok": True, "detail": "The MCP process started."},
+                    {"label": "Connection established", "ok": False, "detail": message},
+                    {"label": "Tool discovery", "ok": False, "detail": "The MCP handshake failed before tools could be listed."},
+                ]
+                result["status"] = "needs_configuration"
+                result["status_label"] = "Needs configuration"
+                result["last_test_status"] = result["status"]
+                result["last_test_label"] = result["status_label"]
+                result["last_error"] = "Missing required environment variables: " + ", ".join(missing_env)
+                result["log_tail"] = _append_log(result["log_tail"], message)
+                result["log_tail"] = _append_log(result["log_tail"], result["last_error"])
+                self.config_service.set_mcp_record(server_name, result)
+                self.logger.warning("mcp_probe_failed server=%s error=%s", server_name, message)
+                return result
             result["last_test_checks"] = [
                 {"label": "Secrets provided", "ok": True, "detail": "Required env vars are present."},
                 {"label": "Startup preflight", "ok": True, "detail": "The MCP process started."},
@@ -668,7 +718,8 @@ class GUIMCPService:
         workspace_package = _find_workspace_mcp_package(checkout_dir)
         readme_summary = _extract_readme_summary(checkout_dir / "README.md")
         example_config = _load_mcp_example(checkout_dir)
-        required_env, optional_env = _collect_env_requirements(checkout_dir, example_config, server_manifest)
+        env_requirements = _collect_env_requirements(checkout_dir, example_config, server_manifest)
+        required_env, optional_env = _split_env_requirements(env_requirements)
 
         install_steps: list[dict[str, Any]] = []
         run_command = ""
@@ -820,6 +871,7 @@ class GUIMCPService:
             "run_args": run_args,
             "run_url": run_url,
             "install_steps": install_steps,
+            "env_requirements": env_requirements,
             "required_env": required_env,
             "optional_env": optional_env,
             "healthcheck": "Start the MCP transport and list tools through an MCP client handshake.",
@@ -2033,11 +2085,12 @@ def _normalize_ai_plan(
     run_url = str(payload.get("run_url", "")).strip()
     run_args = [str(item).strip() for item in payload.get("run_args", []) if str(item).strip()]
     install_steps = _normalize_ai_install_steps(payload.get("install_steps", []))
-    required_env = _normalize_env_names(payload.get("required_env", []))
-    optional_env = [
-        item for item in _normalize_env_names(payload.get("optional_env", []))
-        if item not in required_env
-    ]
+    env_requirements = _normalize_env_requirements(
+        payload.get("env_requirements", []),
+        fallback_required=payload.get("required_env", []),
+        fallback_optional=payload.get("optional_env", []),
+    )
+    required_env, optional_env = _split_env_requirements(env_requirements)
 
     if transport in {"sse", "streamableHttp"} and not run_url:
         raise ValueError("AI fallback selected a remote transport without a URL.")
@@ -2078,6 +2131,7 @@ def _normalize_ai_plan(
         "run_args": run_args,
         "run_url": run_url,
         "install_steps": install_steps,
+        "env_requirements": env_requirements,
         "required_env": required_env,
         "optional_env": optional_env,
         "healthcheck": "Start the MCP transport and list tools through an MCP client handshake.",
@@ -2255,11 +2309,34 @@ def _collect_env_requirements(
     checkout_dir: Path,
     example_config: dict[str, Any],
     server_manifest: dict[str, Any],
-) -> tuple[list[str], list[str]]:
-    """Infer required and optional environment variables from repo examples."""
-    required: list[str] = []
-    optional: list[str] = []
+) -> list[dict[str, Any]]:
+    """Infer environment requirements from structured metadata, source, and runtime-adjacent docs."""
+    requirements = _merge_env_requirements(
+        _collect_env_requirements_from_env_examples(checkout_dir),
+        _collect_env_requirements_from_example_config(example_config),
+        _collect_env_requirements_from_server_manifest(server_manifest),
+        _collect_env_requirements_from_source_scan(checkout_dir),
+    )
+    known_names = {str(item.get("name", "")).strip() for item in requirements if isinstance(item, dict)}
+    readme_fallback = [
+        item
+        for item in _collect_env_requirements_from_readme(checkout_dir / "README.md")
+        if str(item.get("name", "")).strip() not in known_names
+    ]
+    return _merge_env_requirements(requirements, readme_fallback)
 
+
+def _collect_env_requirements_from_install_dir(install_dir_raw: Any) -> list[dict[str, Any]]:
+    """Refresh env hints from one managed source checkout when available."""
+    install_dir = Path(str(install_dir_raw).strip()).expanduser() if str(install_dir_raw).strip() else None
+    if install_dir is None or not install_dir.exists() or not install_dir.is_dir():
+        return []
+    return _collect_env_requirements(install_dir, _load_mcp_example(install_dir), _load_server_manifest(install_dir))
+
+
+def _collect_env_requirements_from_env_examples(checkout_dir: Path) -> list[dict[str, Any]]:
+    """Collect env names from example env files shipped with one repo."""
+    requirements: list[dict[str, Any]] = []
     for filename in (".env.example", ".env.sample", ".env.template"):
         path = checkout_dir / filename
         if not path.exists():
@@ -2271,35 +2348,466 @@ def _collect_env_requirements(
             if line.startswith("#"):
                 match = re.match(r"#\s*([A-Z][A-Z0-9_]*)=", line)
                 if match:
-                    optional.append(match.group(1))
+                    requirements.append(
+                        _build_env_requirement(
+                            match.group(1),
+                            required=False,
+                            confidence="high",
+                            source=f"env_example:{filename}",
+                            reason=f"Commented optional env in {filename}.",
+                        )
+                    )
                 continue
             match = re.match(r"([A-Z][A-Z0-9_]*)=", line)
             if match:
-                required.append(match.group(1))
+                requirements.append(
+                    _build_env_requirement(
+                        match.group(1),
+                        required=True,
+                        confidence="high",
+                        source=f"env_example:{filename}",
+                        reason=f"Declared in {filename}.",
+                    )
+                )
+    return requirements
 
-    env_keys = list((example_config.get("env") or {}).keys())
-    for key in env_keys:
-        if key not in required and key not in optional:
-            required.append(key)
 
+def _collect_env_requirements_from_example_config(example_config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Collect env names from bundled MCP config examples."""
+    source_name = str(example_config.get("source_file", "")).strip() or "mcp-example"
+    return [
+        _build_env_requirement(
+            key,
+            required=True,
+            confidence="high",
+            source=f"example_config:{source_name}",
+            reason=f"Listed in {source_name}.",
+        )
+        for key in (example_config.get("env") or {}).keys()
+    ]
+
+
+def _collect_env_requirements_from_server_manifest(server_manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    """Collect env names from server.json style MCP manifests."""
+    requirements: list[dict[str, Any]] = []
     packages = server_manifest.get("packages")
-    if isinstance(packages, list):
-        for package in packages:
-            if not isinstance(package, dict):
+    if not isinstance(packages, list):
+        return requirements
+    for package in packages:
+        if not isinstance(package, dict):
+            continue
+        identifier = str(package.get("identifier", "")).strip() or str(package.get("registryType", "")).strip() or "server.json"
+        for env_var in package.get("environmentVariables", []) or []:
+            if not isinstance(env_var, dict):
                 continue
-            for env_var in package.get("environmentVariables", []) or []:
-                if not isinstance(env_var, dict):
-                    continue
-                name = str(env_var.get("name", "")).strip()
-                if not name:
-                    continue
-                if env_var.get("isRequired", False):
-                    if name not in required:
-                        required.append(name)
-                elif name not in required and name not in optional:
-                    optional.append(name)
+            requirements.append(
+                _build_env_requirement(
+                    env_var.get("name", ""),
+                    required=bool(env_var.get("isRequired", False)),
+                    confidence="high",
+                    source=f"server_manifest:{identifier}",
+                    reason=f"Declared in server.json package metadata for {identifier}.",
+                )
+            )
+    return requirements
 
-    return _unique(required), _unique(optional)
+
+def _collect_env_requirements_from_source_scan(checkout_dir: Path) -> list[dict[str, Any]]:
+    """Collect env names from source files when the repo lacks stronger metadata."""
+    requirements: list[dict[str, Any]] = []
+    for path in _iter_env_scan_files(checkout_dir):
+        content = _read_text(path)
+        if not content:
+            continue
+        relative_path = str(path.relative_to(checkout_dir))
+        suffix = path.suffix.lower()
+        if suffix in {".js", ".cjs", ".mjs", ".jsx", ".ts", ".tsx"}:
+            requirements.extend(_collect_js_env_requirements(content, relative_path))
+        elif suffix == ".py":
+            requirements.extend(_collect_python_env_requirements(content, relative_path))
+        elif suffix == ".go":
+            requirements.extend(_collect_go_env_requirements(content, relative_path))
+    return requirements
+
+
+def _collect_env_requirements_from_readme(path: Path) -> list[dict[str, Any]]:
+    """Use README env mentions only as a last-resort fallback."""
+    content = _read_text(path)
+    if not content:
+        return []
+
+    requirements: list[dict[str, Any]] = []
+    in_env_section = False
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            in_env_section = bool(re.search(r"\b(env|environment|configuration)\b", line, flags=re.IGNORECASE))
+            continue
+        if not in_env_section and not any(token in line.lower() for token in ("env", "environment", "variable", "config")) and "|" not in line and "`" not in line and "=" not in line:
+            continue
+        matches = re.findall(r"\b([A-Z][A-Z0-9_]*_[A-Z0-9_]*)\b", line)
+        if not matches:
+            continue
+        is_required = "required" in line.lower() and "optional" not in line.lower()
+        for name in _normalize_env_names(matches):
+            requirements.append(
+                _build_env_requirement(
+                    name,
+                    required=is_required,
+                    confidence="low",
+                    source=f"readme:{path.name}",
+                    reason=f"Documented in {path.name}.",
+                )
+            )
+    return requirements
+
+
+def _iter_env_scan_files(checkout_dir: Path) -> list[Path]:
+    """Return source files worth scanning for env usage."""
+    candidates: list[Path] = []
+    ignored_dirs = {
+        ".git",
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".next",
+        ".turbo",
+        ".yarn",
+        ".pnpm-store",
+        "coverage",
+        "dist",
+        "build",
+        "target",
+        "vendor",
+    }
+    allowed_suffixes = {".js", ".cjs", ".mjs", ".jsx", ".ts", ".tsx", ".py", ".go"}
+    for root, dirnames, filenames in os.walk(checkout_dir):
+        dirnames[:] = [name for name in dirnames if name not in ignored_dirs]
+        for filename in filenames:
+            path = Path(root) / filename
+            if path.suffix.lower() not in allowed_suffixes:
+                continue
+            try:
+                if path.stat().st_size > 256_000:
+                    continue
+            except OSError:
+                continue
+            candidates.append(path)
+            if len(candidates) >= 200:
+                return candidates
+    return candidates
+
+
+def _collect_js_env_requirements(content: str, relative_path: str) -> list[dict[str, Any]]:
+    """Collect env names from JS and TS source code."""
+    requirements: list[dict[str, Any]] = []
+    patterns = [
+        re.compile(r"process\.env(?:\?\.)?\.([A-Z][A-Z0-9_]*)"),
+        re.compile(r"process\.env\s*\[\s*[\"']([A-Z][A-Z0-9_]*)[\"']\s*\]"),
+    ]
+    for line in content.splitlines():
+        for pattern in patterns:
+            for match in pattern.finditer(line):
+                optional = bool(re.match(r"\s*(?:\?\?|\|\|)\s*[^,\])};]+", line[match.end() :]))
+                requirements.append(
+                    _build_env_requirement(
+                        match.group(1),
+                        required=not optional,
+                        confidence="medium",
+                        source=f"source_scan:{relative_path}",
+                        reason=(
+                            f"Referenced via process.env with an inline default in {relative_path}."
+                            if optional
+                            else f"Referenced via process.env in {relative_path}."
+                        ),
+                    )
+                )
+    return requirements
+
+
+def _collect_python_env_requirements(content: str, relative_path: str) -> list[dict[str, Any]]:
+    """Collect env names from Python source code."""
+    requirements: list[dict[str, Any]] = []
+    for line in content.splitlines():
+        for match in re.finditer(r"os\.environ\[\s*[\"']([A-Z][A-Z0-9_]*)[\"']\s*\]", line):
+            requirements.append(
+                _build_env_requirement(
+                    match.group(1),
+                    required=True,
+                    confidence="medium",
+                    source=f"source_scan:{relative_path}",
+                    reason=f"Referenced via os.environ[...] in {relative_path}.",
+                )
+            )
+        for match in re.finditer(r"os\.getenv\(\s*[\"']([A-Z][A-Z0-9_]*)[\"'](?:\s*,\s*([^)]+))?\)", line):
+            requirements.append(
+                _build_env_requirement(
+                    match.group(1),
+                    required=not bool(match.group(2)),
+                    confidence="medium",
+                    source=f"source_scan:{relative_path}",
+                    reason=(
+                        f"Referenced via os.getenv with a fallback in {relative_path}."
+                        if match.group(2)
+                        else f"Referenced via os.getenv in {relative_path}."
+                    ),
+                )
+            )
+        for match in re.finditer(r"(?:os\.)?environ\.get\(\s*[\"']([A-Z][A-Z0-9_]*)[\"'](?:\s*,\s*([^)]+))?\)", line):
+            requirements.append(
+                _build_env_requirement(
+                    match.group(1),
+                    required=not bool(match.group(2)),
+                    confidence="medium",
+                    source=f"source_scan:{relative_path}",
+                    reason=(
+                        f"Referenced via environ.get with a fallback in {relative_path}."
+                        if match.group(2)
+                        else f"Referenced via environ.get in {relative_path}."
+                    ),
+                )
+            )
+    return requirements
+
+
+def _collect_go_env_requirements(content: str, relative_path: str) -> list[dict[str, Any]]:
+    """Collect env names from Go source code."""
+    requirements: list[dict[str, Any]] = []
+    for line in content.splitlines():
+        for match in re.finditer(r"os\.Getenv\(\s*\"([A-Z][A-Z0-9_]*)\"\s*\)", line):
+            requirements.append(
+                _build_env_requirement(
+                    match.group(1),
+                    required=True,
+                    confidence="medium",
+                    source=f"source_scan:{relative_path}",
+                    reason=f"Referenced via os.Getenv in {relative_path}.",
+                )
+            )
+        for match in re.finditer(r"os\.LookupEnv\(\s*\"([A-Z][A-Z0-9_]*)\"\s*\)", line):
+            requirements.append(
+                _build_env_requirement(
+                    match.group(1),
+                    required=False,
+                    confidence="medium",
+                    source=f"source_scan:{relative_path}",
+                    reason=f"Referenced via os.LookupEnv in {relative_path}.",
+                )
+            )
+    return requirements
+
+
+def _collect_env_requirements_from_runtime_error(message: str) -> list[dict[str, Any]]:
+    """Promote env names mentioned in runtime failures back into the MCP record."""
+    requirements: list[dict[str, Any]] = []
+    for raw_line in str(message).splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if not re.search(r"\b(env|environment)\b", line, flags=re.IGNORECASE):
+            continue
+        names = _normalize_env_names(re.findall(r"\b([A-Z][A-Z0-9_]*)\b", line))
+        if not names:
+            continue
+        for name in names:
+            requirements.append(
+                _build_env_requirement(
+                    name,
+                    required=True,
+                    confidence="high",
+                    source="runtime_error",
+                    reason=f"Runtime failure mentioned {name}.",
+                )
+            )
+    return requirements
+
+
+def _merge_runtime_error_env_requirements(
+    record: dict[str, Any],
+    current_env: dict[str, str],
+    message: str,
+) -> dict[str, Any]:
+    """Merge env requirements inferred from runtime errors back into one MCP record."""
+    runtime_requirements = _collect_env_requirements_from_runtime_error(message)
+    if not runtime_requirements:
+        return record
+    env_requirements = _merge_env_requirements(record.get("env_requirements", []), runtime_requirements)
+    required_env, optional_env = _split_env_requirements(env_requirements)
+    return {
+        **record,
+        "env_requirements": env_requirements,
+        "required_env": required_env,
+        "optional_env": optional_env,
+        "missing_env": _missing_env_vars(required_env, current_env),
+    }
+
+
+def _build_env_requirement(
+    name: Any,
+    *,
+    required: bool,
+    confidence: str,
+    source: str,
+    reason: str,
+) -> dict[str, Any]:
+    """Create one normalized env requirement record."""
+    normalized = _normalize_env_names([name])
+    if not normalized:
+        return {}
+    level = str(confidence).strip().lower()
+    if level not in {"low", "medium", "high"}:
+        level = "medium"
+    return {
+        "name": normalized[0],
+        "required": bool(required),
+        "confidence": level,
+        "sources": [str(source).strip()] if str(source).strip() else [],
+        "reason": str(reason).strip(),
+    }
+
+
+def _normalize_env_requirements(
+    value: Any,
+    *,
+    fallback_required: Any = None,
+    fallback_optional: Any = None,
+) -> list[dict[str, Any]]:
+    """Normalize legacy env lists and rich env requirement objects into one structure."""
+    requirements = _merge_env_requirements(value)
+    if fallback_required:
+        requirements = _merge_env_requirements(
+            requirements,
+            [
+                _build_env_requirement(
+                    name,
+                    required=True,
+                    confidence="medium",
+                    source="legacy_required_env",
+                    reason="Persisted from legacy MCP metadata.",
+                )
+                for name in fallback_required
+            ],
+        )
+    if fallback_optional:
+        requirements = _merge_env_requirements(
+            requirements,
+            [
+                _build_env_requirement(
+                    name,
+                    required=False,
+                    confidence="medium",
+                    source="legacy_optional_env",
+                    reason="Persisted from legacy MCP metadata.",
+                )
+                for name in fallback_optional
+            ],
+        )
+    return requirements
+
+
+def _merge_env_requirements(*collections: Any) -> list[dict[str, Any]]:
+    """Merge env requirement evidence while keeping the richest known record per env name."""
+    merged: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for collection in collections:
+        for item in _iter_env_requirement_items(collection):
+            normalized = _coerce_env_requirement(item)
+            if not normalized:
+                continue
+            name = normalized["name"]
+            existing = merged.get(name)
+            if existing is None:
+                merged[name] = normalized
+                order.append(name)
+                continue
+            required_before = bool(existing.get("required", False))
+            existing["required"] = required_before or bool(normalized.get("required", False))
+            for source in normalized.get("sources", []):
+                if source not in existing["sources"]:
+                    existing["sources"].append(source)
+            if _env_confidence_rank(normalized.get("confidence", "")) > _env_confidence_rank(existing.get("confidence", "")):
+                existing["confidence"] = normalized.get("confidence", "medium")
+                if normalized.get("reason"):
+                    existing["reason"] = normalized["reason"]
+            elif normalized.get("reason") and not existing.get("reason"):
+                existing["reason"] = normalized["reason"]
+            elif normalized.get("required") and not required_before and normalized.get("reason"):
+                existing["reason"] = normalized["reason"]
+    return [merged[name] for name in order]
+
+
+def _iter_env_requirement_items(value: Any) -> list[Any]:
+    """Flatten one env requirement payload into individual items."""
+    if isinstance(value, list):
+        return list(value)
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, set):
+        return list(value)
+    if value is None or value == "":
+        return []
+    return [value]
+
+
+def _coerce_env_requirement(value: Any) -> dict[str, Any]:
+    """Coerce one legacy env hint into the rich env requirement shape."""
+    if isinstance(value, dict):
+        name = _normalize_env_names([value.get("name", "")])
+        if not name:
+            return {}
+        confidence = str(value.get("confidence", "medium")).strip().lower()
+        if confidence not in {"low", "medium", "high"}:
+            confidence = "medium"
+        sources = [str(item).strip() for item in value.get("sources", []) if str(item).strip()] if isinstance(value.get("sources"), list) else []
+        source = str(value.get("source", "")).strip()
+        if source and source not in sources:
+            sources.append(source)
+        return {
+            "name": name[0],
+            "required": bool(value.get("required", False)),
+            "confidence": confidence,
+            "sources": sources,
+            "reason": str(value.get("reason", "")).strip(),
+        }
+    if isinstance(value, str):
+        normalized = _normalize_env_names([value])
+        if not normalized:
+            return {}
+        return {
+            "name": normalized[0],
+            "required": False,
+            "confidence": "medium",
+            "sources": [],
+            "reason": "",
+        }
+    return {}
+
+
+def _split_env_requirements(env_requirements: Any) -> tuple[list[str], list[str]]:
+    """Return legacy required/optional env name lists from rich env metadata."""
+    required: list[str] = []
+    optional: list[str] = []
+    for item in _normalize_env_requirements(env_requirements):
+        name = str(item.get("name", "")).strip()
+        if not name:
+            continue
+        if bool(item.get("required", False)):
+            required.append(name)
+        elif name not in optional:
+            optional.append(name)
+    return required, [name for name in optional if name not in required]
+
+
+def _env_confidence_rank(value: Any) -> int:
+    """Map env confidence labels into comparable weights."""
+    levels = {"low": 1, "medium": 2, "high": 3}
+    return levels.get(str(value).strip().lower(), 2)
 
 
 def _example_runtime_is_actionable(example_config: dict[str, Any]) -> bool:

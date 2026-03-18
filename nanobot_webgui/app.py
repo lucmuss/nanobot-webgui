@@ -914,11 +914,16 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 },
                 "env_fields": [
                     {
-                        "name": env_name,
-                        "value": (server.env or {}).get(env_name, ""),
-                        "required": env_name in card.get("required_env", []),
+                        "name": str(field.get("name", "")).strip(),
+                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), ""),
+                        "required": bool(field.get("required", False)),
+                        "reason": str(field.get("reason", "")).strip(),
+                        "confidence": str(field.get("confidence", "")).strip(),
+                        "sources": [str(source).strip() for source in field.get("sources", []) if str(source).strip()]
+                        if isinstance(field.get("sources"), list)
+                        else [],
                     }
-                    for env_name in [*card.get("required_env", []), *[item for item in card.get("optional_env", []) if item not in card.get("required_env", [])]]
+                    for field in card.get("env_requirements", [])
                 ],
                 "mcp_test_history": mcp_test_history or [],
                 "mcp_last_error": last_error,
@@ -2907,8 +2912,9 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         existing_record = config_service.get_mcp_record(server_name)
         known_env_fields = [
-            *[str(item) for item in existing_record.get("required_env", [])],
-            *[str(item) for item in existing_record.get("optional_env", []) if str(item) not in existing_record.get("required_env", [])],
+            str(item.get("name", "")).strip()
+            for item in _normalized_env_requirements(existing_record)
+            if str(item.get("name", "")).strip()
         ]
         for env_name in known_env_fields:
             field_value = str(form.get(f"env__{env_name}", "")).strip()
@@ -3968,9 +3974,66 @@ def _store_avatar(upload: UploadFile, avatars_dir: Path) -> str:
     return f"avatars/{filename}"
 
 
+def _normalized_env_requirements(record: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return a stable env requirement list even for legacy MCP records."""
+    raw = record.get("env_requirements")
+    normalized: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", "")).strip()
+            if not name:
+                continue
+            normalized.append(
+                {
+                    "name": name,
+                    "required": bool(item.get("required", False)),
+                    "confidence": str(item.get("confidence", "")).strip(),
+                    "sources": [str(source).strip() for source in item.get("sources", []) if str(source).strip()]
+                    if isinstance(item.get("sources"), list)
+                    else [],
+                    "reason": str(item.get("reason", "")).strip(),
+                }
+            )
+    if normalized:
+        return normalized
+
+    required_env = [str(item).strip() for item in record.get("required_env", []) if str(item).strip()]
+    optional_env = [
+        str(item).strip()
+        for item in record.get("optional_env", [])
+        if str(item).strip() and str(item).strip() not in required_env
+    ]
+    return [
+        *[
+            {"name": env_name, "required": True, "confidence": "medium", "sources": ["legacy_required_env"], "reason": ""}
+            for env_name in required_env
+        ],
+        *[
+            {"name": env_name, "required": False, "confidence": "medium", "sources": ["legacy_optional_env"], "reason": ""}
+            for env_name in optional_env
+        ],
+    ]
+
+
+def _env_name_lists(record: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Derive legacy required/optional env name lists from one MCP record."""
+    env_requirements = _normalized_env_requirements(record)
+    required_env = [str(item.get("name", "")).strip() for item in env_requirements if bool(item.get("required", False))]
+    optional_env = [
+        str(item.get("name", "")).strip()
+        for item in env_requirements
+        if str(item.get("name", "")).strip() and not bool(item.get("required", False))
+    ]
+    return required_env, [name for name in optional_env if name not in required_env]
+
+
 def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_service: GUIConfigService) -> dict[str, Any]:
     """Merge one MCP config entry with GUI-managed runtime metadata."""
     record = config_service.get_mcp_record(server_name)
+    env_requirements = _normalized_env_requirements(record)
+    required_env, optional_env = _env_name_lists(record)
     enabled = bool(record.get("enabled", False))
     test_status = str(record.get("status", "registered")).strip() or "registered"
     test_label = str(record.get("status_label", "Registered")).strip() or "Registered"
@@ -4000,8 +4063,9 @@ def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_ser
         "tool_names": [str(item) for item in record.get("tool_names", [])],
         "tool_count": len([str(item) for item in record.get("tool_names", [])]),
         "last_test_checks": list(record.get("last_test_checks", [])) if isinstance(record.get("last_test_checks"), list) else [],
-        "required_env": [str(item) for item in record.get("required_env", [])],
-        "optional_env": [str(item) for item in record.get("optional_env", [])],
+        "env_requirements": env_requirements,
+        "required_env": required_env,
+        "optional_env": optional_env,
         "missing_env": [str(item) for item in record.get("missing_env", [])],
         "healthcheck": str(record.get("healthcheck", "")).strip(),
         "install_steps": [str(item) for item in record.get("install_steps", [])],

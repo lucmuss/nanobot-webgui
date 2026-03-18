@@ -48,6 +48,14 @@ def build_mcp_fixture_analysis(
             {"display": str(item), "command": [], "timeout": 0}
             for item in fixture.get("install_steps", [])
         ],
+        "env_requirements": [
+            {"name": str(item), "required": True, "confidence": "medium", "sources": ["fixture"], "reason": ""}
+            for item in fixture.get("required_env", [])
+        ]
+        + [
+            {"name": str(item), "required": False, "confidence": "medium", "sources": ["fixture"], "reason": ""}
+            for item in fixture.get("optional_env", [])
+        ],
         "required_env": [str(item) for item in fixture.get("required_env", [])],
         "optional_env": [str(item) for item in fixture.get("optional_env", [])],
         "healthcheck": str(fixture.get("healthcheck", "Fixture MCP handshake")).strip(),

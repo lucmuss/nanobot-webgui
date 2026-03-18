@@ -664,6 +664,139 @@ async def test_test_server_replaces_generic_connection_closed_with_stdio_diagnos
     assert result["last_test_checks"][2]["detail"] == "Fatal error: No configuration found."
 
 
+def test_inspect_checkout_collects_env_requirements_from_source_and_readme_fallback(tmp_path: Path):
+    checkout_dir = tmp_path / "email-mcp"
+    (checkout_dir / "src").mkdir(parents=True)
+    (checkout_dir / "dist").mkdir(parents=True)
+    (checkout_dir / "README.md").write_text(
+        """
+# Email MCP
+
+## Environment Variables
+
+| Name | Required |
+| --- | --- |
+| `README_ONLY_TOKEN` | optional |
+""".strip(),
+        encoding="utf-8",
+    )
+    (checkout_dir / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "@codefuturist/email-mcp",
+                "version": "0.2.1",
+                "bin": {"email-mcp": "./dist/main.js"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (checkout_dir / "dist" / "main.js").write_text("console.log('start')\n", encoding="utf-8")
+    (checkout_dir / "src" / "config.ts").write_text(
+        """
+const emailAddress = process.env.MCP_EMAIL_ADDRESS;
+const timeout = process.env.MCP_TIMEOUT ?? "10";
+""".strip(),
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "codefuturist",
+            "repo": "email-mcp",
+            "repo_url": "https://github.com/codefuturist/email-mcp",
+            "clone_url": "https://github.com/codefuturist/email-mcp.git",
+        },
+    )
+
+    assert "MCP_EMAIL_ADDRESS" in analysis["required_env"]
+    assert "MCP_TIMEOUT" in analysis["optional_env"]
+    assert any(
+        item["name"] == "README_ONLY_TOKEN" and item["confidence"] == "low"
+        for item in analysis["env_requirements"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_test_server_refreshes_env_requirements_from_install_dir_before_probe(tmp_path: Path):
+    install_dir = tmp_path / "workspace" / "mcp-installs" / "codefuturist__email-mcp"
+    (install_dir / "src" / "config").mkdir(parents=True)
+    (install_dir / "src" / "config" / "loader.ts").write_text(
+        """
+const emailAddress = process.env.MCP_EMAIL_ADDRESS;
+const emailPassword = process.env.MCP_EMAIL_PASSWORD;
+""".strip(),
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+    config.tools.mcp_servers["email-mcp"] = MCPServerConfig(
+        type="stdio",
+        command="node",
+        args=["dist/main.js"],
+        env={},
+        url="",
+        headers={},
+        tool_timeout=30,
+    )
+    service.config_service.save(config)
+    service.config_service.set_mcp_record(
+        "email-mcp",
+        {
+            "install_dir": str(install_dir),
+            "required_env": [],
+            "optional_env": [],
+        },
+    )
+
+    result = await service.test_server("email-mcp")
+
+    assert result["status"] == "needs_configuration"
+    assert result["missing_env"] == ["MCP_EMAIL_ADDRESS", "MCP_EMAIL_PASSWORD"]
+    assert any(
+        item["name"] == "MCP_EMAIL_ADDRESS" and "source_scan:src/config/loader.ts" in item["sources"]
+        for item in result["env_requirements"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_test_server_promotes_runtime_error_envs_into_configuration_fields(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+    config.tools.mcp_servers["email-mcp"] = MCPServerConfig(
+        type="stdio",
+        command="node",
+        args=["dist/main.js"],
+        env={},
+        url="",
+        headers={},
+        tool_timeout=30,
+    )
+    service.config_service.save(config)
+    service.config_service.set_mcp_record("email-mcp", {"required_env": [], "optional_env": []})
+
+    async def fake_preflight(_cfg, *, settle_seconds: float = 2.0):
+        assert settle_seconds == 2.0
+        return (
+            "Fatal error: No configuration found.\n"
+            "Set environment variables (MCP_EMAIL_ADDRESS, MCP_EMAIL_PASSWORD, etc.)"
+        )
+
+    monkeypatch.setattr(service, "_preflight_server", fake_preflight)
+
+    result = await service.test_server("email-mcp")
+
+    assert result["status"] == "needs_configuration"
+    assert result["missing_env"] == ["MCP_EMAIL_ADDRESS", "MCP_EMAIL_PASSWORD"]
+    assert result["required_env"] == ["MCP_EMAIL_ADDRESS", "MCP_EMAIL_PASSWORD"]
+    assert any(item["name"] == "MCP_EMAIL_PASSWORD" and "runtime_error" in item["sources"] for item in result["env_requirements"])
+
+
 @pytest.mark.asyncio
 async def test_analyze_repository_uses_ai_fallback_for_unknown_repo(tmp_path: Path):
     repo_dir = tmp_path / "unknown-repo"
