@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 import tomllib
 from contextlib import AsyncExitStack
@@ -74,6 +75,13 @@ class GUIMCPService:
         install_dir: Path | None = None
         normalized_repo_url = _normalize_repo_url(str(analysis.get("repo_url", "")))
 
+        version_mismatches = [
+            item
+            for item in analysis.get("runtime_status", [])
+            if isinstance(item, dict) and str(item.get("reason", "")) == "version_mismatch"
+        ]
+        if version_mismatches:
+            raise ValueError(_describe_runtime_version_mismatches(version_mismatches))
         missing_runtimes = [str(item) for item in analysis.get("missing_runtimes", [])]
         if missing_runtimes:
             raise ValueError(
@@ -142,6 +150,7 @@ class GUIMCPService:
             "analysis_mode": analysis.get("analysis_mode", "deterministic"),
             "analysis_confidence": analysis.get("analysis_confidence", 0.0),
             "required_runtimes": analysis.get("required_runtimes", []),
+            "runtime_constraints": analysis.get("runtime_constraints", {}),
             "runtime_status": analysis.get("runtime_status", []),
             "missing_runtimes": analysis.get("missing_runtimes", []),
             "next_action": analysis.get("next_action", ""),
@@ -332,12 +341,13 @@ class GUIMCPService:
         """Re-evaluate runtime availability for one stored MCP record."""
         record = self.config_service.get_mcp_record(server_name)
         required_runtimes = [str(item) for item in record.get("required_runtimes", []) if str(item).strip()]
-        runtime_status = _check_runtime_requirements(required_runtimes)
+        runtime_status = _check_runtime_requirements(required_runtimes, record.get("runtime_constraints", {}))
         missing_runtimes = [item["name"] for item in runtime_status if not item["available"]]
         updated = {
             **record,
             "runtime_status": runtime_status,
             "missing_runtimes": missing_runtimes,
+            "runtime_constraints": dict(record.get("runtime_constraints", {}) or {}),
             "can_install": not missing_runtimes,
             "next_action": _describe_repair_next_step(
                 missing_runtimes=missing_runtimes,
@@ -615,6 +625,11 @@ class GUIMCPService:
                 requirements_txt=requirements_txt,
                 run_url=run_url,
             ),
+            "runtime_constraints": _derive_runtime_constraints(
+                install_mode=install_mode,
+                run_command=run_command,
+                package_json=package_json,
+            ),
         }
 
     def _build_repository_bundle(self, checkout_dir: Path, repo: dict[str, str]) -> dict[str, Any]:
@@ -682,7 +697,7 @@ class GUIMCPService:
         """Add runtime checks and next-step guidance to one install plan."""
         enriched = dict(analysis)
         required_runtimes = _derive_required_runtimes(enriched)
-        runtime_status = _check_runtime_requirements(required_runtimes)
+        runtime_status = _check_runtime_requirements(required_runtimes, enriched.get("runtime_constraints", {}))
         missing_runtimes = [item["name"] for item in runtime_status if not item["available"]]
         enriched["required_runtimes"] = required_runtimes
         enriched["runtime_status"] = runtime_status
@@ -1205,20 +1220,105 @@ def _derive_required_runtimes(analysis: dict[str, Any]) -> list[str]:
     return deduped
 
 
-def _check_runtime_requirements(required_runtimes: list[str]) -> list[dict[str, Any]]:
+def _derive_runtime_constraints(
+    *,
+    install_mode: str,
+    run_command: str,
+    package_json: dict[str, Any],
+) -> dict[str, str]:
+    """Return runtime version constraints declared by the repository."""
+    constraints: dict[str, str] = {}
+    engines = package_json.get("engines") if isinstance(package_json, dict) else {}
+    if not isinstance(engines, dict):
+        return constraints
+
+    node_constraint = str(engines.get("node", "")).strip()
+    if node_constraint and (run_command in {"node", "npx"} or install_mode in {"npm", "workspace_package"}):
+        constraints["node"] = node_constraint
+    return constraints
+
+
+def _check_runtime_requirements(required_runtimes: list[str], runtime_constraints: dict[str, str] | None = None) -> list[dict[str, Any]]:
     """Check whether the container host currently exposes the required runtimes."""
+    constraints = runtime_constraints or {}
     results: list[dict[str, Any]] = []
     for runtime in required_runtimes:
         checks = _runtime_exec_candidates(runtime)
         available_exec = next((candidate for candidate in checks if shutil.which(candidate)), "")
+        installed_version = _read_runtime_version(runtime, available_exec) if available_exec else ""
+        required_version = str(constraints.get(runtime, "")).strip()
+        available = bool(available_exec)
+        reason = ""
+        if available and required_version and not _runtime_version_satisfies(installed_version, required_version):
+            available = False
+            reason = "version_mismatch"
+        elif not available:
+            reason = "missing"
         results.append(
             {
                 "name": runtime,
-                "available": bool(available_exec),
+                "available": available,
                 "executable": available_exec,
+                "version": installed_version,
+                "required_version": required_version,
+                "reason": reason,
             }
         )
     return results
+
+
+def _read_runtime_version(runtime: str, executable: str) -> str:
+    """Read one runtime version string when the executable is present."""
+    if not executable:
+        return ""
+
+    version_commands = {
+        "node": [executable, "--version"],
+        "npm": [executable, "--version"],
+        "npx": [executable, "--version"],
+        "python": [executable, "--version"],
+        "pip": [executable, "--version"],
+        "uv": [executable, "--version"],
+        "uvx": [executable, "--version"],
+        "docker": [executable, "--version"],
+    }
+    command = version_commands.get(runtime)
+    if not command:
+        return ""
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=5, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    output = (completed.stdout or completed.stderr or "").strip()
+    match = re.search(r"v?(\d+(?:\.\d+){0,2})", output)
+    return match.group(1) if match else ""
+
+
+def _runtime_version_satisfies(installed_version: str, constraint: str) -> bool:
+    """Check simple semver-ish constraints like >=24 or >=24.0.0."""
+    if not constraint:
+        return True
+    match = re.match(r"^\s*>=\s*v?(\d+(?:\.\d+){0,2})\s*$", constraint)
+    if not match:
+        return True
+    required = _version_tuple(match.group(1))
+    installed = _version_tuple(installed_version)
+    if not installed:
+        return False
+    return installed >= required
+
+
+def _version_tuple(value: str) -> tuple[int, ...]:
+    """Convert dotted numeric versions into comparable tuples."""
+    raw = str(value).strip().lstrip("v")
+    if not raw:
+        return ()
+    parts: list[int] = []
+    for piece in raw.split("."):
+        if not piece.isdigit():
+            break
+        parts.append(int(piece))
+    return tuple(parts)
 
 
 def _runtime_exec_candidates(runtime: str) -> list[str]:
@@ -1238,6 +1338,13 @@ def _runtime_exec_candidates(runtime: str) -> list[str]:
 
 def _describe_next_mcp_action(analysis: dict[str, Any]) -> str:
     """Give the GUI a simple next-step message for the install preview."""
+    version_mismatches = [
+        item
+        for item in analysis.get("runtime_status", [])
+        if isinstance(item, dict) and str(item.get("reason", "")) == "version_mismatch"
+    ]
+    if version_mismatches:
+        return _describe_runtime_version_mismatches(version_mismatches)
     missing_runtimes = [str(item) for item in analysis.get("missing_runtimes", [])]
     if missing_runtimes:
         return "Install or expose these runtimes in the container first: " + ", ".join(missing_runtimes)
@@ -1280,6 +1387,20 @@ def _summarize_exception(exc: BaseException) -> str:
 
     walk(exc)
     return leaves[0] if leaves else (str(exc).strip() or exc.__class__.__name__)
+
+
+def _describe_runtime_version_mismatches(items: list[dict[str, Any]]) -> str:
+    """Format one or more runtime version mismatches for the UI."""
+    parts: list[str] = []
+    for item in items:
+        name = str(item.get("name", "")).strip() or "runtime"
+        current = str(item.get("version", "")).strip() or "not detected"
+        required = str(item.get("required_version", "")).strip() or "a newer version"
+        parts.append(f"{name} {current} installed, requires {required}")
+    if not parts:
+        return "The container runtime version is incompatible with this MCP."
+    prefix = "Incompatible runtime versions for this MCP: "
+    return prefix + "; ".join(parts)
 
 
 def _normalize_ai_plan(

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import nanobot_webgui.mcp_service as mcp_service_module
 from nanobot.config.schema import MCPServerConfig
 from nanobot_webgui.config_service import GUIConfigService
 from nanobot_webgui.mcp_service import GUIMCPService, _extract_readme_summary, _guess_env_defaults, _parse_repository_source
@@ -165,6 +166,55 @@ def test_enrich_analysis_adds_repo_type_runtime_checks_and_next_step(tmp_path: P
     assert "npx" in enriched["required_runtimes"]
     assert isinstance(enriched["runtime_status"], list)
     assert enriched["next_action"]
+
+
+def test_enrich_analysis_detects_node_engine_version_mismatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    checkout_dir = tmp_path / "email-mcp"
+    checkout_dir.mkdir(parents=True)
+    (checkout_dir / "README.md").write_text("Email MCP server.", encoding="utf-8")
+    (checkout_dir / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "@codefuturist/email-mcp",
+                "version": "0.2.1",
+                "bin": {"email-mcp": "./dist/main.js"},
+                "engines": {"node": ">=99.0.0"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "codefuturist",
+            "repo": "email-mcp",
+            "repo_url": "https://github.com/codefuturist/email-mcp",
+            "clone_url": "https://github.com/codefuturist/email-mcp.git",
+        },
+    )
+
+    monkeypatch.setattr(
+        mcp_service_module.shutil,
+        "which",
+        lambda name: {"node": "/usr/bin/node", "npx": "/usr/bin/npx", "npm": "/usr/bin/npm"}.get(name, ""),
+    )
+
+    class _Completed:
+        stdout = "v20.20.1\n"
+        stderr = ""
+
+    monkeypatch.setattr(mcp_service_module.subprocess, "run", lambda *args, **kwargs: _Completed())
+
+    enriched = service._enrich_analysis(analysis)
+
+    node_status = next(item for item in enriched["runtime_status"] if item["name"] == "node")
+    assert node_status["available"] is False
+    assert node_status["reason"] == "version_mismatch"
+    assert node_status["required_version"] == ">=99.0.0"
+    assert enriched["missing_runtimes"] == ["node"]
+    assert "requires >=99.0.0" in enriched["next_action"]
 
 
 def test_inspect_checkout_uses_pyproject_console_script_for_python_mcp(tmp_path: Path):
