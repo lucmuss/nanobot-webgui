@@ -1190,6 +1190,158 @@ async def test_install_repository_falls_back_to_source_checkout_after_npm_module
     assert "Automatic source-checkout fallback was applied" in record["log_tail"]
 
 
+@pytest.mark.asyncio
+async def test_test_server_falls_back_to_source_checkout_after_existing_npm_runtime_failure(
+    tmp_path: Path,
+):
+    service = _build_service(tmp_path)
+    source_repo = tmp_path / "email-mcp-source"
+    (source_repo / "dist").mkdir(parents=True)
+    (source_repo / "README.md").write_text("Email MCP source checkout.", encoding="utf-8")
+    (source_repo / "package.json").write_text(
+        json.dumps(
+            {
+                "name": "@codefuturist/email-mcp",
+                "version": "0.2.1",
+                "bin": {"email-mcp": "./dist/main.js"},
+                "scripts": {"build": "tsc"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (source_repo / "dist" / "main.js").write_text("console.log('email-mcp');\n", encoding="utf-8")
+
+    config = service.config_service.ensure_instance()
+    config.tools.mcp_servers["email-mcp"] = MCPServerConfig(
+        type="stdio",
+        command="/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+        args=[
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npx-cli.js",
+            "-y",
+            "@codefuturist/email-mcp",
+        ],
+        env={
+            "MCP_EMAIL_ADDRESS": "user@example.com",
+            "MCP_EMAIL_PASSWORD": "secret",
+            "MCP_EMAIL_IMAP_HOST": "imap.example.com",
+            "MCP_EMAIL_SMTP_HOST": "smtp.example.com",
+        },
+        url="",
+        headers={},
+        tool_timeout=30,
+    )
+    service.config_service.save(config)
+    service.config_service.set_mcp_record(
+        "email-mcp",
+        {
+            "server_name": "email-mcp",
+            "title": "codefuturist/email-mcp",
+            "summary": "Email MCP package.",
+            "repo_url": "https://github.com/codefuturist/email-mcp",
+            "clone_url": "https://github.com/codefuturist/email-mcp.git",
+            "install_dir": "",
+            "install_steps": ["Register npm package runtime via npx @codefuturist/email-mcp"],
+            "required_env": ["MCP_EMAIL_ADDRESS", "MCP_EMAIL_IMAP_HOST", "MCP_EMAIL_SMTP_HOST"],
+            "optional_env": ["MCP_EMAIL_PASSWORD"],
+            "env_requirements": [
+                {"name": "MCP_EMAIL_ADDRESS", "required": True, "confidence": "medium", "sources": ["legacy_required_env"], "reason": ""},
+                {"name": "MCP_EMAIL_PASSWORD", "required": False, "confidence": "medium", "sources": ["legacy_optional_env"], "reason": ""},
+                {"name": "MCP_EMAIL_IMAP_HOST", "required": True, "confidence": "medium", "sources": ["legacy_required_env"], "reason": ""},
+                {"name": "MCP_EMAIL_SMTP_HOST", "required": True, "confidence": "medium", "sources": ["legacy_required_env"], "reason": ""},
+            ],
+            "healthcheck": "list tools",
+            "evidence": ["server.json npm=@codefuturist/email-mcp"],
+            "repo_type": "server_json",
+            "analysis_mode": "deterministic",
+            "analysis_confidence": 0.75,
+            "required_runtimes": ["node", "npx"],
+            "runtime_constraints": {"node": ">=24.0.0"},
+            "runtime_bindings": {
+                "node": {
+                    "constraint": ">=24.0.0",
+                    "resolved_version": "24.10.0",
+                    "root_dir": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64",
+                    "node_executable": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+                    "npm_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+                    "npx_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npx-cli.js",
+                }
+            },
+            "runtime_status": [],
+            "missing_runtimes": [],
+            "can_install": True,
+            "next_action": "Run the MCP test.",
+            "enabled": False,
+        },
+    )
+
+    async def fake_preflight(_cfg, *, settle_seconds: float = 2.0):
+        return ""
+
+    async def fake_prepare(_analysis: dict[str, object], _record: dict[str, object]) -> dict[str, object]:
+        return {
+            "node": {
+                "constraint": ">=24.0.0",
+                "resolved_version": "24.10.0",
+                "root_dir": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64",
+                "node_executable": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+                "npm_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+                "npx_cli_path": "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npx-cli.js",
+            }
+        }
+
+    async def fake_clone(_clone_url: str, target_dir: Path | None = None) -> Path:
+        assert target_dir is not None
+        shutil.copytree(source_repo, target_dir)
+        (target_dir / ".git").mkdir()
+        return target_dir
+
+    executed_commands: list[list[str]] = []
+
+    async def fake_run_command(command: list[str], *, cwd: Path, timeout: int, env: dict[str, str] | None = None):
+        executed_commands.append(list(command))
+        return "", ""
+
+    async def fake_list_tools(cfg: MCPServerConfig) -> list[str]:
+        if any("@codefuturist/email-mcp" == str(arg) for arg in cfg.args):
+            raise RuntimeError(
+                "Error: Cannot find package '/tmp/node_modules/zod-to-json-schema/index.js' code: ERR_MODULE_NOT_FOUND"
+            )
+        return ["send_email"]
+
+    service._preflight_server = fake_preflight  # type: ignore[method-assign]
+    service._prepare_runtime_bindings = fake_prepare  # type: ignore[method-assign]
+    service._clone_repository = fake_clone  # type: ignore[method-assign]
+    service._run_command = fake_run_command  # type: ignore[method-assign]
+    service._list_server_tools = fake_list_tools  # type: ignore[method-assign]
+
+    record = await service.test_server("email-mcp")
+
+    install_dir = tmp_path / "workspace" / "mcp-installs" / "codefuturist__email-mcp"
+    cfg = service.config_service.load().tools.mcp_servers["email-mcp"]
+    assert record["status"] == "active"
+    assert record["install_dir"] == str(install_dir)
+    assert cfg.command == "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node"
+    assert cfg.args == [str(install_dir / "dist" / "main.js")]
+    assert any(
+        command == [
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+            "install",
+        ]
+        for command in executed_commands
+    )
+    assert any(
+        command == [
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/bin/node",
+            "/workspace/mcp-runtimes/node-v24.10.0-linux-x64/lib/node_modules/npm/bin/npm-cli.js",
+            "run",
+            "build",
+        ]
+        for command in executed_commands
+    )
+    assert "Automatic source-checkout fallback was applied" in record["log_tail"]
+
+
 def test_refresh_runtime_requirements_uses_bound_node_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     service = _build_service(tmp_path)
     service.config_service.set_mcp_record(

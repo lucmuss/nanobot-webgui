@@ -451,6 +451,9 @@ class GUIMCPService:
             result["last_test_label"] = result["status_label"]
             result["last_error"] = preflight
             result["log_tail"] = _append_log(result["log_tail"], preflight)
+            fallback = await self._maybe_retry_npm_runtime_via_source_checkout(server_name, cfg, result)
+            if fallback is not None:
+                return fallback
             self.config_service.set_mcp_record(server_name, result)
             return result
 
@@ -490,6 +493,9 @@ class GUIMCPService:
             result["last_test_label"] = result["status_label"]
             result["last_error"] = message
             result["log_tail"] = _append_log(result["log_tail"], message)
+            fallback = await self._maybe_retry_npm_runtime_via_source_checkout(server_name, cfg, result)
+            if fallback is not None:
+                return fallback
             self.config_service.set_mcp_record(server_name, result)
             self.logger.warning("mcp_probe_failed server=%s error=%s", server_name, message)
             return result
@@ -530,6 +536,90 @@ class GUIMCPService:
             return message
         detail = await self._preflight_server(cfg, settle_seconds=8)
         return detail or message
+
+    async def _maybe_retry_npm_runtime_via_source_checkout(
+        self,
+        server_name: str,
+        cfg: MCPServerConfig,
+        failed_record: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Convert a broken npm package runtime into a managed source checkout on retest."""
+        analysis = self._analysis_from_failed_runtime_record(server_name, cfg, failed_record)
+        if analysis is None:
+            return None
+        return await self._fallback_npm_probe_to_source_checkout(
+            analysis=analysis,
+            existing=cfg,
+            existing_record=failed_record,
+            normalized_repo_url=_normalize_repo_url(str(failed_record.get("repo_url", ""))),
+            failed_record=failed_record,
+        )
+
+    def _analysis_from_failed_runtime_record(
+        self,
+        server_name: str,
+        cfg: MCPServerConfig,
+        failed_record: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        """Rebuild the minimum analysis payload needed for source fallback from one stored record."""
+        if not _looks_like_npm_package_resolution_failure(str(failed_record.get("last_error", ""))):
+            return None
+
+        transport = _resolve_transport(cfg)
+        if transport != "stdio":
+            return None
+
+        install_steps = [str(item) for item in failed_record.get("install_steps", []) if str(item).strip()]
+        uses_npm_package_runtime = (
+            cfg.command == "npx"
+            or any("npx-cli.js" in str(arg) for arg in cfg.args)
+            or any("Register npm package runtime via npx" in item for item in install_steps)
+        )
+        if not uses_npm_package_runtime:
+            return None
+
+        repo_url = _normalize_repo_url(str(failed_record.get("repo_url", "")))
+        if not repo_url:
+            return None
+        try:
+            repo = _parse_repository_source(repo_url)
+        except ValueError:
+            return None
+
+        clone_url = str(failed_record.get("clone_url", "")).strip() or repo["clone_url"]
+        return {
+            "server_name": server_name,
+            "title": str(failed_record.get("title", "")).strip() or f"{repo['owner']}/{repo['repo']}",
+            "summary": str(failed_record.get("summary", "")).strip() or "No summary available.",
+            "repo_url": repo_url,
+            "clone_url": clone_url,
+            "install_slug": f"{repo['owner']}__{repo['repo']}".lower(),
+            "install_mode": "npm",
+            "transport": transport,
+            "run_command": "npx",
+            "run_args": list(cfg.args),
+            "run_url": "",
+            "install_steps": [{"command": [], "display": item, "timeout": 0} for item in install_steps],
+            "env_requirements": list(failed_record.get("env_requirements", []))
+            if isinstance(failed_record.get("env_requirements"), list)
+            else [],
+            "required_env": [str(item) for item in failed_record.get("required_env", [])],
+            "optional_env": [str(item) for item in failed_record.get("optional_env", [])],
+            "healthcheck": str(failed_record.get("healthcheck", "")).strip()
+            or "Start the MCP transport and list tools through an MCP client handshake.",
+            "evidence": [str(item) for item in failed_record.get("evidence", []) if str(item).strip()],
+            "repo_type": str(failed_record.get("repo_type", "")).strip() or "server_json",
+            "analysis_mode": str(failed_record.get("analysis_mode", "")).strip() or "deterministic",
+            "analysis_confidence": float(failed_record.get("analysis_confidence", 0.0) or 0.0),
+            "required_runtimes": [str(item) for item in failed_record.get("required_runtimes", []) if str(item).strip()],
+            "runtime_constraints": dict(failed_record.get("runtime_constraints", {}) or {}),
+            "runtime_status": list(failed_record.get("runtime_status", []))
+            if isinstance(failed_record.get("runtime_status"), list)
+            else [],
+            "missing_runtimes": [str(item) for item in failed_record.get("missing_runtimes", []) if str(item).strip()],
+            "can_install": bool(failed_record.get("can_install", True)),
+            "next_action": str(failed_record.get("next_action", "")).strip(),
+        }
 
     async def build_repair_plan(self, server_name: str, *, allow_unrestricted: bool = False) -> dict[str, Any]:
         """Build a bounded repair plan for one installed MCP server."""
