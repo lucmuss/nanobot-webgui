@@ -137,6 +137,7 @@ class GUISettings:
     instance_name: str = "nanobot-dev"
     public_url: str | None = None
     gateway_health_url: str | None = None
+    gateway_state_path: str | None = None
     https_only_cookies: bool = False
     restart_mode: str = "disabled"
     restart_command: str | None = None
@@ -158,6 +159,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
     _TEMPLATES.env.globals["render_markdown"] = _render_markdown_preview
     config_service = GUIConfigService(settings.config_path, settings.workspace)
     config_service.ensure_instance()
+    gateway_state_path = (
+        Path(settings.gateway_state_path).expanduser().resolve()
+        if str(settings.gateway_state_path or "").strip()
+        else (config_service.runtime_dir / "gateway-status.json")
+    )
 
     auth_service = AuthService(
         db_path=config_service.runtime_dir / "gui.sqlite3",
@@ -818,7 +824,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             "agent_health": agent_health,
             "runtime_status": _build_runtime_status(
                 agent_health=agent_health,
-                gateway_status=await _probe_gateway(settings.gateway_health_url),
+                gateway_status=await _probe_gateway(settings.gateway_health_url, gateway_state_path),
                 last_restart_at=config_service.get_last_restart_at(),
             ),
             "model_name": config.agents.defaults.model,
@@ -1672,7 +1678,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             if name != "none" and is_channel_enabled(config, name)
         ]
         provider_name = config.get_provider_name() or config.agents.defaults.provider
-        gateway_status = await _probe_gateway(settings.gateway_health_url)
+        gateway_status = await _probe_gateway(settings.gateway_health_url, gateway_state_path)
         sessions = await agent_service.list_sessions()
         installed_servers = _build_mcp_server_cards(config, config_service)
         enabled_mcp_count = sum(1 for server in installed_servers if server["enabled"])
@@ -3472,7 +3478,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         validation = await _validate_setup(
             config=config,
             config_service=config_service,
-            gateway_health=await _probe_gateway(settings.gateway_health_url),
+            gateway_health=await _probe_gateway(settings.gateway_health_url, gateway_state_path),
             agent_health=config_service.get_agent_health(),
         )
         return _render(
@@ -3539,7 +3545,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             validation = await _validate_setup(
                 config=config,
                 config_service=config_service,
-                gateway_health=await _probe_gateway(settings.gateway_health_url),
+                gateway_health=await _probe_gateway(settings.gateway_health_url, gateway_state_path),
                 agent_health=config_service.get_agent_health(),
             )
             return _render(
@@ -3614,7 +3620,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         validation = await _validate_setup(
             config=config,
             config_service=config_service,
-            gateway_health=await _probe_gateway(settings.gateway_health_url),
+            gateway_health=await _probe_gateway(settings.gateway_health_url, gateway_state_path),
             agent_health=agent_health,
         )
         return _render(
@@ -3707,7 +3713,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             return RedirectResponse("/login", status_code=303)
 
         config = config_service.load()
-        gateway_health = await _probe_gateway(settings.gateway_health_url)
+        gateway_health = await _probe_gateway(settings.gateway_health_url, gateway_state_path)
         agent_health = config_service.get_agent_health()
         return _render(
             request,
@@ -4838,10 +4844,80 @@ def _next_validation_issue(validation_results: list[dict[str, Any]]) -> dict[str
     return None
 
 
-async def _probe_gateway(health_url: str | None) -> dict[str, str]:
+def _load_gateway_runtime_state(state_path: Path | None) -> dict[str, Any]:
+    """Read the shared gateway heartbeat file when available."""
+    if state_path is None or not state_path.exists():
+        return {}
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _gateway_state_is_fresh(payload: dict[str, Any], *, ttl_seconds: int = 20) -> bool:
+    """Return whether one heartbeat payload was updated recently enough."""
+    raw = str(payload.get("updated_at", "")).strip()
+    if not raw:
+        return False
+    try:
+        updated_at = datetime.fromisoformat(raw)
+    except ValueError:
+        return False
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - updated_at <= timedelta(seconds=ttl_seconds)
+
+
+def _gateway_status_from_runtime_state(payload: dict[str, Any]) -> dict[str, str]:
+    """Translate a shared gateway heartbeat payload into a dashboard status."""
+    if not payload:
+        return {}
+    state = str(payload.get("state", "")).strip().lower()
+    if state == "running" and _gateway_state_is_fresh(payload):
+        return {
+            "state": "runtime_heartbeat",
+            "label": "Healthy",
+            "tone": "good",
+            "hint": "Gateway heartbeat is fresh via the shared runtime state file, so the headless agent loop is available.",
+        }
+    if state == "starting" and _gateway_state_is_fresh(payload):
+        return {
+            "state": "starting",
+            "label": "Starting",
+            "tone": "muted",
+            "hint": "Gateway process is starting and already publishing its shared heartbeat.",
+        }
+    if state == "error" and _gateway_state_is_fresh(payload):
+        return {
+            "state": "runtime_error",
+            "label": "Gateway error",
+            "tone": "bad",
+            "hint": str(payload.get("last_error", "")).strip() or "Gateway process reported an error through the shared heartbeat.",
+        }
+    if state in {"running", "starting"}:
+        return {
+            "state": "stale_heartbeat",
+            "label": "Heartbeat stale",
+            "tone": "bad",
+            "hint": "The last shared gateway heartbeat is too old, so the process may no longer be running.",
+        }
+    if state == "stopped":
+        return {
+            "state": "stopped",
+            "label": "Stopped",
+            "tone": "bad",
+            "hint": "Gateway supervisor reported that the process stopped.",
+        }
+    return {}
+
+
+async def _probe_gateway(health_url: str | None, state_path: Path | None = None) -> dict[str, str]:
     """Probe the optional gateway health endpoint for the dashboard."""
+    runtime_state = _load_gateway_runtime_state(state_path)
+    runtime_status = _gateway_status_from_runtime_state(runtime_state)
     if not health_url:
-        return {"state": "not_configured", "label": "Not configured", "tone": "muted"}
+        return runtime_status or {"state": "not_configured", "label": "Not configured", "tone": "muted"}
 
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:
@@ -4850,6 +4926,8 @@ async def _probe_gateway(health_url: str | None) -> dict[str, str]:
             return {"state": "connected", "label": "Connected", "tone": "good"}
         return {"state": "error", "label": f"Error {response.status_code}", "tone": "bad"}
     except Exception as exc:
+        if runtime_status:
+            return runtime_status
         if _looks_like_missing_http_health_endpoint(exc):
             return {
                 "state": "probe_unavailable",

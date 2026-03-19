@@ -1,3 +1,4 @@
+import json
 import re
 import shutil
 from pathlib import Path
@@ -197,6 +198,7 @@ def test_gui_help_shows_web_options():
     assert "--config" in help_text
     assert "--secure-cookies" in help_text
     assert "--gateway-health-url" in help_text
+    assert "--gateway-state-path" in help_text
     assert "--restart-mode" in help_text
     assert "--restart-command" in help_text
     assert "--update-check" in help_text
@@ -241,6 +243,8 @@ def test_gui_starts_uvicorn_with_expected_settings(monkeypatch, tmp_path: Path):
             "release-gui",
             "--gateway-health-url",
             "http://127.0.0.1:9999/health",
+            "--gateway-state-path",
+            str(tmp_path / "gateway-status.json"),
             "--restart-mode",
             "command",
             "--restart-command",
@@ -267,6 +271,7 @@ def test_gui_starts_uvicorn_with_expected_settings(monkeypatch, tmp_path: Path):
     assert settings.config_path == config_path.resolve()
     assert settings.instance_name == "release-gui"
     assert settings.gateway_health_url == "http://127.0.0.1:9999/health"
+    assert settings.gateway_state_path == str(tmp_path / "gateway-status.json")
     assert settings.https_only_cookies is True
     assert settings.restart_mode == "command"
     assert settings.restart_command == "docker restart nanobot-gateway"
@@ -293,6 +298,43 @@ def test_gui_rejects_repair_mode_command_without_command():
 
     assert result.exit_code == 1
     assert "--repair-command is required" in result.stdout
+
+
+def test_gateway_supervisor_writes_shared_heartbeat(monkeypatch, tmp_path: Path):
+    config_path = tmp_path / "instance" / "config.json"
+    config_path.parent.mkdir(parents=True)
+    config_path.write_text("{}")
+    state_path = tmp_path / "instance" / "gateway-status.json"
+
+    def fake_gateway(*, port=None, workspace=None, verbose=False, config=None):
+        assert port == 18792
+        assert workspace == str(tmp_path / "workspace")
+        assert config == str(config_path.resolve())
+        raise _StopGateway("done")
+
+    monkeypatch.setattr("nanobot.cli.commands.gateway", fake_gateway)
+
+    result = runner.invoke(
+        app,
+        [
+            "gateway-supervisor",
+            "--port",
+            "18792",
+            "--workspace",
+            str(tmp_path / "workspace"),
+            "--config",
+            str(config_path),
+            "--state-path",
+            str(state_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert state_path.exists()
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert payload["kind"] == "nanobot_gateway"
+    assert payload["state"] == "error"
+    assert payload["config_path"] == str(config_path.resolve())
 
 
 def test_repair_worker_executes_bounded_recipe(monkeypatch):

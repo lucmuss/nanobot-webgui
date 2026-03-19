@@ -462,6 +462,29 @@ def test_probe_gateway_marks_missing_http_endpoint_as_muted(monkeypatch: pytest.
     assert "headless" in result["hint"]
 
 
+def test_probe_gateway_uses_shared_runtime_heartbeat_when_http_probe_is_missing(tmp_path: Path):
+    state_path = tmp_path / "gateway-status.json"
+    state_path.write_text(
+        """
+{
+  "kind": "nanobot_gateway",
+  "state": "running",
+  "updated_at": "2099-01-01T00:00:00+00:00",
+  "config_path": "/tmp/config.json",
+  "workspace": "/tmp/workspace"
+}
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = asyncio.run(_probe_gateway(None, state_path))
+
+    assert result["state"] == "runtime_heartbeat"
+    assert result["tone"] == "good"
+    assert result["label"] == "Healthy"
+    assert "heartbeat" in result["hint"]
+
+
 def test_validate_setup_treats_probe_unavailable_gateway_as_non_blocking(tmp_path: Path):
     client, app = _make_client(tmp_path)
 

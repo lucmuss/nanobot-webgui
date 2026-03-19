@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -14,6 +16,103 @@ from nanobot.cli.commands import app as upstream_app
 from nanobot_webgui.repair_worker import run_repair_recipe
 
 app = upstream_app
+
+
+def _utc_now() -> str:
+    """Return a compact UTC timestamp string."""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _resolve_gateway_state_path(config_path: Path, explicit_path: str | None = None) -> Path:
+    """Return the shared gateway heartbeat file path."""
+    candidate = (explicit_path or os.getenv("NANOBOT_GUI_GATEWAY_STATE_PATH", "")).strip()
+    if candidate:
+        return Path(candidate).expanduser().resolve()
+    return config_path.parent / "gateway-status.json"
+
+
+def _write_gateway_state(state_path: Path, payload: dict[str, object]) -> None:
+    """Persist the gateway heartbeat payload atomically."""
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = state_path.with_suffix(state_path.suffix + ".tmp")
+    temp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_path.replace(state_path)
+
+
+@app.command("gateway-supervisor")
+def gateway_supervisor(
+    port: int | None = typer.Option(None, "--port", "-p", help="Gateway port"),
+    workspace: str | None = typer.Option(None, "--workspace", "-w", help="Workspace directory"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
+    config: str | None = typer.Option(None, "--config", "-c", help="Path to config file"),
+    state_path: str | None = typer.Option(
+        None,
+        "--state-path",
+        help="Optional shared heartbeat JSON path used by the GUI to track gateway availability.",
+    ),
+    heartbeat_interval: int = typer.Option(
+        5,
+        "--heartbeat-interval",
+        min=1,
+        help="Seconds between heartbeat refreshes written by the supervisor.",
+    ),
+):
+    """Run the upstream gateway while publishing a shared liveness heartbeat."""
+    from nanobot.cli.commands import gateway as upstream_gateway
+
+    config_path = (
+        Path(config).expanduser().resolve()
+        if config
+        else (Path.home() / ".nanobot" / "config.json")
+    )
+    state_file = _resolve_gateway_state_path(config_path, state_path)
+    workspace_value = str(Path(workspace).expanduser()) if workspace else ""
+    base_payload: dict[str, object] = {
+        "kind": "nanobot_gateway",
+        "pid": os.getpid(),
+        "config_path": str(config_path),
+        "workspace": workspace_value,
+        "port": port or 0,
+        "started_at": _utc_now(),
+    }
+    stop_event = threading.Event()
+
+    def publish(state: str, *, error: str = "") -> None:
+        payload = {
+            **base_payload,
+            "state": state,
+            "updated_at": _utc_now(),
+        }
+        if error:
+            payload["last_error"] = error
+        _write_gateway_state(state_file, payload)
+
+    def heartbeat_loop() -> None:
+        while not stop_event.wait(heartbeat_interval):
+            publish("running")
+
+    publish("starting")
+    thread = threading.Thread(target=heartbeat_loop, name="nanobot-gateway-heartbeat", daemon=True)
+    thread.start()
+    try:
+        publish("running")
+        upstream_gateway(
+            port=port,
+            workspace=workspace,
+            verbose=verbose,
+            config=str(config_path),
+        )
+        publish("stopped")
+    except KeyboardInterrupt:
+        publish("stopped")
+        raise
+    except BaseException as exc:
+        message = str(exc).strip() or exc.__class__.__name__
+        publish("error", error=message)
+        raise
+    finally:
+        stop_event.set()
+        thread.join(timeout=1)
 
 
 @app.command()
@@ -32,6 +131,11 @@ def gui(
         None,
         "--gateway-health-url",
         help="Optional health endpoint used by the dashboard to probe a separate gateway",
+    ),
+    gateway_state_path: str | None = typer.Option(
+        None,
+        "--gateway-state-path",
+        help="Optional shared heartbeat JSON path used when the gateway does not expose an HTTP health endpoint.",
     ),
     restart_mode: str = typer.Option(
         "",
@@ -103,6 +207,7 @@ def gui(
         else (Path.home() / ".nanobot" / "config.json")
     )
     gateway_url = gateway_health_url or os.getenv("NANOBOT_GUI_GATEWAY_HEALTH_URL")
+    gateway_state = gateway_state_path or os.getenv("NANOBOT_GUI_GATEWAY_STATE_PATH")
     public_url_value = (public_url or os.getenv("NANOBOT_GUI_PUBLIC_URL", "")).strip()
     restart_mode_value = (restart_mode or os.getenv("NANOBOT_GUI_RESTART_MODE", "")).strip().lower()
     restart_command_value = (restart_command or os.getenv("NANOBOT_GUI_RESTART_COMMAND", "")).strip()
@@ -152,6 +257,7 @@ def gui(
         instance_name=instance_name,
         public_url=public_url_value or None,
         gateway_health_url=gateway_url,
+        gateway_state_path=(gateway_state or "").strip() or None,
         https_only_cookies=secure_cookies,
         restart_mode=restart_mode_value,
         restart_command=restart_command_value or None,
@@ -173,6 +279,8 @@ def gui(
         console.print(f"[dim]Workspace: {Path(workspace).expanduser()}[/dim]")
     if gateway_url:
         console.print(f"[dim]Gateway probe: {gateway_url}[/dim]")
+    if gateway_state:
+        console.print(f"[dim]Gateway heartbeat: {Path(gateway_state).expanduser()}[/dim]")
     if secure_cookies:
         console.print("[dim]Session cookies: HTTPS-only[/dim]")
     if restart_mode_value == "self":
