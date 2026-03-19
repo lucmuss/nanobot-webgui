@@ -1,6 +1,6 @@
 [project]
 name = "nanobot-webgui"
-version = "0.3.9"
+version = "0.3.10"
 description = "Production-focused browser GUI overlay for upstream nanobot"
 requires-python = ">=3.11"
 license = {text = "MIT"}
