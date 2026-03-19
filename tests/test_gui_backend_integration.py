@@ -125,12 +125,108 @@ def _complete_setup(client: TestClient) -> None:
             "response_style": "brief",
             "tools_enabled": "on",
             "restrict_to_workspace": "on",
+            "heartbeat_enabled_present": "1",
+            "heartbeat_enabled": "on",
+            "heartbeat_interval_minutes": "30",
             "action": "finish",
         },
         follow_redirects=True,
     )
     assert response.status_code == 200
     assert "Dashboard" in response.text
+
+
+def test_setup_agent_page_exposes_heartbeat_controls(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.post(
+        "/setup/provider",
+        data={
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "api_key": "backend-openrouter-key",
+            "api_base": "",
+            "extra_headers": "{}",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/setup/channel",
+        data={
+            "channel": "telegram",
+            "token": "123456:ABCDEF",
+            "allow_from": "owner-1, owner-2",
+            "send_progress": "on",
+            "send_tool_hints": "on",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+    assert "Heartbeat automation" in response.text
+    assert 'data-testid="agent-heartbeat-enabled"' in response.text
+    assert 'data-testid="agent-heartbeat-interval-minutes"' in response.text
+
+
+def test_setup_agent_saves_heartbeat_interval_from_form(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.post(
+        "/setup/provider",
+        data={
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "api_key": "backend-openrouter-key",
+            "api_base": "",
+            "extra_headers": "{}",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/setup/channel",
+        data={
+            "channel": "telegram",
+            "token": "123456:ABCDEF",
+            "allow_from": "owner-1, owner-2",
+            "send_progress": "on",
+            "send_tool_hints": "on",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/setup/agent",
+        data={
+            "model": "openai/gpt-4.1-mini",
+            "provider": "openrouter",
+            "instruction_content": "# Backend integration instructions\n- Stay deterministic.",
+            "response_style": "brief",
+            "tools_enabled": "on",
+            "restrict_to_workspace": "on",
+            "heartbeat_enabled_present": "1",
+            "heartbeat_enabled": "on",
+            "heartbeat_interval_minutes": "720",
+            "action": "finish",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    updated_config = app.state.config_service.load()
+    assert updated_config.gateway.heartbeat.enabled is True
+    assert updated_config.gateway.heartbeat.interval_s == 43200
 
 
 def _install_fixture_mcp_backend(app):

@@ -1584,6 +1584,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "mcp_servers": _build_mcp_server_cards(config, config_service),
                 "workspace_locked": bool(config_service.workspace_override),
                 "safe_mode": config_service.is_safe_mode(),
+                "heartbeat_enabled": config.gateway.heartbeat.enabled,
+                "heartbeat_interval_minutes": max(1, round(config.gateway.heartbeat.interval_s / 60)),
             },
         )
 
@@ -1597,6 +1599,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         action = str(form.get("action", "finish")).strip() or "finish"
         config = config_service.load()
         defaults = config.agents.defaults
+        heartbeat = config.gateway.heartbeat
 
         try:
             if not config_service.workspace_override:
@@ -1607,6 +1610,13 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             defaults.temperature = _form_float(form.get("temperature"), defaults.temperature)
             defaults.max_tool_iterations = _form_int(form.get("max_tool_iterations"), defaults.max_tool_iterations)
             defaults.memory_window = _form_int(form.get("memory_window"), defaults.memory_window)
+            heartbeat_minutes = _form_int(
+                form.get("heartbeat_interval_minutes"),
+                max(1, round(heartbeat.interval_s / 60)),
+            )
+            if heartbeat_minutes < 1:
+                raise ValueError("Heartbeat interval must be at least 1 minute.")
+            heartbeat.interval_s = heartbeat_minutes * 60
         except ValueError as exc:
             agent_doc = config_service.read_markdown_document("agents")
             instruction_files = _build_setup_instruction_files(config_service)
@@ -1630,12 +1640,21 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "mcp_servers": _build_mcp_server_cards(config, config_service),
                     "workspace_locked": bool(config_service.workspace_override),
                     "safe_mode": config_service.is_safe_mode(),
+                    "heartbeat_enabled": bool(form.get("heartbeat_enabled")),
+                    "heartbeat_interval_minutes": str(
+                        form.get(
+                            "heartbeat_interval_minutes",
+                            max(1, round(config.gateway.heartbeat.interval_s / 60)),
+                        )
+                    ),
                 },
                 status_code=400,
             )
 
         reasoning_effort = str(form.get("reasoning_effort", "")).strip()
         defaults.reasoning_effort = reasoning_effort or None
+        if form.get("heartbeat_enabled_present"):
+            heartbeat.enabled = bool(form.get("heartbeat_enabled"))
         set_tools_enabled(config, bool(form.get("tools_enabled")))
         config.tools.restrict_to_workspace = bool(form.get("restrict_to_workspace"))
         instruction_content = str(form.get("instruction_content", ""))

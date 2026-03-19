@@ -98,6 +98,24 @@
               </label>
             </div>
 
+            <div class="card compact-card" style="margin-top: 10px;">
+              <header><strong>Heartbeat automation</strong></header>
+              <p class="muted">Control how often Nanobot checks <span class="mono">HEARTBEAT.md</span> for recurring tasks. This does not affect the dashboard gateway liveness indicator.</p>
+              <input type="hidden" name="heartbeat_enabled_present" value="1">
+              <div class="form-columns" style="margin-top: 12px;">
+                <label class="checkbox">
+                  <input type="checkbox" name="heartbeat_enabled" {% if heartbeat_enabled %}checked{% endif %} data-testid="agent-heartbeat-enabled">
+                  <span>Enable heartbeat automation</span>
+                </label>
+
+                <label title="Enter the heartbeat interval in minutes. For example: 30 = 30 minutes, 720 = 12 hours.">
+                  Heartbeat interval (minutes)
+                  <input type="number" name="heartbeat_interval_minutes" value="{{ heartbeat_interval_minutes }}" min="1" data-testid="agent-heartbeat-interval-minutes">
+                  <span class="field-caption">Examples: <span class="mono">30</span> = 30 minutes, <span class="mono">720</span> = 12 hours.</span>
+                </label>
+              </div>
+            </div>
+
             <label title="Optional extra reasoning depth for models that support it. Leave disabled unless you need it.">
               Reasoning effort
               <select name="reasoning_effort" data-testid="agent-reasoning-effort">
