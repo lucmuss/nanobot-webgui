@@ -4333,6 +4333,8 @@ def _build_runtime_status(
         return {"label": "Faulty", "tone": "bad"}
     if gateway_status.get("tone") == "good":
         return {"label": "Gateway only", "tone": "muted"}
+    if gateway_status.get("state") == "probe_unavailable":
+        return {"label": "Gateway probe unavailable", "tone": "muted"}
     return {"label": "Offline", "tone": "bad"}
 
 
@@ -4795,9 +4797,16 @@ async def _validate_setup(
         },
         {
             "label": "Gateway health",
-            "ok": gateway_health.get("tone") == "good",
+            "ok": gateway_health.get("tone") == "good" or gateway_health.get("state") == "probe_unavailable",
             "detail": gateway_health.get("label", "Unknown"),
-            "hint": "The gateway is optional, but this shows whether the headless runtime endpoint is reachable." if gateway_health.get("tone") != "good" else "Gateway health endpoint responded.",
+            "hint": (
+                gateway_health.get("hint")
+                or (
+                    "The gateway is optional, but this shows whether the headless runtime endpoint is reachable."
+                    if gateway_health.get("tone") != "good"
+                    else "Gateway health endpoint responded."
+                )
+            ),
             "action_label": "Open Status",
             "action_url": "/status",
         },
@@ -4832,16 +4841,45 @@ def _next_validation_issue(validation_results: list[dict[str, Any]]) -> dict[str
 async def _probe_gateway(health_url: str | None) -> dict[str, str]:
     """Probe the optional gateway health endpoint for the dashboard."""
     if not health_url:
-        return {"label": "Not configured", "tone": "muted"}
+        return {"state": "not_configured", "label": "Not configured", "tone": "muted"}
 
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:
             response = await client.get(health_url)
         if response.is_success:
-            return {"label": "Connected", "tone": "good"}
-        return {"label": f"Error {response.status_code}", "tone": "bad"}
-    except Exception:
-        return {"label": "Offline", "tone": "bad"}
+            return {"state": "connected", "label": "Connected", "tone": "good"}
+        return {"state": "error", "label": f"Error {response.status_code}", "tone": "bad"}
+    except Exception as exc:
+        if _looks_like_missing_http_health_endpoint(exc):
+            return {
+                "state": "probe_unavailable",
+                "label": "No HTTP health endpoint",
+                "tone": "muted",
+                "hint": "This nanobot gateway build runs headless and does not expose /health, even though the gateway process may still be active.",
+            }
+        return {"state": "offline", "label": "Offline", "tone": "bad"}
+
+
+def _looks_like_missing_http_health_endpoint(exc: Exception) -> bool:
+    """Detect the common case where the headless gateway has no HTTP health endpoint."""
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    hints = (
+        "connection refused",
+        "connection reset by peer",
+        "empty reply from server",
+        "server disconnected without sending a response",
+        "[errno 111]",
+        "[errno 104]",
+        "[winerror 10061]",
+    )
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        message = str(current).strip().lower()
+        if any(hint in message for hint in hints):
+            return True
+        current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+    return False
 
 
 def _normalize_update_repo(repo: str | None) -> str:

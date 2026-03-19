@@ -1,11 +1,20 @@
+import asyncio
 import base64
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from nanobot.config.schema import MCPServerConfig
-from nanobot_webgui.app import GUISettings, _display_summary_text, _render_chat_message_html, create_gui_app
+from nanobot_webgui.app import (
+    GUISettings,
+    _display_summary_text,
+    _probe_gateway,
+    _render_chat_message_html,
+    _validate_setup,
+    create_gui_app,
+)
 from nanobot_webgui.mcp_service import _parse_repository_source
 from nanobot_webgui.version import GUI_VERSION
 from nanobot.session.manager import SessionManager
@@ -430,6 +439,58 @@ def test_dashboard_hides_setup_progress_when_everything_is_ready(tmp_path: Path)
     assert "Setup Progress" not in response.text
     assert 'data-testid="dashboard-setup-progress"' not in response.text
     assert "System Health" in response.text
+
+
+def test_probe_gateway_marks_missing_http_endpoint_as_muted(monkeypatch: pytest.MonkeyPatch):
+    class _FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def get(self, url: str):
+            raise httpx.ConnectError("[Errno 111] Connection refused")
+
+    monkeypatch.setattr("nanobot_webgui.app.httpx.AsyncClient", lambda timeout=1.5: _FakeClient())
+
+    result = asyncio.run(_probe_gateway("http://nanobot-dev-gateway:18792/health"))
+
+    assert result["state"] == "probe_unavailable"
+    assert result["tone"] == "muted"
+    assert result["label"] == "No HTTP health endpoint"
+    assert "headless" in result["hint"]
+
+
+def test_validate_setup_treats_probe_unavailable_gateway_as_non_blocking(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    config = app.state.config_service.load()
+    checks = asyncio.run(
+        _validate_setup(
+            config=config,
+            config_service=app.state.config_service,
+            gateway_health={
+                "state": "probe_unavailable",
+                "label": "No HTTP health endpoint",
+                "tone": "muted",
+                "hint": "This nanobot gateway build runs headless and does not expose /health.",
+            },
+            agent_health={
+                "ok": True,
+                "provider": "openrouter",
+                "model": "openai/gpt-4.1-mini",
+            },
+        )
+    )
+
+    gateway_check = next(item for item in checks if item["label"] == "Gateway health")
+    assert gateway_check["ok"] is True
+    assert gateway_check["detail"] == "No HTTP health endpoint"
+    assert "headless" in gateway_check["hint"]
 
 
 def test_dashboard_shows_usage_24h_metric_after_usage_events(tmp_path: Path):
