@@ -2,14 +2,23 @@ import asyncio
 import json
 import logging
 import shutil
+from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
+import anyio
 import pytest
 
 import nanobot_webgui.mcp_service as mcp_service_module
 from nanobot.config.schema import MCPServerConfig
 from nanobot_webgui.config_service import GUIConfigService
-from nanobot_webgui.mcp_service import GUIMCPService, _extract_readme_summary, _guess_env_defaults, _parse_repository_source
+from nanobot_webgui.mcp_service import (
+    GUIMCPService,
+    _extract_readme_summary,
+    _guess_env_defaults,
+    _list_stdio_tools,
+    _parse_repository_source,
+)
 from tests.helpers.mcp_fixtures import FIXTURE_ROOT
 
 
@@ -591,6 +600,54 @@ def test_guess_env_defaults_skips_generic_and_non_filesystem_path_names(tmp_path
     assert "PYTHONPATH" not in defaults
     assert "NODE_PATH" not in defaults
     assert "MCP_ENDPOINT_PATH" not in defaults
+
+
+@pytest.mark.asyncio
+async def test_list_stdio_tools_ignores_broken_resource_error_on_shutdown(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    import mcp
+    import mcp.client.stdio as mcp_client_stdio
+
+    cfg = MCPServerConfig(
+        type="stdio",
+        command="node",
+        args=["./dist/main.js"],
+        env={"MCP_EMAIL_ADDRESS": "user@example.com"},
+        url="",
+        headers={},
+        tool_timeout=30,
+    )
+
+    class _FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def initialize(self):
+            return SimpleNamespace()
+
+        async def list_tools(self):
+            return SimpleNamespace(
+                tools=[SimpleNamespace(name="send_email"), SimpleNamespace(name="list_accounts")]
+            )
+
+    @asynccontextmanager
+    async def fake_stdio_client(_params):
+        yield object(), object()
+        raise ExceptionGroup(
+            "unhandled errors in a TaskGroup",
+            [anyio.BrokenResourceError()],
+        )
+
+    monkeypatch.setattr(mcp_client_stdio, "stdio_client", fake_stdio_client)
+    monkeypatch.setattr(mcp, "ClientSession", lambda read, write: _FakeSession())
+
+    tools = await _list_stdio_tools(cfg)
+
+    assert tools == ["send_email", "list_accounts"]
 
 
 @pytest.mark.asyncio

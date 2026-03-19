@@ -3362,12 +3362,28 @@ async def _list_stdio_tools(cfg: MCPServerConfig) -> list[str]:
     env = os.environ.copy()
     env.update({key: value for key, value in (cfg.env or {}).items() if value})
     params = StdioServerParameters(command=cfg.command, args=cfg.args, env=env)
-    async with AsyncExitStack() as stack:
-        read, write = await stack.enter_async_context(stdio_client(params))
-        session = await stack.enter_async_context(ClientSession(read, write))
-        await asyncio.wait_for(session.initialize(), timeout=15)
-        tools = await asyncio.wait_for(session.list_tools(), timeout=15)
-    return [tool.name for tool in tools.tools]
+    tool_names: list[str] | None = None
+    try:
+        async with AsyncExitStack() as stack:
+            read, write = await stack.enter_async_context(stdio_client(params))
+            session = await stack.enter_async_context(ClientSession(read, write))
+            await asyncio.wait_for(session.initialize(), timeout=15)
+            tools = await asyncio.wait_for(session.list_tools(), timeout=15)
+            tool_names = [tool.name for tool in tools.tools]
+    except BaseException as exc:
+        if tool_names is not None and _is_ignorable_stdio_shutdown_error(exc):
+            return tool_names
+        raise
+    return tool_names or []
+
+
+def _is_ignorable_stdio_shutdown_error(exc: BaseException) -> bool:
+    """Treat known stdio teardown races as non-fatal after tool discovery succeeded."""
+    nested = getattr(exc, "exceptions", None)
+    if isinstance(nested, (list, tuple)):
+        children = [item for item in nested if isinstance(item, BaseException)]
+        return bool(children) and all(_is_ignorable_stdio_shutdown_error(item) for item in children)
+    return exc.__class__.__name__ == "BrokenResourceError"
 
 
 async def _list_sse_tools(cfg: MCPServerConfig) -> list[str]:
