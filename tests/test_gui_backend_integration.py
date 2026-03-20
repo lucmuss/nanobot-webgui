@@ -844,6 +844,45 @@ def test_gui_mcp_detail_publish_uses_category_select_and_visible_env_fields(tmp_
     )
     assert install_response.status_code == 200
 
+    record = app.state.config_service.get_mcp_record("secret")
+    app.state.config_service.set_mcp_record(
+        "secret",
+        {
+            **record,
+            "env_requirements": [
+                {
+                    "name": "FAKE_API_KEY",
+                    "required": True,
+                    "confidence": "high",
+                    "sources": ["legacy_required_env"],
+                    "reason": "",
+                    "default_value": "",
+                    "default_source": "",
+                },
+                {
+                    "name": "PORT",
+                    "required": True,
+                    "confidence": "high",
+                    "sources": ["env_example:.env.example"],
+                    "reason": "Declared in .env.example.",
+                    "default_value": "3333",
+                    "default_source": "env_example:.env.example",
+                },
+                {
+                    "name": "FAKE_REGION",
+                    "required": False,
+                    "confidence": "medium",
+                    "sources": ["legacy_optional_env"],
+                    "reason": "",
+                    "default_value": "",
+                    "default_source": "",
+                },
+            ],
+            "required_env": ["FAKE_API_KEY", "PORT"],
+            "optional_env": ["FAKE_REGION"],
+        },
+    )
+
     response = client.get("/mcp/secret")
 
     assert response.status_code == 200
@@ -855,6 +894,11 @@ def test_gui_mcp_detail_publish_uses_category_select_and_visible_env_fields(tmp_
         '<input type="text" name="env__FAKE_API_KEY" value="" autocomplete="off" spellcheck="false" '
         'data-testid="mcp-env-FAKE_API_KEY">'
     ) in response.text
+    assert (
+        '<input type="text" name="env__PORT" value="3333" autocomplete="off" spellcheck="false" '
+        'data-testid="mcp-env-PORT">'
+    ) in response.text
+    assert "Suggested default from .env.example" in response.text
     assert '<details style="margin-top: 16px;" data-testid="mcp-env-advanced">' in response.text
     assert '<summary>Additional parameter</summary>' in response.text
     assert (

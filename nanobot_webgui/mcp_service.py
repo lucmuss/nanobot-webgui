@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import html
 import json
 import logging
@@ -206,11 +207,24 @@ class GUIMCPService:
     ) -> dict[str, Any]:
         """Persist one install plan into config and return its provisional GUI record."""
         config = self.config_service.load()
+        env_default_hints = _guess_env_default_hints(
+            config=config,
+            server_name=analysis["server_name"],
+            required_env=analysis["required_env"],
+            optional_env=analysis["optional_env"],
+            env_requirements=analysis.get("env_requirements", []),
+            workspace=self.config_service.default_workspace,
+        )
+        env_requirements = _merge_env_requirement_default_hints(
+            analysis.get("env_requirements", []),
+            env_default_hints,
+        )
         server_cfg = self._build_server_config(
             analysis,
             install_dir,
             existing,
             config,
+            env_default_hints=env_default_hints,
             runtime_bindings=runtime_bindings,
         )
         config.tools.mcp_servers[analysis["server_name"]] = server_cfg
@@ -241,7 +255,7 @@ class GUIMCPService:
             "clone_url": analysis["clone_url"],
             "install_dir": str(install_dir) if install_dir is not None else "",
             "install_steps": [step["display"] for step in analysis["install_steps"]],
-            "env_requirements": analysis.get("env_requirements", []),
+            "env_requirements": env_requirements,
             "required_env": analysis["required_env"],
             "optional_env": analysis["optional_env"],
             "healthcheck": analysis["healthcheck"],
@@ -1079,16 +1093,19 @@ class GUIMCPService:
         existing: MCPServerConfig | None,
         config,
         *,
+        env_default_hints: dict[str, dict[str, str]] | None = None,
         runtime_bindings: dict[str, Any] | None = None,
     ) -> MCPServerConfig:
         """Create the MCP config entry using the derived install plan."""
-        env_defaults = _guess_env_defaults(
+        default_hints = env_default_hints or _guess_env_default_hints(
             config=config,
             server_name=analysis["server_name"],
             required_env=analysis["required_env"],
             optional_env=analysis["optional_env"],
+            env_requirements=analysis.get("env_requirements", []),
             workspace=self.config_service.default_workspace,
         )
+        env_defaults = {name: item["value"] for name, item in default_hints.items() if str(item.get("value", "")).strip()}
         existing_env = dict(existing.env) if existing else {}
         env = {**env_defaults, **existing_env}
         headers = dict(existing.headers) if existing else {}
@@ -2436,27 +2453,33 @@ def _collect_env_requirements_from_env_examples(checkout_dir: Path) -> list[dict
             if not line:
                 continue
             if line.startswith("#"):
-                match = re.match(r"#\s*([A-Z][A-Z0-9_]*)=", line)
+                match = re.match(r"#\s*([A-Z][A-Z0-9_]*)=(.*)$", line)
                 if match:
+                    env_name = match.group(1)
                     requirements.append(
                         _build_env_requirement(
-                            match.group(1),
+                            env_name,
                             required=False,
                             confidence="high",
                             source=f"env_example:{filename}",
                             reason=f"Commented optional env in {filename}.",
+                            default_value=_normalize_env_default_candidate(env_name, match.group(2)),
+                            default_source=f"env_example:{filename}",
                         )
                     )
                 continue
-            match = re.match(r"([A-Z][A-Z0-9_]*)=", line)
+            match = re.match(r"([A-Z][A-Z0-9_]*)=(.*)$", line)
             if match:
+                env_name = match.group(1)
                 requirements.append(
                     _build_env_requirement(
-                        match.group(1),
+                        env_name,
                         required=True,
                         confidence="high",
                         source=f"env_example:{filename}",
                         reason=f"Declared in {filename}.",
+                        default_value=_normalize_env_default_candidate(env_name, match.group(2)),
+                        default_source=f"env_example:{filename}",
                     )
                 )
     return requirements
@@ -2465,16 +2488,26 @@ def _collect_env_requirements_from_env_examples(checkout_dir: Path) -> list[dict
 def _collect_env_requirements_from_example_config(example_config: dict[str, Any]) -> list[dict[str, Any]]:
     """Collect env names from bundled MCP config examples."""
     source_name = str(example_config.get("source_file", "")).strip() or "mcp-example"
-    return [
-        _build_env_requirement(
-            key,
-            required=True,
-            confidence="high",
-            source=f"example_config:{source_name}",
-            reason=f"Listed in {source_name}.",
+    requirements: list[dict[str, Any]] = []
+    env_block = example_config.get("env") or {}
+    if not isinstance(env_block, dict):
+        return requirements
+    for key, value in env_block.items():
+        env_name = str(key).strip()
+        if not env_name:
+            continue
+        requirements.append(
+            _build_env_requirement(
+                env_name,
+                required=True,
+                confidence="high",
+                source=f"example_config:{source_name}",
+                reason=f"Listed in {source_name}.",
+                default_value=_normalize_env_default_candidate(env_name, value),
+                default_source=f"example_config:{source_name}",
+            )
         )
-        for key in (example_config.get("env") or {}).keys()
-    ]
+    return requirements
 
 
 def _collect_env_requirements_from_server_manifest(server_manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2490,13 +2523,20 @@ def _collect_env_requirements_from_server_manifest(server_manifest: dict[str, An
         for env_var in package.get("environmentVariables", []) or []:
             if not isinstance(env_var, dict):
                 continue
+            env_name = env_var.get("name", "")
+            default_value = _normalize_env_default_candidate(
+                env_name,
+                env_var.get("defaultValue", env_var.get("default", env_var.get("value", ""))),
+            )
             requirements.append(
                 _build_env_requirement(
-                    env_var.get("name", ""),
+                    env_name,
                     required=bool(env_var.get("isRequired", False)),
                     confidence="high",
                     source=f"server_manifest:{identifier}",
                     reason=f"Declared in server.json package metadata for {identifier}.",
+                    default_value=default_value,
+                    default_source=f"server_manifest:{identifier}" if default_value else "",
                 )
             )
     return requirements
@@ -2608,9 +2648,10 @@ def _collect_js_env_requirements(content: str, relative_path: str) -> list[dict[
             for match in pattern.finditer(line):
                 env_name = match.group(1)
                 required = env_name in guard_required_envs
+                default_value = _extract_js_env_default(line[match.end() :], env_name)
                 optional = (
                     not required
-                    or bool(re.match(r"\s*(?:\?\?|\|\|)\s*[^,\])};]+", line[match.end() :]))
+                    or bool(default_value)
                     or _js_env_line_looks_toggle_optional(line, env_name, match.end())
                     or _env_name_prefers_optional(env_name)
                 )
@@ -2627,6 +2668,8 @@ def _collect_js_env_requirements(content: str, relative_path: str) -> list[dict[
                             if optional
                             else f"Referenced via process.env without a strict startup guard in {relative_path}."
                         ),
+                        default_value=default_value,
+                        default_source=f"source_scan:{relative_path}" if default_value else "",
                     )
                 )
     return requirements
@@ -2647,9 +2690,11 @@ def _collect_python_env_requirements(content: str, relative_path: str) -> list[d
                 )
             )
         for match in re.finditer(r"os\.getenv\(\s*[\"']([A-Z][A-Z0-9_]*)[\"'](?:\s*,\s*([^)]+))?\)", line):
+            env_name = match.group(1)
+            default_value = _normalize_runtime_default_candidate(env_name, match.group(2) or "")
             requirements.append(
                 _build_env_requirement(
-                    match.group(1),
+                    env_name,
                     required=False,
                     confidence="medium",
                     source=f"source_scan:{relative_path}",
@@ -2658,12 +2703,16 @@ def _collect_python_env_requirements(content: str, relative_path: str) -> list[d
                         if match.group(2)
                         else f"Referenced via os.getenv without a strict startup guard in {relative_path}."
                     ),
+                    default_value=default_value,
+                    default_source=f"source_scan:{relative_path}" if default_value else "",
                 )
             )
         for match in re.finditer(r"(?:os\.)?environ\.get\(\s*[\"']([A-Z][A-Z0-9_]*)[\"'](?:\s*,\s*([^)]+))?\)", line):
+            env_name = match.group(1)
+            default_value = _normalize_runtime_default_candidate(env_name, match.group(2) or "")
             requirements.append(
                 _build_env_requirement(
-                    match.group(1),
+                    env_name,
                     required=False,
                     confidence="medium",
                     source=f"source_scan:{relative_path}",
@@ -2672,6 +2721,8 @@ def _collect_python_env_requirements(content: str, relative_path: str) -> list[d
                         if match.group(2)
                         else f"Referenced via environ.get without a strict startup guard in {relative_path}."
                     ),
+                    default_value=default_value,
+                    default_source=f"source_scan:{relative_path}" if default_value else "",
                 )
             )
     return requirements
@@ -2822,6 +2873,8 @@ def _build_env_requirement(
     confidence: str,
     source: str,
     reason: str,
+    default_value: Any = "",
+    default_source: str = "",
 ) -> dict[str, Any]:
     """Create one normalized env requirement record."""
     normalized = _normalize_env_names([name])
@@ -2830,13 +2883,18 @@ def _build_env_requirement(
     level = str(confidence).strip().lower()
     if level not in {"low", "medium", "high"}:
         level = "medium"
-    return {
+    normalized_default = _normalize_env_default_candidate(normalized[0], default_value)
+    payload = {
         "name": normalized[0],
         "required": bool(required),
         "confidence": level,
         "sources": [str(source).strip()] if str(source).strip() else [],
         "reason": str(reason).strip(),
     }
+    if normalized_default:
+        payload["default_value"] = normalized_default
+        payload["default_source"] = str(default_source).strip() or str(source).strip()
+    return payload
 
 
 def _normalize_env_requirements(
@@ -2906,6 +2964,17 @@ def _merge_env_requirements(*collections: Any) -> list[dict[str, Any]]:
                 existing["reason"] = normalized["reason"]
             elif normalized.get("required") and not required_before and normalized.get("reason"):
                 existing["reason"] = normalized["reason"]
+            normalized_default = str(normalized.get("default_value", "")).strip()
+            existing_default = str(existing.get("default_value", "")).strip()
+            if normalized_default:
+                if (
+                    not existing_default
+                    or _env_confidence_rank(normalized.get("confidence", "")) > _env_confidence_rank(existing.get("confidence", ""))
+                ):
+                    existing["default_value"] = normalized_default
+                    existing["default_source"] = str(normalized.get("default_source", "")).strip()
+                elif not str(existing.get("default_source", "")).strip():
+                    existing["default_source"] = str(normalized.get("default_source", "")).strip()
     return [merged[name] for name in order]
 
 
@@ -2941,6 +3010,8 @@ def _coerce_env_requirement(value: Any) -> dict[str, Any]:
             "confidence": confidence,
             "sources": sources,
             "reason": str(value.get("reason", "")).strip(),
+            "default_value": _normalize_env_default_candidate(name[0], value.get("default_value", "")),
+            "default_source": str(value.get("default_source", "")).strip(),
         }
     if isinstance(value, str):
         normalized = _normalize_env_names([value])
@@ -3239,31 +3310,110 @@ def _guess_env_defaults(
     required_env: list[str],
     optional_env: list[str],
     workspace: Path,
+    env_requirements: Any = None,
 ) -> dict[str, str]:
     """Pre-fill obvious MCP env values from the current nanobot config."""
-    defaults: dict[str, str] = {}
-    mappings = {
-        "OPENAI_API_KEY": config.providers.openai.api_key,
-        "ANTHROPIC_API_KEY": config.providers.anthropic.api_key,
-        "MOONSHOT_API_KEY": config.providers.moonshot.api_key,
-        "OPENROUTER_API_KEY": config.providers.openrouter.api_key,
-        "BRAVE_API_KEY": config.tools.web.search.api_key,
+    return {
+        name: item["value"]
+        for name, item in _guess_env_default_hints(
+            config=config,
+            server_name=server_name,
+            required_env=required_env,
+            optional_env=optional_env,
+            env_requirements=env_requirements,
+            workspace=workspace,
+        ).items()
     }
-    for env_name in required_env + optional_env:
-        value = mappings.get(env_name)
-        if value:
-            defaults[env_name] = value
+
+
+def _guess_env_default_hints(
+    *,
+    config,
+    server_name: str,
+    required_env: list[str],
+    optional_env: list[str],
+    workspace: Path,
+    env_requirements: Any = None,
+) -> dict[str, dict[str, str]]:
+    """Return visible default hints for MCP env fields, including their source."""
+    requirements = _normalize_env_requirements(
+        env_requirements,
+        fallback_required=required_env,
+        fallback_optional=optional_env,
+    )
+    defaults: dict[str, dict[str, str]] = {}
+    mappings = {
+        "OPENAI_API_KEY": (config.providers.openai.api_key, "nanobot_config:providers.openai.api_key"),
+        "ANTHROPIC_API_KEY": (config.providers.anthropic.api_key, "nanobot_config:providers.anthropic.api_key"),
+        "MOONSHOT_API_KEY": (config.providers.moonshot.api_key, "nanobot_config:providers.moonshot.api_key"),
+        "OPENROUTER_API_KEY": (config.providers.openrouter.api_key, "nanobot_config:providers.openrouter.api_key"),
+        "BRAVE_API_KEY": (config.tools.web.search.api_key, "nanobot_config:tools.web.search.api_key"),
+    }
+
+    for item in requirements:
+        env_name = str(item.get("name", "")).strip()
+        if not env_name:
+            continue
+        mapped_value, mapped_source = mappings.get(env_name, ("", ""))
+        if str(mapped_value).strip():
+            defaults[env_name] = {"value": str(mapped_value).strip(), "source": mapped_source}
+            continue
+        default_value = _normalize_env_default_candidate(env_name, item.get("default_value", ""))
+        if default_value:
+            defaults[env_name] = {
+                "value": default_value,
+                "source": str(item.get("default_source", "")).strip() or "repository_default",
+            }
 
     path_env_names = [
-        env_name
-        for env_name in [*required_env, *optional_env]
-        if _should_prefill_workspace_path(env_name)
+        str(item.get("name", "")).strip()
+        for item in requirements
+        if _should_prefill_workspace_path(str(item.get("name", "")).strip())
     ]
     if path_env_names:
         save_dir = workspace / "mcp-output" / server_name
         save_dir.mkdir(parents=True, exist_ok=True)
         for env_name in path_env_names:
-            defaults.setdefault(env_name, str(save_dir))
+            defaults.setdefault(
+                env_name,
+                {"value": str(save_dir), "source": "gui_heuristic:workspace_output_path"},
+            )
+
+    port_values: dict[str, str] = {}
+    for item in requirements:
+        env_name = str(item.get("name", "")).strip()
+        if not env_name or not _should_prefill_local_port(env_name):
+            continue
+        value = defaults.get(env_name, {}).get("value", "").strip()
+        if not value:
+            value = _suggest_local_port(server_name, env_name)
+            defaults[env_name] = {"value": value, "source": "gui_heuristic:local_port"}
+        port_values[env_name] = value
+
+    host_values: dict[str, str] = {}
+    for item in requirements:
+        env_name = str(item.get("name", "")).strip()
+        if not env_name or not _should_prefill_local_host(env_name):
+            continue
+        value = defaults.get(env_name, {}).get("value", "").strip()
+        if not value:
+            value = "127.0.0.1"
+            defaults[env_name] = {"value": value, "source": "gui_heuristic:local_host"}
+        host_values[env_name] = value
+
+    resolved_host = next((value for value in host_values.values() if value), "127.0.0.1")
+    resolved_port = next((value for value in port_values.values() if value), "")
+    for item in requirements:
+        env_name = str(item.get("name", "")).strip()
+        if not env_name or not _should_prefill_local_url(env_name):
+            continue
+        if defaults.get(env_name, {}).get("value", "").strip():
+            continue
+        port = resolved_port or _suggest_local_port(server_name, "PORT")
+        defaults[env_name] = {
+            "value": f"http://{resolved_host}:{port}",
+            "source": "gui_heuristic:local_url",
+        }
     return defaults
 
 
@@ -3288,6 +3438,157 @@ def _should_prefill_workspace_path(env_name: str) -> bool:
         "TEMP_PATH",
     )
     return any(normalized.endswith(suffix) for suffix in path_suffixes)
+
+
+def _should_prefill_local_port(env_name: str) -> bool:
+    """Return whether one env name likely expects a local MCP bind port."""
+    normalized = str(env_name).strip().upper()
+    if not normalized:
+        return False
+    if normalized == "PORT":
+        return True
+    if not normalized.endswith("_PORT"):
+        return False
+    return _env_name_has_local_bind_hint(normalized)
+
+
+def _should_prefill_local_host(env_name: str) -> bool:
+    """Return whether one env name likely expects a local MCP bind host."""
+    normalized = str(env_name).strip().upper()
+    if not normalized:
+        return False
+    if normalized in {"HOST", "HOSTNAME"}:
+        return True
+    if not (normalized.endswith("_HOST") or normalized.endswith("_HOSTNAME")):
+        return False
+    return _env_name_has_local_bind_hint(normalized)
+
+
+def _should_prefill_local_url(env_name: str) -> bool:
+    """Return whether one env name likely expects a local MCP endpoint URL."""
+    normalized = str(env_name).strip().upper()
+    if not normalized:
+        return False
+    direct_names = {
+        "MCP_URL",
+        "MCP_SERVER_URL",
+        "SERVER_URL",
+        "SERVICE_URL",
+        "LOCAL_URL",
+        "LOCAL_BASE_URL",
+        "LOCAL_ENDPOINT_URL",
+    }
+    if normalized in direct_names:
+        return True
+    if not normalized.endswith("_URL"):
+        return False
+    return _env_name_has_local_bind_hint(normalized)
+
+
+def _env_name_has_local_bind_hint(normalized: str) -> bool:
+    """Return whether one env name looks like local server bind config, not external service config."""
+    positive_tokens = {"APP", "SERVER", "MCP", "HTTP", "HTTPS", "SERVICE", "LISTEN", "LOCAL", "WEB", "WS"}
+    negative_tokens = {
+        "SMTP",
+        "IMAP",
+        "POSTGRES",
+        "POSTGRESQL",
+        "MYSQL",
+        "MONGO",
+        "REDIS",
+        "DATABASE",
+        "DB",
+        "API",
+        "FTP",
+        "SSH",
+        "OAUTH",
+        "FIGMA",
+    }
+    parts = [part for part in normalized.split("_") if part]
+    if any(part in negative_tokens for part in parts):
+        return False
+    return any(part in positive_tokens for part in parts)
+
+
+def _suggest_local_port(server_name: str, env_name: str) -> str:
+    """Return one stable local port suggestion for an MCP server env."""
+    digest = hashlib.sha256(f"{server_name}:{env_name}".encode("utf-8")).hexdigest()
+    return str(3300 + (int(digest[:6], 16) % 3000))
+
+
+def _normalize_env_default_candidate(env_name: Any, raw_value: Any) -> str:
+    """Normalize one repository-provided env default while skipping placeholders and secrets."""
+    normalized_name = str(env_name).strip().upper()
+    if _env_name_is_secret_like(normalized_name):
+        return ""
+    candidate = str(raw_value or "").strip()
+    if not candidate:
+        return ""
+    candidate = re.split(r"\s+#", candidate, maxsplit=1)[0].strip()
+    if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in {"'", '"'}:
+        candidate = candidate[1:-1].strip()
+    if not candidate:
+        return ""
+    lower = candidate.lower()
+    if (
+        "<" in candidate
+        or ">" in candidate
+        or "${" in candidate
+        or lower.startswith("your_")
+        or lower.startswith("your-")
+        or "example" in lower
+        or "placeholder" in lower
+        or "changeme" in lower
+        or "replace_me" in lower
+        or "replace-with" in lower
+    ):
+        return ""
+    return candidate
+
+
+def _normalize_runtime_default_candidate(env_name: Any, raw_value: Any) -> str:
+    """Normalize one runtime default literal from source code."""
+    candidate = str(raw_value or "").strip()
+    if not candidate:
+        return ""
+    if candidate in {"None", "null", "undefined"}:
+        return ""
+    return _normalize_env_default_candidate(env_name, candidate)
+
+
+def _extract_js_env_default(tail: str, env_name: str) -> str:
+    """Extract one simple JS default literal from a process.env expression tail."""
+    match = re.match(r"\s*(?:\?\?|\|\|)\s*(\"[^\"]*\"|'[^']*'|\d+|true|false)\b", tail)
+    if not match:
+        return ""
+    return _normalize_runtime_default_candidate(env_name, match.group(1))
+
+
+def _env_name_is_secret_like(env_name: str) -> bool:
+    """Return whether an env name likely carries secrets that should never be auto-filled from repo examples."""
+    normalized = str(env_name).strip().upper()
+    if not normalized:
+        return False
+    secret_suffixes = ("_KEY", "_TOKEN", "_SECRET", "_PASSWORD", "_PASS", "_CLIENT_SECRET")
+    return normalized.endswith(secret_suffixes)
+
+
+def _merge_env_requirement_default_hints(
+    env_requirements: Any,
+    hints: dict[str, dict[str, str]],
+) -> list[dict[str, Any]]:
+    """Attach guessed default hints to rich env requirements without losing stronger repository evidence."""
+    merged = _normalize_env_requirements(env_requirements)
+    for item in merged:
+        env_name = str(item.get("name", "")).strip()
+        hint = hints.get(env_name, {})
+        if not env_name or not hint:
+            continue
+        if not str(item.get("default_value", "")).strip():
+            item["default_value"] = str(hint.get("value", "")).strip()
+        if not str(item.get("default_source", "")).strip():
+            item["default_source"] = str(hint.get("source", "")).strip()
+    return merged
 
 
 def _missing_env_vars(required_env: list[str], current_env: dict[str, str]) -> list[str]:

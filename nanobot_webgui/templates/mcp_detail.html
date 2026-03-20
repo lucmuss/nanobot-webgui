@@ -358,6 +358,12 @@
               <label>
                 {{ field.name }}{% if field.required %} (required){% endif %}
                 <input type="text" name="env__{{ field.name }}" value="{{ field.value }}" autocomplete="off" spellcheck="false" data-testid="mcp-env-{{ field.name }}">
+                {% if field.default_value %}
+                  <span class="field-caption">
+                    {{ field.default_source_label or "Suggested default" }}:
+                    <span class="mono">{{ field.default_value }}</span>
+                  </span>
+                {% endif %}
               </label>
             {% endfor %}
           </div>
@@ -372,6 +378,12 @@
                 <label>
                   {{ field.name }}
                   <input type="text" name="env__{{ field.name }}" value="{{ field.value }}" autocomplete="off" spellcheck="false" data-testid="mcp-env-{{ field.name }}">
+                  {% if field.default_value %}
+                    <span class="field-caption">
+                      {{ field.default_source_label or "Suggested default" }}:
+                      <span class="mono">{{ field.default_value }}</span>
+                    </span>
+                  {% endif %}
                 </label>
               {% endfor %}
             </div>

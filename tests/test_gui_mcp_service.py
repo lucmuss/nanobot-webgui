@@ -15,6 +15,7 @@ from nanobot_webgui.config_service import GUIConfigService
 from nanobot_webgui.mcp_service import (
     GUIMCPService,
     _extract_readme_summary,
+    _guess_env_default_hints,
     _guess_env_defaults,
     _list_stdio_tools,
     _parse_repository_source,
@@ -600,6 +601,59 @@ def test_guess_env_defaults_skips_generic_and_non_filesystem_path_names(tmp_path
     assert "PYTHONPATH" not in defaults
     assert "NODE_PATH" not in defaults
     assert "MCP_ENDPOINT_PATH" not in defaults
+
+
+def test_guess_env_default_hints_prefers_repo_defaults_and_local_runtime_suggestions(tmp_path: Path):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+    workspace = tmp_path / "workspace"
+
+    hints = _guess_env_default_hints(
+        config=config,
+        server_name="figma-context-mcp",
+        required_env=["PORT", "SERVER_HOST", "MCP_SERVER_URL"],
+        optional_env=["OUTPUT_FORMAT"],
+        env_requirements=[
+            {
+                "name": "PORT",
+                "required": True,
+                "confidence": "high",
+                "sources": ["env_example:.env.example"],
+                "reason": "Declared in .env.example.",
+                "default_value": "3333",
+                "default_source": "env_example:.env.example",
+            },
+            {
+                "name": "OUTPUT_FORMAT",
+                "required": False,
+                "confidence": "high",
+                "sources": ["env_example:.env.example"],
+                "reason": "Commented optional env in .env.example.",
+                "default_value": "json",
+                "default_source": "env_example:.env.example",
+            },
+            {
+                "name": "SERVER_HOST",
+                "required": True,
+                "confidence": "medium",
+                "sources": ["source_scan:src/index.ts"],
+                "reason": "Referenced via process.env without a strict startup guard.",
+            },
+            {
+                "name": "MCP_SERVER_URL",
+                "required": False,
+                "confidence": "medium",
+                "sources": ["source_scan:src/index.ts"],
+                "reason": "Referenced via process.env without a strict startup guard.",
+            },
+        ],
+        workspace=workspace,
+    )
+
+    assert hints["PORT"] == {"value": "3333", "source": "env_example:.env.example"}
+    assert hints["OUTPUT_FORMAT"] == {"value": "json", "source": "env_example:.env.example"}
+    assert hints["SERVER_HOST"] == {"value": "127.0.0.1", "source": "gui_heuristic:local_host"}
+    assert hints["MCP_SERVER_URL"] == {"value": "http://127.0.0.1:3333", "source": "gui_heuristic:local_url"}
 
 
 @pytest.mark.asyncio

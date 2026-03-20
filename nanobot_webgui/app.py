@@ -921,26 +921,34 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "env_fields": [
                     {
                         "name": str(field.get("name", "")).strip(),
-                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), ""),
+                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), "")
+                        or str(field.get("default_value", "")).strip(),
                         "required": bool(field.get("required", False)),
                         "reason": str(field.get("reason", "")).strip(),
                         "confidence": str(field.get("confidence", "")).strip(),
                         "sources": [str(source).strip() for source in field.get("sources", []) if str(source).strip()]
                         if isinstance(field.get("sources"), list)
                         else [],
+                        "default_value": str(field.get("default_value", "")).strip(),
+                        "default_source": str(field.get("default_source", "")).strip(),
+                        "default_source_label": _env_default_source_label(str(field.get("default_source", "")).strip()),
                     }
                     for field in card.get("env_requirements", [])
                 ],
                 "required_env_fields": [
                     {
                         "name": str(field.get("name", "")).strip(),
-                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), ""),
+                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), "")
+                        or str(field.get("default_value", "")).strip(),
                         "required": bool(field.get("required", False)),
                         "reason": str(field.get("reason", "")).strip(),
                         "confidence": str(field.get("confidence", "")).strip(),
                         "sources": [str(source).strip() for source in field.get("sources", []) if str(source).strip()]
                         if isinstance(field.get("sources"), list)
                         else [],
+                        "default_value": str(field.get("default_value", "")).strip(),
+                        "default_source": str(field.get("default_source", "")).strip(),
+                        "default_source_label": _env_default_source_label(str(field.get("default_source", "")).strip()),
                     }
                     for field in card.get("env_requirements", [])
                     if bool(field.get("required", False))
@@ -948,13 +956,17 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "optional_env_fields": [
                     {
                         "name": str(field.get("name", "")).strip(),
-                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), ""),
+                        "value": (server.env or {}).get(str(field.get("name", "")).strip(), "")
+                        or str(field.get("default_value", "")).strip(),
                         "required": bool(field.get("required", False)),
                         "reason": str(field.get("reason", "")).strip(),
                         "confidence": str(field.get("confidence", "")).strip(),
                         "sources": [str(source).strip() for source in field.get("sources", []) if str(source).strip()]
                         if isinstance(field.get("sources"), list)
                         else [],
+                        "default_value": str(field.get("default_value", "")).strip(),
+                        "default_source": str(field.get("default_source", "")).strip(),
+                        "default_source_label": _env_default_source_label(str(field.get("default_source", "")).strip()),
                     }
                     for field in card.get("env_requirements", [])
                     if not bool(field.get("required", False))
@@ -4047,6 +4059,8 @@ def _normalized_env_requirements(record: dict[str, Any]) -> list[dict[str, Any]]
                     if isinstance(item.get("sources"), list)
                     else [],
                     "reason": str(item.get("reason", "")).strip(),
+                    "default_value": str(item.get("default_value", "")).strip(),
+                    "default_source": str(item.get("default_source", "")).strip(),
                 }
             )
     if normalized:
@@ -4060,14 +4074,56 @@ def _normalized_env_requirements(record: dict[str, Any]) -> list[dict[str, Any]]
     ]
     return [
         *[
-            {"name": env_name, "required": True, "confidence": "medium", "sources": ["legacy_required_env"], "reason": ""}
+            {
+                "name": env_name,
+                "required": True,
+                "confidence": "medium",
+                "sources": ["legacy_required_env"],
+                "reason": "",
+                "default_value": "",
+                "default_source": "",
+            }
             for env_name in required_env
         ],
         *[
-            {"name": env_name, "required": False, "confidence": "medium", "sources": ["legacy_optional_env"], "reason": ""}
+            {
+                "name": env_name,
+                "required": False,
+                "confidence": "medium",
+                "sources": ["legacy_optional_env"],
+                "reason": "",
+                "default_value": "",
+                "default_source": "",
+            }
             for env_name in optional_env
         ],
     ]
+
+
+def _env_default_source_label(source: str) -> str:
+    """Return one user-facing label for an inferred MCP env default source."""
+    raw = str(source).strip()
+    if not raw:
+        return ""
+    if raw.startswith("env_example:"):
+        return f"Suggested default from {raw.split(':', 1)[1]}"
+    if raw.startswith("example_config:"):
+        return f"Suggested default from {raw.split(':', 1)[1]}"
+    if raw.startswith("server_manifest:"):
+        return "Suggested default from server.json"
+    if raw.startswith("source_scan:"):
+        return f"Suggested default from {raw.split(':', 1)[1]}"
+    if raw.startswith("nanobot_config:"):
+        return "Filled from current Nanobot settings"
+    if raw == "gui_heuristic:workspace_output_path":
+        return "Suggested workspace output path"
+    if raw == "gui_heuristic:local_port":
+        return "Suggested local port"
+    if raw == "gui_heuristic:local_host":
+        return "Suggested local host"
+    if raw == "gui_heuristic:local_url":
+        return "Suggested local URL"
+    return "Suggested default"
 
 
 def _env_name_lists(record: dict[str, Any]) -> tuple[list[str], list[str]]:
