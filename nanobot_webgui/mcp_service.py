@@ -471,50 +471,61 @@ class GUIMCPService:
             self.config_service.set_mcp_record(server_name, result)
             return result
 
+        tool_names: list[str] | None = None
         try:
             tool_names = await self._list_server_tools(cfg)
         except Exception as exc:
             message = _summarize_exception(exc)
             message = await self._diagnose_probe_failure(cfg, message)
-            result = _merge_runtime_error_env_requirements(result, cfg.env, message)
-            missing_env = [str(item) for item in result.get("missing_env", []) if str(item).strip()]
-            if missing_env:
+            stdio_retry = await self._maybe_retry_npx_runtime_with_stdio_flag(server_name, cfg, message)
+            if stdio_retry is not None:
+                cfg, retry_tools, retry_message = stdio_retry
+                result["command"] = cfg.command
+                result["args"] = list(cfg.args)
+                if retry_tools is not None:
+                    tool_names = retry_tools
+                else:
+                    message = retry_message
+            if tool_names is None:
+                result = _merge_runtime_error_env_requirements(result, cfg.env, message)
+                missing_env = [str(item) for item in result.get("missing_env", []) if str(item).strip()]
+                if missing_env:
+                    result["last_test_checks"] = [
+                        {"label": "Secrets provided", "ok": False, "detail": ", ".join(missing_env)},
+                        {"label": "Startup preflight", "ok": True, "detail": "The MCP process started."},
+                        {"label": "Connection established", "ok": False, "detail": message},
+                        {"label": "Tool discovery", "ok": False, "detail": "The MCP handshake failed before tools could be listed."},
+                    ]
+                    result["status"] = "needs_configuration"
+                    result["status_label"] = "Needs configuration"
+                    result["last_test_status"] = result["status"]
+                    result["last_test_label"] = result["status_label"]
+                    result["last_error"] = "Missing required environment variables: " + ", ".join(missing_env)
+                    result["log_tail"] = _append_log(result["log_tail"], message)
+                    result["log_tail"] = _append_log(result["log_tail"], result["last_error"])
+                    self.config_service.set_mcp_record(server_name, result)
+                    self.logger.warning("mcp_probe_failed server=%s error=%s", server_name, message)
+                    return result
                 result["last_test_checks"] = [
-                    {"label": "Secrets provided", "ok": False, "detail": ", ".join(missing_env)},
+                    {"label": "Secrets provided", "ok": True, "detail": "Required env vars are present."},
                     {"label": "Startup preflight", "ok": True, "detail": "The MCP process started."},
                     {"label": "Connection established", "ok": False, "detail": message},
                     {"label": "Tool discovery", "ok": False, "detail": "The MCP handshake failed before tools could be listed."},
                 ]
-                result["status"] = "needs_configuration"
-                result["status_label"] = "Needs configuration"
+                result["status"] = "error"
+                result["status_label"] = "Probe failed"
                 result["last_test_status"] = result["status"]
                 result["last_test_label"] = result["status_label"]
-                result["last_error"] = "Missing required environment variables: " + ", ".join(missing_env)
+                result["last_error"] = message
                 result["log_tail"] = _append_log(result["log_tail"], message)
-                result["log_tail"] = _append_log(result["log_tail"], result["last_error"])
+                fallback = await self._maybe_retry_npm_runtime_via_source_checkout(server_name, cfg, result)
+                if fallback is not None:
+                    return fallback
                 self.config_service.set_mcp_record(server_name, result)
                 self.logger.warning("mcp_probe_failed server=%s error=%s", server_name, message)
                 return result
-            result["last_test_checks"] = [
-                {"label": "Secrets provided", "ok": True, "detail": "Required env vars are present."},
-                {"label": "Startup preflight", "ok": True, "detail": "The MCP process started."},
-                {"label": "Connection established", "ok": False, "detail": message},
-                {"label": "Tool discovery", "ok": False, "detail": "The MCP handshake failed before tools could be listed."},
-            ]
-            result["status"] = "error"
-            result["status_label"] = "Probe failed"
-            result["last_test_status"] = result["status"]
-            result["last_test_label"] = result["status_label"]
-            result["last_error"] = message
-            result["log_tail"] = _append_log(result["log_tail"], message)
-            fallback = await self._maybe_retry_npm_runtime_via_source_checkout(server_name, cfg, result)
-            if fallback is not None:
-                return fallback
-            self.config_service.set_mcp_record(server_name, result)
-            self.logger.warning("mcp_probe_failed server=%s error=%s", server_name, message)
-            return result
 
-        result["tool_names"] = tool_names
+        result["tool_names"] = tool_names or []
         result["last_error"] = ""
         result["status"] = "active"
         result["status_label"] = "Active"
@@ -550,6 +561,42 @@ class GUIMCPService:
             return message
         detail = await self._preflight_server(cfg, settle_seconds=8)
         return detail or message
+
+    def _persist_server_config(self, server_name: str, cfg: MCPServerConfig) -> None:
+        """Persist one updated MCP server config back to Nanobot state."""
+        config = self.config_service.load()
+        config.tools.mcp_servers[server_name] = cfg
+        self.config_service.save(config)
+
+    async def _maybe_retry_npx_runtime_with_stdio_flag(
+        self,
+        server_name: str,
+        cfg: MCPServerConfig,
+        message: str,
+    ) -> tuple[MCPServerConfig, list[str] | None, str] | None:
+        """Retry a generic npx stdio failure with an explicit --stdio flag when the repo likely expects it."""
+        if _resolve_transport(cfg) != "stdio":
+            return None
+        if not _looks_like_generic_stdio_failure(message):
+            return None
+        if not _looks_like_npx_package_runtime(cfg):
+            return None
+        if _args_include_stdio_flag(cfg.args):
+            return None
+
+        retry_cfg = _clone_server_config_with_args(cfg, [*list(cfg.args or []), "--stdio"])
+        try:
+            tool_names = await self._list_server_tools(retry_cfg)
+        except Exception as exc:
+            retry_message = _summarize_exception(exc)
+            retry_message = await self._diagnose_probe_failure(retry_cfg, retry_message)
+            if _looks_like_generic_stdio_failure(retry_message):
+                return None
+            self._persist_server_config(server_name, retry_cfg)
+            return retry_cfg, None, retry_message
+
+        self._persist_server_config(server_name, retry_cfg)
+        return retry_cfg, tool_names, ""
 
     async def _maybe_retry_npm_runtime_via_source_checkout(
         self,
@@ -820,7 +867,9 @@ class GUIMCPService:
         requirements_txt = _read_text(checkout_dir / "requirements.txt")
         server_manifest = _load_server_manifest(checkout_dir)
         workspace_package = _find_workspace_mcp_package(checkout_dir)
-        readme_summary = _extract_readme_summary(checkout_dir / "README.md")
+        readme_path = checkout_dir / "README.md"
+        readme_text = _read_text(readme_path)
+        readme_summary = _extract_readme_summary(readme_path)
         example_config = _load_mcp_example(checkout_dir)
         env_requirements = _collect_env_requirements(checkout_dir, example_config, server_manifest)
         required_env, optional_env = _split_env_requirements(env_requirements)
@@ -951,6 +1000,16 @@ class GUIMCPService:
                 run_args = [f"./{script_entry}"]
         elif not run_command and not run_url:
             raise ValueError("Could not derive an install plan for this repository.")
+
+        if _runtime_should_append_stdio_flag(
+            transport=transport,
+            run_command=run_command,
+            run_args=run_args,
+            readme_text=readme_text,
+            package_json=package_json,
+        ):
+            run_args = [*run_args, "--stdio"]
+            evidence.append("README/scripts document --stdio runtime flag")
 
         if not run_command and not run_url:
             raise ValueError("Could not derive the MCP startup command from the repository.")
@@ -1901,6 +1960,62 @@ def _looks_like_npm_package_resolution_failure(message: str) -> bool:
         or "Cannot find package" in normalized
         or "Cannot find module" in normalized
     )
+
+
+def _looks_like_npx_package_runtime(cfg: MCPServerConfig) -> bool:
+    """Return whether one MCP config executes an npm package through npx."""
+    if str(cfg.command).strip() == "npx":
+        return True
+    return any("npx-cli.js" in str(arg) for arg in (cfg.args or []))
+
+
+def _args_include_stdio_flag(args: list[str] | tuple[str, ...]) -> bool:
+    """Return whether a command line already opts into stdio transport explicitly."""
+    return any(str(arg).strip() == "--stdio" for arg in args)
+
+
+def _clone_server_config_with_args(cfg: MCPServerConfig, args: list[str]) -> MCPServerConfig:
+    """Copy one MCP config while replacing only its CLI arguments."""
+    return MCPServerConfig(
+        type=cfg.type,
+        command=cfg.command,
+        args=args,
+        env=dict(cfg.env or {}),
+        url=cfg.url,
+        headers=dict(cfg.headers or {}),
+        tool_timeout=cfg.tool_timeout,
+        enabled_tools=list(cfg.enabled_tools or []),
+    )
+
+
+def _text_mentions_stdio_flag(text: str) -> bool:
+    """Return whether documentation or scripts explicitly mention a --stdio flag."""
+    return bool(re.search(r"(?:^|[^\w-])--stdio(?:$|[^\w-])", str(text or ""), flags=re.IGNORECASE))
+
+
+def _runtime_should_append_stdio_flag(
+    *,
+    transport: str,
+    run_command: str,
+    run_args: list[str],
+    readme_text: str,
+    package_json: dict[str, Any],
+) -> bool:
+    """Return whether a derived Node/npm stdio runtime should include an explicit --stdio flag."""
+    if transport != "stdio":
+        return False
+    if run_command not in {"npx", "node"}:
+        return False
+    if _args_include_stdio_flag(run_args):
+        return False
+    if _text_mentions_stdio_flag(readme_text):
+        return True
+    scripts = package_json.get("scripts") if isinstance(package_json, dict) else {}
+    if isinstance(scripts, dict):
+        for value in scripts.values():
+            if _text_mentions_stdio_flag(str(value)):
+                return True
+    return False
 
 
 def _runtime_version_satisfies(installed_version: str, constraint: str) -> bool:

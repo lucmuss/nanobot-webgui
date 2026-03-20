@@ -78,6 +78,45 @@ def test_inspect_checkout_prefers_server_manifest_npm_package(tmp_path: Path):
     assert analysis["optional_env"] == ["FIRECRAWL_API_KEY"]
 
 
+def test_inspect_checkout_appends_stdio_flag_for_documented_npx_runtime(tmp_path: Path):
+    checkout_dir = tmp_path / "figma-context-mcp"
+    checkout_dir.mkdir(parents=True)
+    (checkout_dir / "README.md").write_text(
+        "Run with `npx -y figma-developer-mcp --figma-api-key=YOUR-KEY --stdio`.\n",
+        encoding="utf-8",
+    )
+    (checkout_dir / "server.json").write_text(
+        json.dumps(
+            {
+                "name": "Figma Context MCP",
+                "packages": [
+                    {
+                        "registryType": "npm",
+                        "identifier": "figma-developer-mcp",
+                        "transport": {"type": "stdio"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    service = _build_service(tmp_path)
+    analysis = service._inspect_checkout(
+        checkout_dir,
+        {
+            "owner": "glips",
+            "repo": "figma-context-mcp",
+            "repo_url": "https://github.com/GLips/Figma-Context-MCP",
+            "clone_url": "https://github.com/GLips/Figma-Context-MCP.git",
+        },
+    )
+
+    assert analysis["run_command"] == "npx"
+    assert analysis["run_args"] == ["-y", "figma-developer-mcp", "--stdio"]
+    assert any("--stdio runtime flag" in item for item in analysis["evidence"])
+
+
 def test_inspect_checkout_falls_back_to_workspace_mcp_package(tmp_path: Path):
     checkout_dir = FIXTURE_ROOT / "workspace-playwright"
 
@@ -773,6 +812,54 @@ async def test_test_server_replaces_generic_connection_closed_with_stdio_diagnos
     assert result["status"] == "error"
     assert result["last_error"] == "Fatal error: No configuration found."
     assert result["last_test_checks"][2]["detail"] == "Fatal error: No configuration found."
+
+
+@pytest.mark.asyncio
+async def test_test_server_retries_npx_runtime_with_documented_stdio_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    service = _build_service(tmp_path)
+    config = service.config_service.ensure_instance()
+    config.tools.mcp_servers["figma-context-mcp"] = MCPServerConfig(
+        type="stdio",
+        command="/workspace/node/bin/node",
+        args=["/workspace/node/lib/node_modules/npm/bin/npx-cli.js", "-y", "figma-developer-mcp"],
+        env={"FIGMA_API_KEY": "test"},
+        url="",
+        headers={},
+        tool_timeout=30,
+    )
+    service.config_service.save(config)
+    service.config_service.set_mcp_record(
+        "figma-context-mcp",
+        {
+            "required_env": [],
+            "repo_url": "https://github.com/GLips/Figma-Context-MCP",
+            "clone_url": "https://github.com/GLips/Figma-Context-MCP.git",
+            "install_steps": ["Register npm package runtime via npx figma-developer-mcp"],
+        },
+    )
+
+    async def fake_preflight(_cfg, *, settle_seconds: float = 2.0):
+        return ""
+
+    async def fake_list_tools(cfg: MCPServerConfig):
+        if "--stdio" not in list(cfg.args):
+            raise RuntimeError("Connection closed")
+        return ["get_figma_data"]
+
+    monkeypatch.setattr(service, "_preflight_server", fake_preflight)
+    monkeypatch.setattr(service, "_list_server_tools", fake_list_tools)
+
+    result = await service.test_server("figma-context-mcp")
+
+    saved_cfg = service.config_service.load().tools.mcp_servers["figma-context-mcp"]
+    assert result["status"] == "active"
+    assert result["tool_names"] == ["get_figma_data"]
+    assert saved_cfg.args == [
+        "/workspace/node/lib/node_modules/npm/bin/npx-cli.js",
+        "-y",
+        "figma-developer-mcp",
+        "--stdio",
+    ]
 
 
 def test_inspect_checkout_collects_env_requirements_from_source_and_readme_fallback(tmp_path: Path):
