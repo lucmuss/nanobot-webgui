@@ -7,7 +7,7 @@
             <h3 class="community-card-title">{{ item.name }}</h3>
           </a>
           {% if item.repo_url %}
-            <div class="mono community-card-repo">{{ item.repo_url }}</div>
+            <a class="mono community-card-repo" href="{{ item.repo_url }}" target="_blank" rel="noreferrer noopener">{{ item.repo_url }}</a>
           {% endif %}
           <div class="text-markdown muted" style="margin: 8px 0 0;">{{ render_markdown(item.description) | safe }}</div>
         </div>
@@ -94,7 +94,7 @@
         <summary>Tool preview ({{ item.tool_count }} total)</summary>
         <div class="tool-chip-strip" style="margin-top: 12px;">
           {% for tool in item.tools %}
-            <span class="pill tool-pill">{{ tool }}</span>
+            <a class="pill tool-pill" href="/tools/{{ tool|urlencode }}">{{ tool }}</a>
           {% endfor %}
         </div>
         <p class="muted" style="margin-top: 10px;">The hub currently tracks tool names. Detailed tool descriptions will appear here once they are available from the registry.</p>

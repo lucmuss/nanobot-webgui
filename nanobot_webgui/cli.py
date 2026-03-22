@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -16,6 +18,10 @@ from nanobot.cli.commands import app as upstream_app
 from nanobot_webgui.repair_worker import run_repair_recipe
 
 app = upstream_app
+_USAGE_EVENT_CONTEXT: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "nanobot_usage_event_context",
+    default=None,
+)
 
 
 def _utc_now() -> str:
@@ -37,6 +43,146 @@ def _write_gateway_state(state_path: Path, payload: dict[str, object]) -> None:
     temp_path = state_path.with_suffix(state_path.suffix + ".tmp")
     temp_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     temp_path.replace(state_path)
+
+
+def _resolve_gui_state_path(config_path: Path) -> Path:
+    """Return the GUI state file path that stores usage events."""
+    return config_path.parent / "gui-state.json"
+
+
+def _normalize_usage_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Normalize one usage payload into the GUI usage-event shape."""
+    prompt_tokens = int(payload.get("prompt_tokens", 0) or 0)
+    completion_tokens = int(payload.get("completion_tokens", 0) or 0)
+    total_tokens = int(payload.get("total_tokens", 0) or 0)
+    if total_tokens <= 0:
+        total_tokens = prompt_tokens + completion_tokens
+    return {
+        "timestamp": str(payload.get("timestamp", "")).strip() or _utc_now(),
+        "source": str(payload.get("source", "")).strip() or "unknown",
+        "provider": str(payload.get("provider", "")).strip(),
+        "model": str(payload.get("model", "")).strip(),
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": total_tokens,
+        "estimated_cost_usd": payload.get("estimated_cost_usd"),
+        "note": str(payload.get("note", "")).strip(),
+    }
+
+
+def _record_usage_event(state_path: Path, payload: dict[str, Any]) -> None:
+    """Append one usage event into the shared GUI state file."""
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state: dict[str, Any] = {}
+    if state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:
+            state = {}
+    events = state.get("usage_events")
+    if not isinstance(events, list):
+        events = []
+    events.append(_normalize_usage_payload(payload))
+    state["usage_events"] = events[-300:]
+    temp_path = state_path.with_suffix(state_path.suffix + ".tmp")
+    temp_path.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    temp_path.replace(state_path)
+
+
+def _usage_source_for_message(channel: str, session_key: str) -> str:
+    """Map one message/session pair onto a stable usage-event source."""
+    normalized_channel = str(channel or "").strip().lower() or "unknown"
+    normalized_session = str(session_key or "").strip().lower()
+    if normalized_session.startswith("heartbeat"):
+        return "heartbeat"
+    if normalized_session.startswith("cron:"):
+        return "cron"
+    if normalized_session.startswith("web:mcp-test:"):
+        return "mcp_test"
+    if normalized_channel == "web":
+        return "chat"
+    return normalized_channel
+
+
+class _UsageTrackingProvider:
+    """Proxy provider that accumulates usage for the current turn context."""
+
+    def __init__(self, provider: Any) -> None:
+        self._provider = provider
+
+    async def chat(self, *args: Any, **kwargs: Any) -> Any:
+        response = await self._provider.chat(*args, **kwargs)
+        self._capture_usage(response, kwargs)
+        return response
+
+    async def chat_with_retry(self, *args: Any, **kwargs: Any) -> Any:
+        response = await self._provider.chat_with_retry(*args, **kwargs)
+        self._capture_usage(response, kwargs)
+        return response
+
+    def _capture_usage(self, response: Any, kwargs: dict[str, Any]) -> None:
+        context = _USAGE_EVENT_CONTEXT.get()
+        if not context:
+            return
+        usage = getattr(response, "usage", None) or {}
+        prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+        completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+        total_tokens = int(usage.get("total_tokens", 0) or 0) or (prompt_tokens + completion_tokens)
+        if prompt_tokens <= 0 and completion_tokens <= 0 and total_tokens <= 0:
+            return
+        context["prompt_tokens"] = int(context.get("prompt_tokens", 0) or 0) + prompt_tokens
+        context["completion_tokens"] = int(context.get("completion_tokens", 0) or 0) + completion_tokens
+        context["total_tokens"] = int(context.get("total_tokens", 0) or 0) + total_tokens
+        if not str(context.get("provider", "")).strip():
+            context["provider"] = getattr(self._provider, "provider_name", "") or self._provider.__class__.__name__
+        if not str(context.get("model", "")).strip():
+            context["model"] = str(kwargs.get("model", "")).strip()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._provider, name)
+
+
+def _install_gateway_usage_tracking(config_path: Path) -> None:
+    """Monkeypatch the upstream gateway runtime so all channel usage is recorded."""
+    import nanobot.cli.commands as upstream_commands
+    from nanobot.agent.loop import AgentLoop
+
+    if getattr(upstream_commands, "_nanobot_gui_usage_tracking_installed", False):
+        return
+
+    state_path = _resolve_gui_state_path(config_path)
+    original_make_provider = upstream_commands._make_provider
+    original_process_message = AgentLoop._process_message
+
+    def wrapped_make_provider(config: Any) -> Any:
+        provider = original_make_provider(config)
+        if isinstance(provider, _UsageTrackingProvider):
+            return provider
+        return _UsageTrackingProvider(provider)
+
+    async def wrapped_process_message(self, msg, session_key=None, on_progress=None):
+        usage_context = {
+            "timestamp": _utc_now(),
+            "source": _usage_source_for_message(getattr(msg, "channel", ""), session_key or getattr(msg, "session_key", "")),
+            "provider": "",
+            "model": str(getattr(self, "model", "")).strip(),
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "note": str(session_key or getattr(msg, "session_key", "")).strip(),
+        }
+        token = _USAGE_EVENT_CONTEXT.set(usage_context)
+        try:
+            return await original_process_message(self, msg, session_key=session_key, on_progress=on_progress)
+        finally:
+            context = _USAGE_EVENT_CONTEXT.get()
+            _USAGE_EVENT_CONTEXT.reset(token)
+            if context and int(context.get("total_tokens", 0) or 0) > 0:
+                _record_usage_event(state_path, context)
+
+    upstream_commands._make_provider = wrapped_make_provider
+    AgentLoop._process_message = wrapped_process_message
+    upstream_commands._nanobot_gui_usage_tracking_installed = True
 
 
 @app.command("gateway-supervisor")
@@ -66,6 +212,7 @@ def gateway_supervisor(
         else (Path.home() / ".nanobot" / "config.json")
     )
     state_file = _resolve_gateway_state_path(config_path, state_path)
+    _install_gateway_usage_tracking(config_path)
     workspace_value = str(Path(workspace).expanduser()) if workspace else ""
     base_payload: dict[str, object] = {
         "kind": "nanobot_gateway",
@@ -180,7 +327,7 @@ def gui(
     community_api_url: str | None = typer.Option(
         None,
         "--community-api-url",
-        help="Optional community hub API base URL, for example http://nanobot-community-hub:18811/api/v1",
+        help="Optional community hub API base URL, for example https://nanobot-hub.eu/api/v1",
     ),
     community_public_url: str | None = typer.Option(
         None,

@@ -209,7 +209,12 @@
           {% for server in installed_servers %}
             <article class="card compact-card mcp-server-card" data-testid="dashboard-mcp-card-{{ server.name }}">
               <header>
-                <a class="list-row-title-link" href="/mcp/{{ server.name }}" data-testid="dashboard-mcp-title-link-{{ server.name }}"><strong>{{ server.name }}</strong></a>
+                <div class="stack-list">
+                  <a class="list-row-title-link" href="/mcp/{{ server.name }}" data-testid="dashboard-mcp-title-link-{{ server.name }}"><strong>{{ server.name }}</strong></a>
+                  {% if server.repo_url %}
+                    <a class="mono muted" href="{{ server.repo_url }}" target="_blank" rel="noreferrer noopener" data-testid="dashboard-mcp-repo-link-{{ server.name }}">{{ server.repo_url }}</a>
+                  {% endif %}
+                </div>
                 <span class="pill {% if server.status_tone == 'good' %}good{% elif server.status_tone == 'bad' %}bad{% else %}muted{% endif %}">
                   {{ server.effective_status }}
                 </span>

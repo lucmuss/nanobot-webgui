@@ -1424,10 +1424,17 @@ def _sanitize_summary_text(raw: str) -> str:
     if not text:
         return ""
 
+    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
     text = re.sub(r"!\[[^\]]*]\([^)]*\)", " ", text)
     text = re.sub(r"<img\b[^>]*>", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"</?[^>]+>", " ", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"`{1,3}([^`]+)`{1,3}", r"\1", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"__([^_]+)__", r"\1", text)
+    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+    text = re.sub(r"(?<!_)_([^_]+)_(?!_)", r"\1", text)
+    text = re.sub(r"~~([^~]+)~~", r"\1", text)
     text = " ".join(line.strip() for line in text.splitlines() if line.strip())
     text = re.sub(r"\s+", " ", text).strip()
     if not re.search(r"[A-Za-z0-9]", text):

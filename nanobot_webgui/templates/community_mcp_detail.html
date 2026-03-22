@@ -8,7 +8,7 @@
         <p class="eyebrow">Community MCP Detail</p>
         <h3>{{ community_item.name }}</h3>
         {% if community_item.repo_url %}
-          <div class="mono community-card-repo">{{ community_item.repo_url }}</div>
+          <a class="mono community-card-repo" href="{{ community_item.repo_url }}" target="_blank" rel="noreferrer noopener">{{ community_item.repo_url }}</a>
         {% endif %}
         <div class="text-markdown muted">{{ render_markdown(community_item.description) | safe }}</div>
       </div>
@@ -27,7 +27,7 @@
           {% if item.label == "Trust Score" %}title="Trust Score is the overall quality index. It combines performance, config consensus, repair success, and verification signals."{% endif %}
         ><strong>{{ item.label }}</strong>{{ item.value }}</span>
       {% endfor %}
-      <span class="meta-chip"><strong>Repository</strong>{{ community_item.repo_url }}</span>
+      <span class="meta-chip"><strong>Repository</strong><a href="{{ community_item.repo_url }}" target="_blank" rel="noreferrer noopener">{{ community_item.repo_url }}</a></span>
     </div>
   </section>
 
@@ -105,7 +105,7 @@
           {% if community_item.get("permission_hints") %}
             <div><strong>Security and permissions</strong><div class="muted">{{ community_item.get("permission_hints", [])|join(" · ") }}</div></div>
           {% endif %}
-          <div><strong>Repository</strong><div class="mono">{{ community_item.repo_url }}</div></div>
+          <div><strong>Repository</strong><div class="mono"><a href="{{ community_item.repo_url }}" target="_blank" rel="noreferrer noopener">{{ community_item.repo_url }}</a></div></div>
         </div>
       </div>
       <div class="actions" style="margin-top: 14px;">
@@ -129,7 +129,7 @@
       </div>
       <div class="tool-chip-strip" data-testid="community-mcp-capabilities">
         {% for tool in community_item.tools %}
-          <span class="pill tool-pill">{{ tool }}</span>
+          <a class="pill tool-pill" href="/tools/{{ tool|urlencode }}">{{ tool }}</a>
         {% endfor %}
       </div>
     </section>

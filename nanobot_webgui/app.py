@@ -18,6 +18,7 @@ from datetime import datetime, timedelta, timezone
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request, UploadFile
@@ -52,6 +53,58 @@ NANOBOT_VERSION = nanobot.__version__
 
 
 _TEMPLATES = Jinja2Templates(directory=str(Path(__file__).resolve().parent / "templates"))
+
+
+RECOMMENDED_AGENT_TUNING = {
+    "max_tokens": 8192,
+    "temperature": 0.3,
+    "max_tool_iterations": 40,
+    "memory_window": 100,
+    "reasoning_effort": "medium",
+}
+
+AGENT_TUNING_INFORMATION = [
+    {
+        "name": "Max tokens",
+        "description": (
+            "This sets the upper bound for one reply. Higher values give the agent room for longer code changes, "
+            "multi-step explanations, and larger MCP outputs. Lower values keep responses tighter, but they can cut "
+            "off useful detail or force the model to compress important reasoning."
+        ),
+    },
+    {
+        "name": "Temperature",
+        "description": (
+            "Temperature controls how stable or inventive the wording becomes. Lower values stay more deterministic "
+            "and are usually better for MCP workflows, ops tasks, and debugging. Higher values can feel more natural "
+            "or creative, but they also raise the chance of drift and noisy tool usage."
+        ),
+    },
+    {
+        "name": "Max tool iterations",
+        "description": (
+            "This limits how many tool-call rounds the agent may attempt before stopping. Raising it helps with longer "
+            "MCP chains, multi-repo inspections, and repair flows that need several steps. Lowering it makes the agent "
+            "stop earlier, which can reduce runaway loops but may interrupt legitimate workflows."
+        ),
+    },
+    {
+        "name": "Memory window",
+        "description": (
+            "The memory window defines how many recent turns stay in short-term context. A larger window helps the "
+            "agent preserve continuity across longer conversations and follow-up MCP tests. A smaller window keeps "
+            "context leaner and cheaper, but the agent may forget recent details sooner."
+        ),
+    },
+    {
+        "name": "Reasoning effort",
+        "description": (
+            "Reasoning effort asks supported models to spend more internal effort on a task. Higher levels can improve "
+            "hard debugging, planning, and tricky tool decisions, but they often increase latency. Lower levels feel "
+            "snappier and are often enough for routine chat or configuration work."
+        ),
+    },
+]
 
 
 CHANNEL_DEFINITIONS: dict[str, dict[str, Any]] = {
@@ -447,18 +500,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         installed_servers: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
         """Attach the originating MCP server to recent tool activity where possible."""
-        tool_index: dict[str, dict[str, str]] = {}
-        for server in installed_servers:
-            server_name = str(server.get("name", "")).strip()
-            if not server_name:
-                continue
-            for tool_name in server.get("tool_names", []) or []:
-                normalized = str(tool_name).strip()
-                if normalized and normalized not in tool_index:
-                    tool_index[normalized] = {
-                        "server_name": server_name,
-                        "server_href": f"/mcp/{server_name}",
-                    }
+        tool_index = {
+            str(item.get("name", "")).strip(): item
+            for item in _build_tool_catalog(installed_servers)
+            if str(item.get("name", "")).strip()
+        }
         enriched: list[dict[str, Any]] = []
         for item in items:
             raw_name = str(item.get("raw_name", item.get("name", ""))).strip()
@@ -468,11 +514,163 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 {
                     **item,
                     "name": display_name,
-                    "server_name": match.get("server_name", "") if match else "",
-                    "server_href": match.get("server_href", "") if match else "",
+                    "server_name": str((match or {}).get("primary_server_name", "")).strip(),
+                    "server_href": str((match or {}).get("primary_server_href", "")).strip(),
+                    "tool_href": str((match or {}).get("href", "")).strip() or _tool_href(display_name),
                 }
             )
         return enriched
+
+    def _server_href(server_name: str) -> str:
+        """Return the local detail URL for one MCP server."""
+        return f"/mcp/{quote(str(server_name).strip(), safe='')}"
+
+    def _tool_href(tool_name: str) -> str:
+        """Return the local detail URL for one MCP tool."""
+        return f"/tools/{quote(str(tool_name).strip(), safe='')}"
+
+    def _build_tool_catalog(installed_servers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Build a compact cross-server MCP tool catalog for linking and detail views."""
+        catalog: dict[str, dict[str, Any]] = {}
+        for server in installed_servers:
+            server_name = str(server.get("name", "")).strip()
+            if not server_name:
+                continue
+            server_href = str(server.get("href", "")).strip() or _server_href(server_name)
+            for tool_name in server.get("tool_names", []) or []:
+                normalized = str(tool_name).strip()
+                if not normalized:
+                    continue
+                entry = catalog.setdefault(
+                    normalized,
+                    {
+                        "name": normalized,
+                        "href": _tool_href(normalized),
+                        "providers": [],
+                    },
+                )
+                entry["providers"].append(
+                    {
+                        "server_name": server_name,
+                        "server_href": server_href,
+                        "server_repo_url": str(server.get("repo_url", "")).strip(),
+                        "server_summary": str(server.get("summary", "")).strip(),
+                        "server_transport": str(server.get("transport", "")).strip(),
+                        "server_status_label": str(server.get("status_label", "")).strip(),
+                        "server_enabled": bool(server.get("enabled", False)),
+                        "server_effective_status": str(server.get("effective_status", "")).strip(),
+                    }
+                )
+        tools: list[dict[str, Any]] = []
+        for name, entry in catalog.items():
+            providers = sorted(
+                entry["providers"],
+                key=lambda item: (
+                    0 if item.get("server_enabled") else 1,
+                    str(item.get("server_name", "")).lower(),
+                ),
+            )
+            tools.append(
+                {
+                    "name": name,
+                    "href": entry["href"],
+                    "provider_count": len(providers),
+                    "providers": providers,
+                    "primary_server_name": str(providers[0].get("server_name", "")).strip() if providers else "",
+                    "primary_server_href": str(providers[0].get("server_href", "")).strip() if providers else "",
+                    "primary_repo_url": str(providers[0].get("server_repo_url", "")).strip() if providers else "",
+                }
+            )
+        tools.sort(key=lambda item: str(item.get("name", "")).lower())
+        return tools
+
+    def _tool_detail_context(tool_name: str, installed_servers: list[dict[str, Any]]) -> dict[str, Any]:
+        """Return the detail payload for one MCP tool."""
+        normalized = str(tool_name).strip()
+        for entry in _build_tool_catalog(installed_servers):
+            if str(entry.get("name", "")).strip() == normalized:
+                return entry
+        return {
+            "name": normalized,
+            "href": _tool_href(normalized),
+            "provider_count": 0,
+            "providers": [],
+            "primary_server_name": "",
+            "primary_server_href": "",
+            "primary_repo_url": "",
+        }
+
+    def _active_tool_catalog(
+        active_servers: list[dict[str, Any]],
+        tool_catalog: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Return the tool catalog filtered down to currently enabled MCP servers."""
+        active_server_names = {
+            str(server.get("name", "")).strip()
+            for server in active_servers
+            if str(server.get("name", "")).strip()
+        }
+        active_tools: list[dict[str, Any]] = []
+        for item in tool_catalog:
+            providers = [
+                provider
+                for provider in item.get("providers", [])
+                if str(provider.get("server_name", "")).strip() in active_server_names
+            ]
+            if not providers:
+                continue
+            active_tools.append(
+                {
+                    **item,
+                    "providers": providers,
+                    "provider_count": len(providers),
+                    "primary_server_name": str(providers[0].get("server_name", "")).strip(),
+                    "primary_server_href": str(providers[0].get("server_href", "")).strip(),
+                    "primary_repo_url": str(providers[0].get("server_repo_url", "")).strip(),
+                }
+            )
+        return active_tools
+
+    def _recommended_agent_tuning(config) -> dict[str, Any]:
+        """Return the tuning form values with GUI recommendations as fallbacks."""
+        defaults = config.agents.defaults
+        temperature = defaults.temperature
+        if temperature in (None, 0.0, 0.1):
+            temperature = RECOMMENDED_AGENT_TUNING["temperature"]
+        return {
+            "max_tokens": int(defaults.max_tokens or RECOMMENDED_AGENT_TUNING["max_tokens"]),
+            "temperature": float(temperature),
+            "max_tool_iterations": int(defaults.max_tool_iterations or RECOMMENDED_AGENT_TUNING["max_tool_iterations"]),
+            "memory_window": int(defaults.memory_window or RECOMMENDED_AGENT_TUNING["memory_window"]),
+            "reasoning_effort": str(defaults.reasoning_effort or RECOMMENDED_AGENT_TUNING["reasoning_effort"]).strip(),
+        }
+
+    def _build_default_mcp_test_prompt(server: dict[str, Any]) -> str:
+        """Return a precise default prompt for practical MCP validation."""
+        tool_names = [str(item).strip() for item in server.get("tool_names", []) if str(item).strip()]
+        examples = ", ".join(tool_names[:3]) if tool_names else "the available MCP tools"
+        server_name = str(server.get("name", "")).strip() or "this MCP server"
+        return (
+            f"Test only the MCP server '{server_name}'. First list the tools that are currently available. "
+            f"Then use one or two representative tools such as {examples}. "
+            "Explain which tool you called, which input you used, what result came back, and whether the server is ready for real use. "
+            "If the MCP is still not fully configured, stop and tell me exactly which environment variables, permissions, or runtime values are still missing."
+        )
+
+    def _merge_publish_tags(
+        existing_tags: list[str],
+        suggested_tags: list[str],
+        fallback_tags: list[str],
+    ) -> list[str]:
+        """Merge user-provided, agent-suggested, and fallback tags into one bounded tag list."""
+        merged: list[str] = []
+        for bucket in (existing_tags, suggested_tags, fallback_tags):
+            for item in bucket:
+                normalized = str(item).strip().lower()
+                if not normalized or normalized in merged:
+                    continue
+                merged.append(normalized)
+        return merged[:10]
 
     def build_chat_community_context_text(hints: list[dict[str, Any]]) -> str:
         """Serialize community chat hints into one bounded instruction block."""
@@ -784,13 +982,14 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             )
             message["compact_timestamp"] = _format_compact_timestamp(str(message.get("timestamp", "")).strip())
         installed_servers = _build_mcp_server_cards(config, config_service)
+        tool_catalog = _build_tool_catalog(installed_servers)
         recent_tool_activity = await agent_service.get_recent_tool_activity(user, limit=50)
         recent_tool_activity = enrich_tool_activity_items(recent_tool_activity, installed_servers=installed_servers)
         for item in recent_tool_activity:
             item["compact_timestamp"] = _format_compact_timestamp(str(item.get("timestamp", "")).strip())
         agent_health = config_service.get_agent_health()
         active_servers = [server for server in installed_servers if server["enabled"]]
-        active_tool_names = sorted({tool for server in active_servers for tool in server.get("tool_names", [])})
+        active_tools = _active_tool_catalog(active_servers, tool_catalog)
         usage_summary = config_service.get_usage_summary()
         community_chat_hints = await build_chat_community_hints(config)
         chat_failure_target = next(
@@ -830,7 +1029,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             "model_name": config.agents.defaults.model,
             "provider_name": config.get_provider_name() or config.agents.defaults.provider,
             "active_mcp_servers": active_servers,
-            "active_tool_names": active_tool_names,
+            "active_tools": active_tools,
             "recent_tool_activity": recent_tool_activity,
             "chat_error": config_service.get_last_error(),
             "chat_quick_prompts": [
@@ -982,9 +1181,30 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "publish_form": _default_mcp_publish_form(card, user),
                 "repair_action": _get_repair_action(settings, repair_preview),
                 "repair_recipe_details": REPAIR_RECIPE_DETAILS,
+                "mcp_test_prompt_default": _build_default_mcp_test_prompt(card),
                 "error": error,
             },
             status_code=status_code,
+        )
+
+    @app.get("/tools/{tool_name:path}", response_class=HTMLResponse)
+    async def tool_detail_page(request: Request, tool_name: str):
+        user = _require_admin(request, auth_service)
+        if user is None:
+            return RedirectResponse("/login", status_code=303)
+
+        config = config_service.load()
+        installed_servers = _build_mcp_server_cards(config, config_service)
+        tool = _tool_detail_context(tool_name, installed_servers)
+        return _render(
+            request,
+            "tool_detail.html",
+            {
+                "title": f"Tool {tool['name']}",
+                "nav_active": "mcp",
+                "user": user,
+                "tool": tool,
+            },
         )
 
     @app.get("/", response_class=HTMLResponse)
@@ -1577,6 +1797,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         config = config_service.load()
         agent_doc = config_service.read_markdown_document("agents")
         instruction_files = _build_setup_instruction_files(config_service)
+        tuning = _recommended_agent_tuning(config)
         return _render(
             request,
             "setup_agent.html",
@@ -1598,6 +1819,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "safe_mode": config_service.is_safe_mode(),
                 "heartbeat_enabled": config.gateway.heartbeat.enabled,
                 "heartbeat_interval_minutes": max(1, round(config.gateway.heartbeat.interval_s / 60)),
+                "agent_tuning": tuning,
+                "agent_tuning_information": AGENT_TUNING_INFORMATION,
             },
         )
 
@@ -1618,10 +1841,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 defaults.workspace = str(form.get("workspace", str(config_service.default_workspace))).strip()
             defaults.model = str(form.get("model", defaults.model)).strip() or defaults.model
             defaults.provider = str(form.get("provider", defaults.provider)).strip() or defaults.provider
-            defaults.max_tokens = _form_int(form.get("max_tokens"), defaults.max_tokens)
-            defaults.temperature = _form_float(form.get("temperature"), defaults.temperature)
-            defaults.max_tool_iterations = _form_int(form.get("max_tool_iterations"), defaults.max_tool_iterations)
-            defaults.memory_window = _form_int(form.get("memory_window"), defaults.memory_window)
+            tuning_defaults = _recommended_agent_tuning(config)
+            defaults.max_tokens = _form_int(form.get("max_tokens"), int(tuning_defaults["max_tokens"]))
+            defaults.temperature = _form_float(form.get("temperature"), float(tuning_defaults["temperature"]))
+            defaults.max_tool_iterations = _form_int(form.get("max_tool_iterations"), int(tuning_defaults["max_tool_iterations"]))
+            defaults.memory_window = _form_int(form.get("memory_window"), int(tuning_defaults["memory_window"]))
             heartbeat_minutes = _form_int(
                 form.get("heartbeat_interval_minutes"),
                 max(1, round(heartbeat.interval_s / 60)),
@@ -1659,11 +1883,19 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                             max(1, round(config.gateway.heartbeat.interval_s / 60)),
                         )
                     ),
+                    "agent_tuning": {
+                        "max_tokens": str(form.get("max_tokens", _recommended_agent_tuning(config)["max_tokens"])),
+                        "temperature": str(form.get("temperature", _recommended_agent_tuning(config)["temperature"])),
+                        "max_tool_iterations": str(form.get("max_tool_iterations", _recommended_agent_tuning(config)["max_tool_iterations"])),
+                        "memory_window": str(form.get("memory_window", _recommended_agent_tuning(config)["memory_window"])),
+                        "reasoning_effort": str(form.get("reasoning_effort", _recommended_agent_tuning(config)["reasoning_effort"])),
+                    },
+                    "agent_tuning_information": AGENT_TUNING_INFORMATION,
                 },
                 status_code=400,
             )
 
-        reasoning_effort = str(form.get("reasoning_effort", "")).strip()
+        reasoning_effort = str(form.get("reasoning_effort", RECOMMENDED_AGENT_TUNING["reasoning_effort"])).strip()
         defaults.reasoning_effort = reasoning_effort or None
         if form.get("heartbeat_enabled_present"):
             heartbeat.enabled = bool(form.get("heartbeat_enabled"))
@@ -1831,7 +2063,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "value": f"{int((usage_summary.get('totals_24h', {}) or {}).get('total_tokens', 0) or 0):,}",
                 "tone": "neutral",
                 "href": "/usage",
-                "hint": "tokens",
+                "hint": "all tracked sessions",
                 "action_label": "Open Usage",
             },
             {"label": "Gateway", "value": gateway_status["label"], "tone": gateway_status["tone"], "href": "/status"},
@@ -2595,6 +2827,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
         try:
             preview = await mcp_service.analyze_repository(query, allow_ai_fallback=True)
             preview["community_match"] = await resolve_community_match(str(preview.get("repo_url", query)))
+            preview["summary"] = _display_summary_text(preview.get("summary", ""))
         except ValueError as exc:
             store_error(str(exc), context="mcp")
             return render_mcp_page(
@@ -3036,6 +3269,16 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
         card = _build_mcp_server_card(server_name, server, config_service)
         form = await request.form()
+        description = _display_summary_text(str(form.get("description", "")).strip() or str(card.get("summary", "")).strip())
+        category = str(form.get("category", "")).strip() or _guess_community_category(card)
+        existing_tags = _split_list(str(form.get("tags", "")).strip())
+        suggested_tags = await agent_service.suggest_mcp_publish_tags(
+            server_name=server_name,
+            description=description,
+            tool_names=[str(item) for item in card.get("tool_names", []) if str(item).strip()],
+            category=category,
+            existing_tags=existing_tags,
+        )
         payload = _build_mcp_submission_payload(
             server_name=server_name,
             card=card,
@@ -3043,6 +3286,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             submitted_by=user.username,
             source_instance=settings.instance_name,
             source_public_url=settings.public_url or "",
+            description_override=description,
+            inferred_tags=suggested_tags,
         )
         if not payload.get("repo_url"):
             _set_flash(request, "This MCP has no repository URL recorded yet, so it cannot be published to the Community Hub.", level="error")
@@ -3540,7 +3785,10 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "repair_mode": settings.repair_mode,
                     "repair_command_configured": bool(str(settings.repair_command or "").strip()),
                     "community_api_url": settings.community_api_url or "",
-                    "community_public_url": settings.community_public_url or "",
+                    "community_public_url": _effective_community_public_url(
+                        settings.community_api_url or "",
+                        settings.community_public_url or "",
+                    ),
                     "community_enabled": bool(community_service.enabled),
                     "community_write_enabled": bool(community_service.can_write),
                 },
@@ -3611,7 +3859,10 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                         "repair_mode": settings.repair_mode,
                         "repair_command_configured": bool(str(settings.repair_command or "").strip()),
                         "community_api_url": settings.community_api_url or "",
-                        "community_public_url": settings.community_public_url or "",
+                        "community_public_url": _effective_community_public_url(
+                            settings.community_api_url or "",
+                            settings.community_public_url or "",
+                        ),
                         "community_enabled": bool(community_service.enabled),
                         "community_write_enabled": bool(community_service.can_write),
                     },
@@ -3682,7 +3933,10 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                     "repair_mode": settings.repair_mode,
                     "repair_command_configured": bool(str(settings.repair_command or "").strip()),
                     "community_api_url": settings.community_api_url or "",
-                    "community_public_url": settings.community_public_url or "",
+                    "community_public_url": _effective_community_public_url(
+                        settings.community_api_url or "",
+                        settings.community_public_url or "",
+                    ),
                     "community_enabled": bool(community_service.enabled),
                     "community_write_enabled": bool(community_service.can_write),
                 },
@@ -4138,6 +4392,16 @@ def _env_name_lists(record: dict[str, Any]) -> tuple[list[str], list[str]]:
     return required_env, [name for name in optional_env if name not in required_env]
 
 
+def _server_href(server_name: str) -> str:
+    """Return the local detail URL for one MCP server."""
+    return f"/mcp/{quote(str(server_name).strip(), safe='')}"
+
+
+def _tool_href(tool_name: str) -> str:
+    """Return the local detail URL for one MCP tool."""
+    return f"/tools/{quote(str(tool_name).strip(), safe='')}"
+
+
 def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_service: GUIConfigService) -> dict[str, Any]:
     """Merge one MCP config entry with GUI-managed runtime metadata."""
     record = config_service.get_mcp_record(server_name)
@@ -4155,6 +4419,7 @@ def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_ser
 
     return {
         "name": server_name,
+        "href": _server_href(server_name),
         "summary": _display_summary_text(record.get("summary", "")),
         "repo_url": str(record.get("repo_url", "")).strip(),
         "community_slug": str(record.get("community_slug", "")).strip(),
@@ -4170,6 +4435,11 @@ def _build_mcp_server_card(server_name: str, server: MCPServerConfig, config_ser
         "last_checked_at": str(record.get("last_checked_at", "")).strip(),
         "last_installed_at": str(record.get("last_installed_at", "")).strip(),
         "tool_names": [str(item) for item in record.get("tool_names", [])],
+        "tool_details": [
+            {"name": str(item).strip(), "href": _tool_href(str(item).strip())}
+            for item in record.get("tool_names", [])
+            if str(item).strip()
+        ],
         "tool_count": len([str(item) for item in record.get("tool_names", [])]),
         "last_test_checks": list(record.get("last_test_checks", [])) if isinstance(record.get("last_test_checks"), list) else [],
         "env_requirements": env_requirements,
@@ -4250,14 +4520,48 @@ def _display_summary_text(value: Any) -> str:
     text = html.unescape(str(value or "").strip())
     if not text:
         return ""
+    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
     text = re.sub(r"!\[[^\]]*]\([^)]*\)", " ", text)
     text = re.sub(r"<img\b[^>]*>", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"</?[^>]+>", " ", text)
     text = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"`{1,3}([^`]+)`{1,3}", r"\1", text)
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"__([^_]+)__", r"\1", text)
+    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+    text = re.sub(r"(?<!_)_([^_]+)_(?!_)", r"\1", text)
+    text = re.sub(r"~~([^~]+)~~", r"\1", text)
     text = re.sub(r"\s*-[A-Za-z0-9_-]+>\)", " ", text)
     text = text.replace(">", " ")
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def _merge_publish_tags(
+    existing_tags: list[str],
+    suggested_tags: list[str],
+    fallback_tags: list[str],
+) -> list[str]:
+    """Merge user-provided, agent-suggested, and fallback tags into one bounded tag list."""
+    merged: list[str] = []
+    for bucket in (existing_tags, suggested_tags, fallback_tags):
+        for item in bucket:
+            normalized = str(item).strip().lower()
+            if not normalized or normalized in merged:
+                continue
+            merged.append(normalized)
+    return merged[:10]
+
+
+def _effective_community_public_url(api_url: str, public_url: str) -> str:
+    """Return the best public community hub URL for display."""
+    clean_public = str(public_url or "").strip().rstrip("/")
+    if clean_public:
+        return clean_public
+    clean_api = str(api_url or "").strip().rstrip("/")
+    if clean_api.endswith("/api/v1"):
+        return clean_api[: -len("/api/v1")]
+    return clean_api
 
 
 def _default_mcp_publish_form(card: dict[str, Any], user: AdminUser) -> dict[str, str]:
@@ -4279,12 +4583,24 @@ def _build_mcp_submission_payload(
     submitted_by: str,
     source_instance: str,
     source_public_url: str,
+    description_override: str = "",
+    inferred_tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build one bounded MCP submission payload for the community hub."""
     name = str(form.get("name", "")).strip() or server_name
-    description = str(form.get("description", "")).strip() or str(card.get("summary", "")).strip()
+    description = description_override or str(form.get("description", "")).strip() or str(card.get("summary", "")).strip()
     category = str(form.get("category", "")).strip() or _guess_community_category(card)
-    tags = _split_list(str(form.get("tags", "")).strip()) or _guess_community_tags(card)
+    tags = _merge_publish_tags(
+        _split_list(str(form.get("tags", "")).strip()),
+        inferred_tags or [],
+        [],
+    )
+    if len(tags) < 3:
+        tags = _merge_publish_tags(
+            _split_list(str(form.get("tags", "")).strip()),
+            inferred_tags or [],
+            _guess_community_tags(card),
+        )
     known_issues = []
     if str(card.get("last_error", "")).strip():
         known_issues.append(str(card.get("last_error", "")).strip())

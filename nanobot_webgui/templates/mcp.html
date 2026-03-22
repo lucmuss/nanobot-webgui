@@ -72,7 +72,7 @@
             <span class="pill">Server {{ preview.server_name }}</span>
           </header>
           <p class="muted">{{ preview.summary }}</p>
-          <div class="mono">{{ preview.repo_url }}</div>
+          <a class="mono" href="{{ preview.repo_url }}" target="_blank" rel="noreferrer noopener">{{ preview.repo_url }}</a>
 
           <div class="meta-list">
             <div>
@@ -324,11 +324,11 @@
             <div class="meta-pair">
               <strong>Available tools</strong>
               {% if server.tool_names %}
-                <div class="tool-chip-strip" data-testid="mcp-card-tools-{{ server.name }}">
-                  {% for tool_name in server.tool_names %}
-                    <span class="pill tool-pill">{{ tool_name }}</span>
+              <div class="tool-chip-strip" data-testid="mcp-card-tools-{{ server.name }}">
+                  {% for tool in server.tool_details %}
+                    <a class="pill tool-pill" href="{{ tool.href }}">{{ tool.name }}</a>
                   {% endfor %}
-                </div>
+              </div>
               {% else %}
                 <span>No tools discovered yet</span>
               {% endif %}

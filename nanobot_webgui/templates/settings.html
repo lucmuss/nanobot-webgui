@@ -77,11 +77,19 @@
             <div class="meta-grid" style="margin-top: 12px; margin-bottom: 12px;">
               <div class="meta-pair">
                 <strong>Community API</strong>
-                <span class="mono">{{ settings_meta.community_api_url or "Not configured" }}</span>
+                {% if settings_meta.community_api_url %}
+                  <a class="mono" href="{{ settings_meta.community_api_url }}" target="_blank" rel="noreferrer noopener">{{ settings_meta.community_api_url }}</a>
+                {% else %}
+                  <span class="mono">Not configured</span>
+                {% endif %}
               </div>
               <div class="meta-pair">
                 <strong>Public Hub URL</strong>
-                <span class="mono">{{ settings_meta.community_public_url or "Not configured" }}</span>
+                {% if settings_meta.community_public_url %}
+                  <a class="mono" href="{{ settings_meta.community_public_url }}" target="_blank" rel="noreferrer noopener">{{ settings_meta.community_public_url }}</a>
+                {% else %}
+                  <span class="mono">Not configured</span>
+                {% endif %}
               </div>
               <div class="meta-pair">
                 <strong>Read Access</strong>

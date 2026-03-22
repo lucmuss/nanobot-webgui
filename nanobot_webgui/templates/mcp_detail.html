@@ -61,7 +61,7 @@
         </div>
       </div>
 
-      <div class="action-cluster" style="margin-top: 16px;">
+      <div class="action-cluster" style="margin-top: 16px; margin-bottom: 18px;">
         <form class="inline-form" method="post" action="/mcp/repair/{{ server.name }}" data-testid="mcp-detail-repair-form">
           <input type="hidden" name="next" value="/mcp/{{ server.name }}">
           <button
@@ -80,7 +80,11 @@
         <div class="meta-grid">
           <div class="meta-pair">
             <strong>Source</strong>
-            <span class="mono">{{ server.repo_url or "Not recorded" }}</span>
+            {% if server.repo_url %}
+              <a class="mono" href="{{ server.repo_url }}" target="_blank" rel="noreferrer noopener">{{ server.repo_url }}</a>
+            {% else %}
+              <span class="mono">Not recorded</span>
+            {% endif %}
           </div>
           <div class="meta-pair">
             <strong>Transport</strong>
@@ -108,10 +112,10 @@
           </div>
           <div class="meta-pair">
             <strong>Detected tools</strong>
-            {% if server.tool_names %}
+            {% if server.tool_details %}
               <div class="tool-chip-strip">
-                {% for tool_name in server.tool_names %}
-                  <span class="pill tool-pill">{{ tool_name }}</span>
+                {% for tool in server.tool_details %}
+                  <a class="pill tool-pill" href="{{ tool.href }}">{{ tool.name }}</a>
                 {% endfor %}
               </div>
             {% else %}
@@ -310,6 +314,7 @@
               <label style="margin-top: 12px; display: block;">
                 Tags
                 <input type="text" name="tags" value="{{ publish_form.tags }}" data-testid="mcp-community-publish-tags">
+                <span class="field-caption">When you publish, Nanobot augments this list with 3 to 10 repository-specific tags from the description.</span>
               </label>
               <div class="actions" style="margin-top: 14px;">
                 <button type="submit" data-testid="mcp-community-publish-submit">Publish MCP to Hub</button>
@@ -472,7 +477,7 @@
       <form method="post" action="/mcp/test/{{ server.name }}/chat" data-testid="mcp-test-chat-form">
         <label>
           Test prompt
-          <textarea name="message" placeholder="Ask Nanobot to use this MCP server and describe the result." data-testid="mcp-test-chat-message"></textarea>
+          <textarea name="message" placeholder="Ask Nanobot to use this MCP server and describe the result." data-testid="mcp-test-chat-message">{{ mcp_test_prompt_default }}</textarea>
         </label>
         <div class="actions">
           <button type="submit" data-testid="mcp-test-chat-send">Send Test Prompt</button>

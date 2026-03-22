@@ -82,19 +82,19 @@
             <div class="details-grid">
               <label title="Upper bound for the generated answer length. Keep this high enough for code and MCP work.">
                 Max tokens
-                <input type="number" name="max_tokens" value="{{ config.agents.defaults.max_tokens }}" min="1" data-testid="agent-max-tokens">
+                <input type="number" name="max_tokens" value="{{ agent_tuning.max_tokens }}" min="1" data-testid="agent-max-tokens">
               </label>
               <label title="Higher values increase randomness. Lower values make replies steadier and more deterministic.">
                 Temperature
-                <input type="number" name="temperature" value="{{ config.agents.defaults.temperature }}" step="0.1" min="0" data-testid="agent-temperature">
+                <input type="number" name="temperature" value="{{ agent_tuning.temperature }}" step="0.1" min="0" data-testid="agent-temperature">
               </label>
               <label title="Maximum number of tool-call rounds Nanobot may attempt before it stops.">
                 Max tool iterations
-                <input type="number" name="max_tool_iterations" value="{{ config.agents.defaults.max_tool_iterations }}" min="1" data-testid="agent-max-tool-iterations">
+                <input type="number" name="max_tool_iterations" value="{{ agent_tuning.max_tool_iterations }}" min="1" data-testid="agent-max-tool-iterations">
               </label>
               <label title="How many recent conversation turns stay in the short-term context window.">
                 Memory window
-                <input type="number" name="memory_window" value="{{ config.agents.defaults.memory_window }}" min="1" data-testid="agent-memory-window">
+                <input type="number" name="memory_window" value="{{ agent_tuning.memory_window }}" min="1" data-testid="agent-memory-window">
               </label>
             </div>
 
@@ -119,12 +119,24 @@
             <label title="Optional extra reasoning depth for models that support it. Leave disabled unless you need it.">
               Reasoning effort
               <select name="reasoning_effort" data-testid="agent-reasoning-effort">
-                <option value="" {% if not config.agents.defaults.reasoning_effort %}selected{% endif %}>Disabled</option>
-                <option value="low" {% if config.agents.defaults.reasoning_effort == 'low' %}selected{% endif %}>Low</option>
-                <option value="medium" {% if config.agents.defaults.reasoning_effort == 'medium' %}selected{% endif %}>Medium</option>
-                <option value="high" {% if config.agents.defaults.reasoning_effort == 'high' %}selected{% endif %}>High</option>
+                <option value="" {% if not agent_tuning.reasoning_effort %}selected{% endif %}>Disabled</option>
+                <option value="low" {% if agent_tuning.reasoning_effort == 'low' %}selected{% endif %}>Low</option>
+                <option value="medium" {% if agent_tuning.reasoning_effort == 'medium' %}selected{% endif %}>Medium</option>
+                <option value="high" {% if agent_tuning.reasoning_effort == 'high' %}selected{% endif %}>High</option>
               </select>
             </label>
+          </div>
+        </details>
+
+        <details style="margin-top: 16px;" data-testid="agent-additional-information">
+          <summary>Additional Information</summary>
+          <div class="compact-list" style="margin-top: 14px;">
+            {% for item in agent_tuning_information %}
+              <div>
+                <strong>{{ item.name }}</strong>
+                <p class="muted" style="margin-top: 8px;">{{ item.description }}</p>
+              </div>
+            {% endfor %}
           </div>
         </details>
       </section>
@@ -159,7 +171,7 @@
               <div class="mcp-choice-row">
                 <label class="checkbox">
                   <input type="checkbox" name="enabled_mcp" value="{{ server.name }}" {% if server.enabled %}checked{% endif %} data-testid="agent-enabled-mcp-{{ server.name }}">
-                  <span>{{ server.name }}</span>
+                  <span><a href="{{ server.href }}">{{ server.name }}</a></span>
                 </label>
                 <span class="pill {% if server.enabled %}good{% else %}muted{% endif %}">{{ server.status_label }}</span>
               </div>

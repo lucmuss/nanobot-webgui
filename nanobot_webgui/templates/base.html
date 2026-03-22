@@ -2878,6 +2878,42 @@
           grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
+
+      .password-strength-bars {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .password-strength-bar {
+        display: block;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--border);
+        transition: background 150ms ease;
+      }
+
+      .password-strength-bar.is-active.weak {
+        background: #e11d48;
+      }
+
+      .password-strength-bar.is-active.fair {
+        background: #f59e0b;
+      }
+
+      .password-strength-bar.is-active.good {
+        background: #0ea5e9;
+      }
+
+      .password-strength-bar.is-active.strong,
+      .password-strength-bar.is-active.very-strong {
+        background: #10b981;
+      }
+
+      .mono,
+      .community-card-repo {
+        word-break: break-word;
+      }
     </style>
   </head>
   {% set body_content %}

@@ -42,7 +42,7 @@
               <span class="pill {{ item.get('reliability', {}).get('tone', 'muted') }}">{{ item.get('reliability', {}).get('label', 'Recommended') }}</span>
             </header>
             {% if item.repo_url %}
-              <div class="mono community-card-repo">{{ item.repo_url }}</div>
+              <a class="mono community-card-repo" href="{{ item.repo_url }}" target="_blank" rel="noreferrer noopener">{{ item.repo_url }}</a>
             {% endif %}
             <div class="reliability-stack">
               <div class="split-header" style="margin-bottom: 0;">

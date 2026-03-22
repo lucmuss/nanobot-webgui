@@ -208,7 +208,7 @@ Recommended split in this environment:
 
 Typical wiring:
 
-- internal community API: `http://nanobot-community-hub:18811/api/v1`
+- global community API: `https://nanobot-hub.eu/api/v1`
 - public hub URL: `https://nanobot-hub.eu`
 - public GUI URL: `https://your-nanobot-gui.example.com`
 
@@ -216,6 +216,7 @@ Cloudflare tunnel example:
 
 - `your-nanobot-gui.example.com` -> `http://host.docker.internal:18791`
 - `nanobot-hub.eu` -> `http://host.docker.internal:18811`
+- the Community Hub is treated as a global service endpoint, so GUI and MCP publishing flows should prefer the public API and public URL instead of private container-only addresses
 
 ## Common Commands
 

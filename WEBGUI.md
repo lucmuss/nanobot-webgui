@@ -150,7 +150,7 @@ Typical environment split:
 
 Typical URLs:
 
-- internal API URL: `http://nanobot-community-hub:18811/api/v1`
+- global API URL: `https://nanobot-hub.eu/api/v1`
 - GUI public URL: `https://your-nanobot-gui.example.com`
 - Hub public URL: `https://nanobot-hub.eu`
 
@@ -173,6 +173,8 @@ If you use `cloudflared`, a typical mapping is:
 
 - `your-nanobot-gui.example.com` -> `http://host.docker.internal:18791`
 - `nanobot-hub.eu` -> `http://host.docker.internal:18811`
+
+The Community Hub is treated as a global service endpoint, so GUI settings, publishing flows, and docs should prefer the public API and public hub URL instead of private container-only addresses.
 
 ## 9. Update Banner and Controlled Updates
 

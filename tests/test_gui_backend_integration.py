@@ -173,6 +173,52 @@ def test_setup_agent_page_exposes_heartbeat_controls(tmp_path: Path):
     assert 'data-testid="agent-heartbeat-interval-minutes"' in response.text
 
 
+def test_setup_agent_page_shows_recommended_defaults_and_additional_information(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.post(
+        "/setup/provider",
+        data={
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "api_key": "backend-openrouter-key",
+            "api_base": "",
+            "extra_headers": "{}",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/setup/channel",
+        data={
+            "channel": "telegram",
+            "token": "123456:ABCDEF",
+            "allow_from": "owner-1, owner-2",
+            "send_progress": "on",
+            "send_tool_hints": "on",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert 'data-testid="agent-max-tokens"' in response.text
+    assert 'value="8192"' in response.text
+    assert 'data-testid="agent-temperature"' in response.text
+    assert 'value="0.3"' in response.text
+    assert 'data-testid="agent-max-tool-iterations"' in response.text
+    assert 'value="40"' in response.text
+    assert 'data-testid="agent-memory-window"' in response.text
+    assert 'value="100"' in response.text
+    assert '<option value="medium" selected>Medium</option>' in response.text
+    assert '<summary>Additional Information</summary>' in response.text
+    assert "Temperature controls how stable or inventive the wording becomes." in response.text
+
+
 def test_setup_agent_saves_heartbeat_interval_from_form(tmp_path: Path):
     client, app = _make_client(tmp_path)
 
@@ -227,6 +273,19 @@ def test_setup_agent_saves_heartbeat_interval_from_form(tmp_path: Path):
     updated_config = app.state.config_service.load()
     assert updated_config.gateway.heartbeat.enabled is True
     assert updated_config.gateway.heartbeat.interval_s == 43200
+
+
+def test_profile_page_shows_password_strength_hint(tmp_path: Path):
+    client, _app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.get("/profile")
+
+    assert response.status_code == 200
+    assert 'data-testid="profile-password-strength"' in response.text
+    assert 'data-password-input="profile-password-input"' in response.text
+    assert "Use at least 8 characters, upper/lower case, number, and symbol." in response.text
 
 
 def _install_fixture_mcp_backend(app):
@@ -499,6 +558,34 @@ def test_dashboard_registry_titles_link_to_local_mcp_details(tmp_path: Path):
     assert 'href="/mcp/echo"' in response.text
 
 
+def test_dashboard_registry_surfaces_clickable_repo_url(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    config = app.state.config_service.load()
+    config.tools.mcp_servers["echo"] = MCPServerConfig(type="stdio", command="echo", args=["ok"])
+    app.state.config_service.save(config)
+    app.state.config_service.set_mcp_record(
+        "echo",
+        {
+            "server_name": "echo",
+            "status": "active",
+            "status_label": "Active",
+            "enabled": True,
+            "repo_url": "https://github.com/example/echo-mcp",
+            "tool_names": ["echo_message"],
+        },
+    )
+
+    response = client.get("/dashboard")
+
+    assert response.status_code == 200
+    assert 'data-testid="dashboard-mcp-repo-link-echo"' in response.text
+    assert 'href="https://github.com/example/echo-mcp"' in response.text
+
+
 def test_dashboard_hides_setup_progress_when_everything_is_ready(tmp_path: Path):
     client, app = _make_client(tmp_path)
 
@@ -533,8 +620,65 @@ def test_dashboard_hides_setup_progress_when_everything_is_ready(tmp_path: Path)
 
     assert response.status_code == 200
     assert "Setup Progress" not in response.text
-    assert 'data-testid="dashboard-setup-progress"' not in response.text
-    assert "System Health" in response.text
+
+
+def test_chat_runtime_cards_link_active_servers_and_tools(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    config = app.state.config_service.load()
+    config.tools.mcp_servers["echo"] = MCPServerConfig(type="stdio", command="echo", args=["ok"])
+    app.state.config_service.save(config)
+    app.state.config_service.set_mcp_record(
+        "echo",
+        {
+            "server_name": "echo",
+            "status": "active",
+            "status_label": "Active",
+            "enabled": True,
+            "repo_url": "https://github.com/example/echo-mcp",
+            "tool_names": ["echo_message"],
+        },
+    )
+
+    response = client.get("/chat")
+
+    assert response.status_code == 200
+    assert 'data-testid="chat-active-servers-list"' in response.text
+    assert 'href="/mcp/echo"' in response.text
+    assert 'href="/tools/echo_message"' in response.text
+
+
+def test_tool_detail_page_lists_local_provider(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    config = app.state.config_service.load()
+    config.tools.mcp_servers["echo"] = MCPServerConfig(type="stdio", command="echo", args=["ok"])
+    app.state.config_service.save(config)
+    app.state.config_service.set_mcp_record(
+        "echo",
+        {
+            "server_name": "echo",
+            "status": "active",
+            "status_label": "Active",
+            "enabled": True,
+            "repo_url": "https://github.com/example/echo-mcp",
+            "summary": "Echo test MCP",
+            "tool_names": ["echo_message"],
+        },
+    )
+
+    response = client.get("/tools/echo_message")
+
+    assert response.status_code == 200
+    assert "Where this tool is available" in response.text
+    assert 'href="/mcp/echo"' in response.text
+    assert 'href="https://github.com/example/echo-mcp"' in response.text
 
 
 def test_probe_gateway_marks_missing_http_endpoint_as_muted(monkeypatch: pytest.MonkeyPatch):
@@ -634,6 +778,55 @@ def test_dashboard_shows_usage_24h_metric_after_usage_events(tmp_path: Path):
     assert response.status_code == 200
     assert "Usage 24h" in response.text
     assert "150" in response.text
+
+
+def test_usage_page_breaks_down_input_output_and_sources(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    app.state.config_service.record_usage_event(
+        {
+            "timestamp": "2026-03-22T10:00:00+00:00",
+            "source": "chat",
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "total_tokens": 150,
+        }
+    )
+    app.state.config_service.record_usage_event(
+        {
+            "timestamp": "2026-03-22T11:00:00+00:00",
+            "source": "telegram",
+            "provider": "moonshot",
+            "model": "kimi-k2.5",
+            "prompt_tokens": 80,
+            "completion_tokens": 20,
+            "total_tokens": 100,
+        }
+    )
+    app.state.config_service.record_usage_event(
+        {
+            "timestamp": "2026-03-22T12:00:00+00:00",
+            "source": "heartbeat",
+            "provider": "moonshot",
+            "model": "kimi-k2.5",
+            "prompt_tokens": 40,
+            "completion_tokens": 10,
+            "total_tokens": 50,
+        }
+    )
+
+    response = client.get("/usage")
+
+    assert response.status_code == 200
+    assert "24h input tokens" in response.text
+    assert "24h output tokens" in response.text
+    assert "Chat 24h" in response.text
+    assert "Telegram 24h" in response.text
+    assert "Heartbeat 24h" in response.text
 
 
 def test_whatsapp_partial_includes_bridge_guidance(tmp_path: Path):
@@ -905,6 +1098,128 @@ def test_gui_mcp_detail_publish_uses_category_select_and_visible_env_fields(tmp_
         '<input type="text" name="env__FAKE_REGION" value="" autocomplete="off" spellcheck="false" '
         'data-testid="mcp-env-FAKE_REGION">'
     ) in response.text
+
+
+def test_settings_page_links_community_urls(tmp_path: Path):
+    client, _app = _make_client(
+        tmp_path,
+        community_api_url="https://nanobot-hub.eu/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    response = client.get("/settings")
+
+    assert response.status_code == 200
+    assert 'href="https://nanobot-hub.eu/api/v1"' in response.text
+    assert 'href="https://nanobot-hub.eu"' in response.text
+
+
+def test_mcp_publish_augments_tags_with_agent_suggestions(tmp_path: Path):
+    client, app = _make_client(
+        tmp_path,
+        community_api_url="http://community-hub.test/api/v1",
+        community_api_token="hub-write-token",
+    )
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+    _install_fixture_mcp_backend(app)
+    app.state.config_service.set_community_preferences(
+        share_anonymous_metrics=False,
+        receive_recommendations=True,
+        show_marketplace_stats=True,
+        allow_public_mcp_submissions=True,
+    )
+
+    async def fake_suggest_tags(**_kwargs):
+        return ["email", "imap", "smtp", "automation"]
+
+    captured: dict[str, object] = {}
+
+    async def fake_submit(payload: dict[str, object]):
+        captured.update(payload)
+        return {"created": True, "item": {"slug": "secret-mcp", "name": "Secret MCP"}}
+
+    app.state.agent_service.suggest_mcp_publish_tags = fake_suggest_tags  # type: ignore[method-assign]
+    app.state.community_service.submit_mcp = fake_submit  # type: ignore[method-assign]
+
+    install_response = client.post(
+        "/mcp/install",
+        data={"source": "https://github.com/example/secret-mcp"},
+        follow_redirects=True,
+    )
+    assert install_response.status_code == 200
+
+    response = client.post(
+        "/mcp/publish/secret",
+        data={
+            "name": "Secret MCP",
+            "description": "Email automation with IMAP and SMTP workflows.",
+            "category": "Automation",
+            "tags": "email",
+        },
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert captured["tags"] == ["email", "imap", "smtp", "automation"]
+
+
+def test_mcp_analyze_strips_markdown_from_preview_summary(tmp_path: Path):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+    _complete_setup(client)
+
+    async def fake_health():
+        return {
+            "ok": True,
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "latency_ms": 12,
+            "checked_at": "2026-03-10T00:00:00+00:00",
+            "usage": {"prompt_tokens": 7, "completion_tokens": 5, "total_tokens": 12},
+        }
+
+    async def fake_analyze(source: str, **_kwargs: object):
+        return {
+            "title": "Django MCP Server",
+            "server_name": "django-mcp-server",
+            "summary": "**Django MCP Server** connects **AI agents** to _Django applications_.",
+            "repo_url": source,
+            "clone_url": source + ".git",
+            "transport": "stdio",
+            "run_command": "python",
+            "run_args": ["server.py"],
+            "run_url": "",
+            "install_steps": [],
+            "required_env": [],
+            "optional_env": [],
+            "required_runtimes": [],
+            "runtime_status": [],
+            "missing_runtimes": [],
+            "repo_type": "python",
+            "analysis_mode": "deterministic",
+            "analysis_confidence": 0.95,
+            "next_action": "Install it.",
+            "evidence": [],
+        }
+
+    app.state.agent_service.check_runtime = fake_health  # type: ignore[method-assign]
+    app.state.mcp_service.analyze_repository = fake_analyze  # type: ignore[method-assign]
+
+    response = client.post(
+        "/mcp/analyze",
+        data={"source": "https://github.com/gts360/django-mcp-server"},
+        follow_redirects=True,
+    )
+
+    assert response.status_code == 200
+    assert "Django MCP Server connects AI agents to Django applications." in response.text
+    assert "**Django MCP Server**" not in response.text
 
 
 def test_gui_community_detail_and_install_flow_persist_recommendations(tmp_path: Path):

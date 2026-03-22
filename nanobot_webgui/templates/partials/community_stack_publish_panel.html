@@ -42,7 +42,11 @@
                   <input type="checkbox" name="selected_items" value="{{ entry.item_ref }}" {% if entry.item_ref in stack_submission_form.selected_items %}checked{% endif %} data-testid="community-publish-stack-choice-{{ entry.name }}">
                   <span>{{ entry.name }}</span>
                 </label>
-                <span class="mono community-card-repo">{{ entry.community_slug or entry.repo_url }}</span>
+                {% if entry.community_slug %}
+                  <span class="mono community-card-repo">{{ entry.community_slug }}</span>
+                {% elif entry.repo_url %}
+                  <a class="mono community-card-repo" href="{{ entry.repo_url }}" target="_blank" rel="noreferrer noopener">{{ entry.repo_url }}</a>
+                {% endif %}
               </div>
             {% endfor %}
           </div>

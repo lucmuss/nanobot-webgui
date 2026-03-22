@@ -43,12 +43,21 @@
           <div class="details-grid compact" style="margin-top: 14px;">
             <label>
               New password
-              <input type="password" name="password" placeholder="Leave empty to keep the current password" data-testid="profile-password">
+              <input type="password" id="profile-password-input" name="password" placeholder="Leave empty to keep the current password" data-testid="profile-password">
             </label>
             <label>
               Confirm new password
               <input type="password" name="password_confirm" data-testid="profile-password-confirm">
             </label>
+          </div>
+          <div class="card compact-card" style="margin-top: 14px;" data-password-strength data-password-input="profile-password-input" data-testid="profile-password-strength">
+            <div class="password-strength-bars">
+              <span data-strength-bar class="password-strength-bar"></span>
+              <span data-strength-bar class="password-strength-bar"></span>
+              <span data-strength-bar class="password-strength-bar"></span>
+              <span data-strength-bar class="password-strength-bar"></span>
+            </div>
+            <p data-strength-label class="muted" style="margin-top: 10px;">Use at least 8 characters, upper/lower case, number, and symbol.</p>
           </div>
         </details>
         <div class="actions">

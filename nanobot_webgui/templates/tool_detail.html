@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block body %}
+  <section class="page-header">
+    <div class="page-header-main">
+      <div class="page-header-copy">
+        <p class="eyebrow">MCP Tool Detail</p>
+        <h3>{{ tool.name }}</h3>
+        <p class="muted">Use this page to see which MCP servers expose this tool and jump back into the right local configuration page.</p>
+      </div>
+      <div class="page-header-actions">
+        <a class="button secondary" href="/mcp">Open MCP Registry</a>
+        {% if tool.primary_server_href %}
+          <a class="button secondary" href="{{ tool.primary_server_href }}">Open Primary MCP</a>
+        {% endif %}
+      </div>
+    </div>
+    <div class="page-meta-bar">
+      <span class="meta-chip"><strong>Providers</strong>{{ tool.provider_count }}</span>
+      {% if tool.primary_server_name %}
+        <span class="meta-chip"><strong>Primary MCP</strong><a href="{{ tool.primary_server_href }}">{{ tool.primary_server_name }}</a></span>
+      {% endif %}
+      {% if tool.primary_repo_url %}
+        <span class="meta-chip"><strong>Repository</strong><a href="{{ tool.primary_repo_url }}" target="_blank" rel="noreferrer noopener">{{ tool.primary_repo_url }}</a></span>
+      {% endif %}
+    </div>
+  </section>
+
+  <section class="panel" style="margin-top: 22px;">
+    <div class="section-intro">
+      <p class="eyebrow">Local Providers</p>
+      <h3>Where this tool is available</h3>
+    </div>
+    <div class="card-list">
+      {% for provider in tool.providers %}
+        <article class="card compact-card">
+          <header>
+            <a class="list-row-title-link" href="{{ provider.server_href }}"><strong>{{ provider.server_name }}</strong></a>
+            <span class="pill {% if provider.server_enabled %}good{% else %}muted{% endif %}">{{ provider.server_effective_status or provider.server_status_label }}</span>
+          </header>
+          {% if provider.server_repo_url %}
+            <a class="mono" href="{{ provider.server_repo_url }}" target="_blank" rel="noreferrer noopener">{{ provider.server_repo_url }}</a>
+          {% endif %}
+          {% if provider.server_summary %}
+            <p class="muted" style="margin-top: 10px;">{{ provider.server_summary }}</p>
+          {% endif %}
+          <div class="badge-row" style="margin-top: 12px;">
+            <span class="pill">transport {{ provider.server_transport or "auto" }}</span>
+            <span class="pill {% if provider.server_enabled %}good{% else %}muted{% endif %}">{{ "enabled" if provider.server_enabled else "disabled" }}</span>
+          </div>
+        </article>
+      {% else %}
+        <article class="card compact-card">
+          <p class="muted">No locally installed MCP currently exposes this tool. The link still stays stable so community and chat surfaces can point here consistently.</p>
+        </article>
+      {% endfor %}
+    </div>
+  </section>
+{% endblock %}

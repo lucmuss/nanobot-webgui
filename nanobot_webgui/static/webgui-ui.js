@@ -162,12 +162,68 @@
     });
   }
 
+  function scorePassword(value) {
+    let score = 0;
+    if (value.length >= 8) score += 1;
+    if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score += 1;
+    if (/\d/.test(value)) score += 1;
+    if (/[^A-Za-z0-9]/.test(value)) score += 1;
+    if (value.length >= 14) score += 1;
+    if (score <= 1) return { bars: 1, label: 'Password strength: weak', tone: 'weak' };
+    if (score === 2) return { bars: 2, label: 'Password strength: fair', tone: 'fair' };
+    if (score === 3) return { bars: 3, label: 'Password strength: good', tone: 'good' };
+    if (score === 4) return { bars: 4, label: 'Password strength: strong', tone: 'strong' };
+    return { bars: 4, label: 'Password strength: very strong', tone: 'very-strong' };
+  }
+
+  function initPasswordStrengthIndicators() {
+    document.querySelectorAll('[data-password-strength]').forEach((container) => {
+      if (container.dataset.passwordStrengthReady === 'true') {
+        return;
+      }
+      container.dataset.passwordStrengthReady = 'true';
+
+      const inputId = container.dataset.passwordInput || '';
+      const input = inputId ? document.getElementById(inputId) : null;
+      const bars = Array.from(container.querySelectorAll('[data-strength-bar]'));
+      const label = container.querySelector('[data-strength-label]');
+
+      if (!input || !bars.length || !label) {
+        return;
+      }
+
+      const render = () => {
+        const value = input.value || '';
+        if (!value) {
+          bars.forEach((bar) => {
+            bar.className = 'password-strength-bar';
+          });
+          label.textContent = 'Use at least 8 characters, upper/lower case, number, and symbol.';
+          return;
+        }
+
+        const result = scorePassword(value);
+        bars.forEach((bar, index) => {
+          bar.className = 'password-strength-bar';
+          if (index < result.bars) {
+            bar.classList.add('is-active', result.tone);
+          }
+        });
+        label.textContent = result.label;
+      };
+
+      input.addEventListener('input', render);
+      render();
+    });
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     initMobileSidebar();
     initSectionTabs();
     initAsyncFormFeedback();
     initChatComposerState();
     initCopyButtons();
+    initPasswordStrengthIndicators();
   });
 
   document.body.addEventListener('htmx:afterSwap', function () {
@@ -175,5 +231,6 @@
     initAsyncFormFeedback();
     initChatComposerState();
     initCopyButtons();
+    initPasswordStrengthIndicators();
   });
 })();

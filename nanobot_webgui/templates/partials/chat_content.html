@@ -134,14 +134,22 @@
           </div>
           <div class="meta-pair" data-testid="chat-active-mcp-servers-card">
             <strong>Active MCP servers</strong>
-            <span>{{ active_mcp_servers|map(attribute='name')|join(", ") if active_mcp_servers else "None" }}</span>
+            {% if active_mcp_servers %}
+              <div class="active-tools-scroll active-tools-list" data-testid="chat-active-servers-list">
+                {% for server in active_mcp_servers %}
+                  <a class="pill muted" href="{{ server.href }}">{{ server.name }}</a>
+                {% endfor %}
+              </div>
+            {% else %}
+              <span>None</span>
+            {% endif %}
           </div>
           <div class="meta-pair" data-testid="chat-active-mcp-tools-card">
             <strong>Active tools</strong>
-            {% if active_tool_names %}
+            {% if active_tools %}
               <div class="active-tools-scroll active-tools-list" data-testid="chat-active-tools-list">
-                {% for tool_name in active_tool_names %}
-                  <span class="pill muted">{{ tool_name }}</span>
+                {% for tool in active_tools %}
+                  <a class="pill muted" href="{{ tool.href }}">{{ tool.name }}</a>
                 {% endfor %}
               </div>
             {% else %}
@@ -169,7 +177,11 @@
                   {% else %}
                     <strong>Unknown MCP</strong>
                   {% endif %}
-                  <span class="mono">{{ item.name }}</span>
+                  {% if item.tool_href %}
+                    <a class="mono tool-log-server-link" href="{{ item.tool_href }}">{{ item.name }}</a>
+                  {% else %}
+                    <span class="mono">{{ item.name }}</span>
+                  {% endif %}
                 </div>
                 <span class="muted">{{ item.compact_timestamp or item.timestamp }}</span>
               </div>

@@ -327,6 +327,61 @@ class GUIAgentService:
             raise ValueError("The AI repair planner did not return a JSON object.")
         return payload
 
+    async def suggest_mcp_publish_tags(
+        self,
+        *,
+        server_name: str,
+        description: str,
+        tool_names: list[str] | None = None,
+        category: str = "",
+        existing_tags: list[str] | None = None,
+    ) -> list[str]:
+        """Suggest bounded MCP marketplace tags from the description and tool list."""
+        fallback_tags = _fallback_mcp_tags(
+            server_name=server_name,
+            description=description,
+            tool_names=tool_names or [],
+            category=category,
+            existing_tags=existing_tags or [],
+        )
+        clean_description = str(description or "").strip()
+        if not clean_description:
+            return fallback_tags
+
+        try:
+            config = self.config_service.load()
+            provider = _make_provider(config)
+            response = await provider.chat(
+                messages=[
+                    {"role": "system", "content": _MCP_TAG_SUGGESTER_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "server_name": server_name,
+                                "description": clean_description,
+                                "category": category,
+                                "tool_names": tool_names or [],
+                                "existing_tags": existing_tags or [],
+                            },
+                            ensure_ascii=False,
+                            indent=2,
+                        ),
+                    },
+                ],
+                model=config.agents.defaults.model,
+                max_tokens=180,
+                temperature=0.1,
+                reasoning_effort=config.agents.defaults.reasoning_effort,
+            )
+            payload = _extract_json_object((response.content or "").strip())
+            suggested = _normalize_marketplace_tags(payload.get("tags", []))
+            merged = _merge_marketplace_tags(existing_tags or [], suggested, fallback_tags)
+            return merged if len(merged) >= 3 else fallback_tags
+        except Exception:
+            self.logger.exception("mcp_publish_tag_suggestion_failed server=%s", server_name)
+            return fallback_tags
+
     async def _get_agent(self) -> AgentLoop:
         """Return a cached agent runtime, rebuilding it when config changes."""
         signature = self._config_signature()
@@ -616,6 +671,24 @@ Rules:
 """
 
 
+_MCP_TAG_SUGGESTER_SYSTEM_PROMPT = """You extract short marketplace tags for one MCP server.
+
+Return exactly one JSON object and no prose.
+
+Rules:
+- produce between 3 and 10 tags
+- tags must be lowercase
+- use short phrases or keywords
+- avoid duplicates
+- prefer functional categories, protocols, runtimes, and integration domains
+
+JSON schema:
+{
+  "tags": ["search", "web", "browser"]
+}
+"""
+
+
 def _build_mcp_install_planner_prompt(repository_bundle: dict[str, Any]) -> str:
     """Render one bounded repository bundle for the AI install planner."""
     return (
@@ -656,3 +729,53 @@ def _extract_json_object(raw: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("The AI install planner must return a JSON object.")
     return payload
+
+
+def _normalize_marketplace_tags(value: Any) -> list[str]:
+    """Normalize one raw marketplace tag payload into a bounded list."""
+    if isinstance(value, str):
+        candidates = re.split(r"[,;\n]+", value)
+    elif isinstance(value, list):
+        candidates = [str(item) for item in value]
+    else:
+        candidates = []
+    tags: list[str] = []
+    for item in candidates:
+        normalized = re.sub(r"[^a-z0-9+._ -]", " ", str(item).strip().lower())
+        normalized = re.sub(r"\s+", "-", normalized).strip("-")
+        if not normalized or normalized in tags:
+            continue
+        tags.append(normalized[:32])
+    return tags[:10]
+
+
+def _fallback_mcp_tags(
+    *,
+    server_name: str,
+    description: str,
+    tool_names: list[str],
+    category: str,
+    existing_tags: list[str],
+) -> list[str]:
+    """Build deterministic fallback tags when the model is unavailable."""
+    tokens = _normalize_marketplace_tags(existing_tags)
+    category_tokens = _normalize_marketplace_tags(category)
+    name_tokens = _normalize_marketplace_tags(re.split(r"[-_/ ]+", server_name))
+    tool_tokens = _normalize_marketplace_tags(tool_names[:4])
+    description_tokens = _normalize_marketplace_tags(
+        re.findall(r"[A-Za-z][A-Za-z0-9+._-]{2,}", description)[:12]
+    )
+    merged = _merge_marketplace_tags(tokens, category_tokens + name_tokens + tool_tokens, description_tokens)
+    return merged[:10]
+
+
+def _merge_marketplace_tags(*groups: list[str]) -> list[str]:
+    """Merge multiple tag groups into one bounded deduplicated list."""
+    tags: list[str] = []
+    for group in groups:
+        for item in group:
+            normalized = str(item).strip().lower()
+            if not normalized or normalized in tags:
+                continue
+            tags.append(normalized)
+    return tags[:10]
