@@ -641,7 +641,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             "max_tokens": int(defaults.max_tokens or RECOMMENDED_AGENT_TUNING["max_tokens"]),
             "temperature": float(temperature),
             "max_tool_iterations": int(defaults.max_tool_iterations or RECOMMENDED_AGENT_TUNING["max_tool_iterations"]),
-            "memory_window": int(defaults.memory_window or RECOMMENDED_AGENT_TUNING["memory_window"]),
+            "memory_window": int(getattr(defaults, "memory_window", None) or RECOMMENDED_AGENT_TUNING["memory_window"]),
             "reasoning_effort": str(defaults.reasoning_effort or RECOMMENDED_AGENT_TUNING["reasoning_effort"]).strip(),
         }
 
@@ -1235,6 +1235,23 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
                 "setupComplete": config_service.is_setup_complete(),
             }
         )
+
+    # Case-insensitive redirects for setup routes
+    @app.get("/setup/Admin")
+    async def redirect_setup_admin():
+        return RedirectResponse("/setup/admin", status_code=301)
+
+    @app.get("/setup/Provider")
+    async def redirect_setup_provider():
+        return RedirectResponse("/setup/provider", status_code=301)
+
+    @app.get("/setup/Channel")
+    async def redirect_setup_channel():
+        return RedirectResponse("/setup/channel", status_code=301)
+
+    @app.get("/setup/Agent")
+    async def redirect_setup_agent():
+        return RedirectResponse("/setup/agent", status_code=301)
 
     @app.get("/setup/admin", response_class=HTMLResponse)
     async def setup_admin_page(request: Request):
@@ -1845,7 +1862,8 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             defaults.max_tokens = _form_int(form.get("max_tokens"), int(tuning_defaults["max_tokens"]))
             defaults.temperature = _form_float(form.get("temperature"), float(tuning_defaults["temperature"]))
             defaults.max_tool_iterations = _form_int(form.get("max_tool_iterations"), int(tuning_defaults["max_tool_iterations"]))
-            defaults.memory_window = _form_int(form.get("memory_window"), int(tuning_defaults["memory_window"]))
+            if hasattr(defaults, "memory_window"):
+                defaults.memory_window = _form_int(form.get("memory_window"), int(tuning_defaults["memory_window"]))
             heartbeat_minutes = _form_int(
                 form.get("heartbeat_interval_minutes"),
                 max(1, round(heartbeat.interval_s / 60)),
