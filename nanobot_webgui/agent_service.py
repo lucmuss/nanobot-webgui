@@ -464,7 +464,7 @@ class GUIAgentService:
                 "temperature": config.agents.defaults.temperature,
                 "max_tokens": config.agents.defaults.max_tokens,
                 "max_iterations": config.agents.defaults.max_tool_iterations,
-                "memory_window": config.agents.defaults.memory_window,
+                "memory_window": getattr(config.agents.defaults, "memory_window", 100),
                 "reasoning_effort": config.agents.defaults.reasoning_effort,
                 "brave_api_key": config.tools.web.search.api_key or None,
                 "web_proxy": config.tools.web.proxy or None,
