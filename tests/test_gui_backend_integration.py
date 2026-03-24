@@ -1,6 +1,8 @@
 import asyncio
 import base64
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -217,6 +219,70 @@ def test_setup_agent_page_shows_recommended_defaults_and_additional_information(
     assert '<option value="medium" selected>Medium</option>' in response.text
     assert '<summary>Additional Information</summary>' in response.text
     assert "Temperature controls how stable or inventive the wording becomes." in response.text
+
+
+def test_setup_agent_page_handles_older_upstream_config_without_memory_window(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    client, app = _make_client(tmp_path)
+
+    _bootstrap_admin(client)
+
+    response = client.post(
+        "/setup/provider",
+        data={
+            "provider": "openrouter",
+            "model": "openai/gpt-4.1-mini",
+            "api_key": "backend-openrouter-key",
+            "api_base": "",
+            "extra_headers": "{}",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    response = client.post(
+        "/setup/channel",
+        data={
+            "channel": "telegram",
+            "token": "123456:ABCDEF",
+            "allow_from": "owner-1, owner-2",
+            "send_progress": "on",
+            "send_tool_hints": "on",
+            "action": "next",
+        },
+        follow_redirects=True,
+    )
+    assert response.status_code == 200
+
+    real_config = app.state.config_service.load()
+    legacy_defaults = SimpleNamespace(
+        workspace=real_config.agents.defaults.workspace,
+        model=real_config.agents.defaults.model,
+        provider=real_config.agents.defaults.provider,
+        max_tokens=real_config.agents.defaults.max_tokens,
+        temperature=real_config.agents.defaults.temperature,
+        max_tool_iterations=real_config.agents.defaults.max_tool_iterations,
+        reasoning_effort=real_config.agents.defaults.reasoning_effort,
+    )
+    class _LegacyConfigProxy:
+        def __init__(self, wrapped: object) -> None:
+            self._wrapped = wrapped
+            self.agents = SimpleNamespace(defaults=legacy_defaults)
+            self.gateway = wrapped.gateway
+            self.tools = wrapped.tools
+            self.workspace_path = wrapped.workspace_path
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(self._wrapped, name)
+
+    legacy_config = _LegacyConfigProxy(real_config)
+    monkeypatch.setattr(app.state.config_service, "load", lambda: legacy_config)
+
+    response = client.get("/setup/agent")
+
+    assert response.status_code == 200
+    assert 'data-testid="agent-memory-window"' in response.text
+    assert 'value="100"' in response.text
 
 
 def test_setup_agent_saves_heartbeat_interval_from_form(tmp_path: Path):
@@ -785,9 +851,10 @@ def test_usage_page_breaks_down_input_output_and_sources(tmp_path: Path):
 
     _bootstrap_admin(client)
     _complete_setup(client)
+    now = datetime.now(timezone.utc)
     app.state.config_service.record_usage_event(
         {
-            "timestamp": "2026-03-22T10:00:00+00:00",
+            "timestamp": (now - timedelta(hours=2)).isoformat(),
             "source": "chat",
             "provider": "openrouter",
             "model": "openai/gpt-4.1-mini",
@@ -798,7 +865,7 @@ def test_usage_page_breaks_down_input_output_and_sources(tmp_path: Path):
     )
     app.state.config_service.record_usage_event(
         {
-            "timestamp": "2026-03-22T11:00:00+00:00",
+            "timestamp": (now - timedelta(hours=3)).isoformat(),
             "source": "telegram",
             "provider": "moonshot",
             "model": "kimi-k2.5",
@@ -809,7 +876,7 @@ def test_usage_page_breaks_down_input_output_and_sources(tmp_path: Path):
     )
     app.state.config_service.record_usage_event(
         {
-            "timestamp": "2026-03-22T12:00:00+00:00",
+            "timestamp": (now - timedelta(hours=4)).isoformat(),
             "source": "heartbeat",
             "provider": "moonshot",
             "model": "kimi-k2.5",

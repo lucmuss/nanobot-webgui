@@ -403,6 +403,7 @@ class GUIConfigService:
             "event_count": len(events),
             "totals_all_time": self._sum_usage(events),
             "totals_24h": self._sum_usage(last_24h),
+            "sources_24h": self._sum_usage_by_source(last_24h),
             "recent_models": recent_models[:6],
             "last_event": events[0] if events else {},
             "recent_events": recent_events,
@@ -743,6 +744,27 @@ class GUIConfigService:
             except (TypeError, ValueError):
                 continue
         return totals
+
+    @classmethod
+    def _sum_usage_by_source(cls, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Aggregate usage into per-source buckets for dashboard drill-downs."""
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for event in events:
+            source = str(event.get("source", "")).strip() or "unknown"
+            grouped.setdefault(source, []).append(event)
+        rows: list[dict[str, Any]] = []
+        for source, source_events in grouped.items():
+            totals = cls._sum_usage(source_events)
+            rows.append(
+                {
+                    "source": source,
+                    "label": source.replace("_", " ").title(),
+                    "event_count": len(source_events),
+                    **totals,
+                }
+            )
+        rows.sort(key=lambda item: (int(item.get("total_tokens", 0) or 0), str(item.get("source", ""))), reverse=True)
+        return rows
 
     @staticmethod
     def _format_size(size_bytes: int) -> str:

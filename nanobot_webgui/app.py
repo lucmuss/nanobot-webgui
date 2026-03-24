@@ -33,9 +33,11 @@ from nanobot_webgui.agent_service import GUIAgentService
 from nanobot_webgui.auth import AdminUser, AuthService
 from nanobot_webgui.community_service import GUICommunityService
 from nanobot_webgui.compat import (
+    get_agent_default,
     get_channel_field,
     get_tools_enabled,
     is_channel_enabled,
+    set_agent_default,
     set_channel_field,
     set_tools_enabled,
     supports_tools_enabled,
@@ -633,16 +635,27 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
 
     def _recommended_agent_tuning(config) -> dict[str, Any]:
         """Return the tuning form values with GUI recommendations as fallbacks."""
-        defaults = config.agents.defaults
-        temperature = defaults.temperature
+        max_tokens = get_agent_default(config, "max_tokens")
+        temperature = get_agent_default(config, "temperature")
+        max_tool_iterations = get_agent_default(config, "max_tool_iterations")
+        memory_window = get_agent_default(config, "memory_window")
+        reasoning_effort = get_agent_default(config, "reasoning_effort")
+        if not max_tokens:
+            max_tokens = RECOMMENDED_AGENT_TUNING["max_tokens"]
         if temperature in (None, 0.0, 0.1):
             temperature = RECOMMENDED_AGENT_TUNING["temperature"]
+        if not max_tool_iterations:
+            max_tool_iterations = RECOMMENDED_AGENT_TUNING["max_tool_iterations"]
+        if not memory_window:
+            memory_window = RECOMMENDED_AGENT_TUNING["memory_window"]
+        if not reasoning_effort:
+            reasoning_effort = RECOMMENDED_AGENT_TUNING["reasoning_effort"]
         return {
-            "max_tokens": int(defaults.max_tokens or RECOMMENDED_AGENT_TUNING["max_tokens"]),
+            "max_tokens": int(max_tokens),
             "temperature": float(temperature),
-            "max_tool_iterations": int(defaults.max_tool_iterations or RECOMMENDED_AGENT_TUNING["max_tool_iterations"]),
-            "memory_window": int(getattr(defaults, "memory_window", None) or RECOMMENDED_AGENT_TUNING["memory_window"]),
-            "reasoning_effort": str(defaults.reasoning_effort or RECOMMENDED_AGENT_TUNING["reasoning_effort"]).strip(),
+            "max_tool_iterations": int(max_tool_iterations),
+            "memory_window": int(memory_window),
+            "reasoning_effort": str(reasoning_effort).strip(),
         }
 
     def _build_default_mcp_test_prompt(server: dict[str, Any]) -> str:
@@ -1862,8 +1875,11 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             defaults.max_tokens = _form_int(form.get("max_tokens"), int(tuning_defaults["max_tokens"]))
             defaults.temperature = _form_float(form.get("temperature"), float(tuning_defaults["temperature"]))
             defaults.max_tool_iterations = _form_int(form.get("max_tool_iterations"), int(tuning_defaults["max_tool_iterations"]))
-            if hasattr(defaults, "memory_window"):
-                defaults.memory_window = _form_int(form.get("memory_window"), int(tuning_defaults["memory_window"]))
+            set_agent_default(
+                config,
+                "memory_window",
+                _form_int(form.get("memory_window"), int(tuning_defaults["memory_window"])),
+            )
             heartbeat_minutes = _form_int(
                 form.get("heartbeat_interval_minutes"),
                 max(1, round(heartbeat.interval_s / 60)),
@@ -1914,7 +1930,7 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             )
 
         reasoning_effort = str(form.get("reasoning_effort", RECOMMENDED_AGENT_TUNING["reasoning_effort"])).strip()
-        defaults.reasoning_effort = reasoning_effort or None
+        set_agent_default(config, "reasoning_effort", reasoning_effort or None)
         if form.get("heartbeat_enabled_present"):
             heartbeat.enabled = bool(form.get("heartbeat_enabled"))
         set_tools_enabled(config, bool(form.get("tools_enabled")))

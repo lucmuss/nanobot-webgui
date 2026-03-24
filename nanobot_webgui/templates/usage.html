@@ -5,7 +5,7 @@
       <div class="section-intro">
         <p class="eyebrow">Consumption</p>
         <h3>Usage Snapshot</h3>
-        <p class="muted">Token usage collected from health checks, main chat turns, and MCP test chats.</p>
+        <p class="muted">Token usage collected from all tracked GUI and gateway activity, including main chat, MCP tests, Telegram, heartbeat, and other recorded runtime sessions.</p>
       </div>
 
       <div class="details-grid compact">
@@ -14,17 +14,27 @@
           <div>{{ usage_summary.totals_24h.total_tokens }}</div>
         </article>
         <article class="card compact-card">
-          <header><strong>24h prompt tokens</strong></header>
+          <header><strong>24h input tokens</strong></header>
           <div>{{ usage_summary.totals_24h.prompt_tokens }}</div>
         </article>
         <article class="card compact-card">
-          <header><strong>24h completion tokens</strong></header>
+          <header><strong>24h output tokens</strong></header>
           <div>{{ usage_summary.totals_24h.completion_tokens }}</div>
         </article>
         <article class="card compact-card">
           <header><strong>All-time total tokens</strong></header>
           <div>{{ usage_summary.totals_all_time.total_tokens }}</div>
         </article>
+      </div>
+
+      <div class="details-grid compact" style="margin-top: 16px;">
+        {% for source in usage_summary.sources_24h %}
+          <article class="card compact-card">
+            <header><strong>{{ source.label }} 24h</strong></header>
+            <div>{{ source.total_tokens }}</div>
+            <p class="muted" style="margin-top: 8px;">Input {{ source.prompt_tokens }} · Output {{ source.completion_tokens }} · {{ source.event_count }} event(s)</p>
+          </article>
+        {% endfor %}
       </div>
     </section>
 

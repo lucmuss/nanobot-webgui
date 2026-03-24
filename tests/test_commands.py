@@ -11,7 +11,7 @@ from nanobot.config.schema import Config
 from nanobot.providers.litellm_provider import LiteLLMProvider
 from nanobot.providers.openai_codex_provider import _strip_model_prefix
 from nanobot.providers.registry import find_by_model
-from nanobot_webgui.cli import app
+from nanobot_webgui.cli import _record_usage_event, _usage_source_for_message, app
 
 runner = CliRunner()
 ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
@@ -335,6 +335,36 @@ def test_gateway_supervisor_writes_shared_heartbeat(monkeypatch, tmp_path: Path)
     assert payload["kind"] == "nanobot_gateway"
     assert payload["state"] == "error"
     assert payload["config_path"] == str(config_path.resolve())
+
+
+def test_usage_source_for_message_prefers_special_session_keys():
+    assert _usage_source_for_message("telegram", "heartbeat") == "heartbeat"
+    assert _usage_source_for_message("telegram", "cron:job-1") == "cron"
+    assert _usage_source_for_message("web", "web:mcp-test:echo:admin-1") == "mcp_test"
+    assert _usage_source_for_message("web", "web:admin-1") == "chat"
+    assert _usage_source_for_message("telegram", "telegram:123") == "telegram"
+
+
+def test_record_usage_event_appends_normalized_usage_to_gui_state(tmp_path: Path):
+    state_path = tmp_path / "gui-state.json"
+
+    _record_usage_event(
+        state_path,
+        {
+            "timestamp": "2026-03-22T10:00:00+00:00",
+            "source": "telegram",
+            "provider": "moonshot",
+            "model": "kimi-k2.5",
+            "prompt_tokens": 120,
+            "completion_tokens": 30,
+            "note": "telegram:123",
+        },
+    )
+
+    payload = json.loads(state_path.read_text(encoding="utf-8"))
+    assert len(payload["usage_events"]) == 1
+    assert payload["usage_events"][0]["source"] == "telegram"
+    assert payload["usage_events"][0]["total_tokens"] == 150
 
 
 def test_repair_worker_executes_bounded_recipe(monkeypatch):

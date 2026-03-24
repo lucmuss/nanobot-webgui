@@ -17,6 +17,7 @@ from nanobot_webgui.auth import AdminUser
 from nanobot_webgui.compat import (
     build_agent_loop_kwargs,
     enrich_session_summaries,
+    get_agent_default,
     get_agent_usage,
     get_tools_enabled,
 )
@@ -455,26 +456,31 @@ class GUIAgentService:
         mcp_servers: dict[str, Any],
     ) -> AgentLoop:
         """Construct an AgentLoop for the GUI with the provided MCP set."""
+        agent_kwargs: dict[str, Any] = {
+            "bus": bus,
+            "provider": provider,
+            "workspace": config.workspace_path,
+            "model": config.agents.defaults.model,
+            "temperature": get_agent_default(config, "temperature"),
+            "max_tokens": get_agent_default(config, "max_tokens"),
+            "max_iterations": get_agent_default(config, "max_tool_iterations"),
+            "brave_api_key": config.tools.web.search.api_key or None,
+            "web_proxy": config.tools.web.proxy or None,
+            "exec_config": config.tools.exec,
+            "tools_enabled": get_tools_enabled(config),
+            "restrict_to_workspace": config.tools.restrict_to_workspace,
+            "session_manager": session_manager,
+            "mcp_servers": mcp_servers,
+            "channels_config": config.channels,
+        }
+        memory_window = get_agent_default(config, "memory_window")
+        if memory_window is not None:
+            agent_kwargs["memory_window"] = memory_window
+        reasoning_effort = get_agent_default(config, "reasoning_effort")
+        if reasoning_effort:
+            agent_kwargs["reasoning_effort"] = reasoning_effort
         kwargs = build_agent_loop_kwargs(
-            {
-                "bus": bus,
-                "provider": provider,
-                "workspace": config.workspace_path,
-                "model": config.agents.defaults.model,
-                "temperature": config.agents.defaults.temperature,
-                "max_tokens": config.agents.defaults.max_tokens,
-                "max_iterations": config.agents.defaults.max_tool_iterations,
-                "memory_window": getattr(config.agents.defaults, "memory_window", 100),
-                "reasoning_effort": config.agents.defaults.reasoning_effort,
-                "brave_api_key": config.tools.web.search.api_key or None,
-                "web_proxy": config.tools.web.proxy or None,
-                "exec_config": config.tools.exec,
-                "tools_enabled": get_tools_enabled(config),
-                "restrict_to_workspace": config.tools.restrict_to_workspace,
-                "session_manager": session_manager,
-                "mcp_servers": mcp_servers,
-                "channels_config": config.channels,
-            }
+            agent_kwargs
         )
         return AgentLoop(
             **kwargs,

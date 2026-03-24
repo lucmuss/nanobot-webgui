@@ -28,6 +28,44 @@ def supports_tools_enabled(config: Any) -> bool:
     return bool(tools is not None and hasattr(tools, "enabled"))
 
 
+def get_agent_default(config: Any, field_name: str, default: Any = None) -> Any:
+    """Read one agent default field across newer and older config shapes."""
+    agents = getattr(config, "agents", None)
+    defaults = getattr(agents, "defaults", None)
+    if defaults is None and isinstance(agents, dict):
+        defaults = agents.get("defaults")
+    if defaults is None:
+        return default
+    if isinstance(defaults, dict):
+        if field_name in defaults:
+            return defaults[field_name]
+        alias = _camel_case(field_name)
+        return defaults.get(alias, default)
+    return getattr(defaults, field_name, default)
+
+
+def set_agent_default(config: Any, field_name: str, value: Any) -> None:
+    """Write one agent default field only when the active config schema supports it."""
+    agents = getattr(config, "agents", None)
+    defaults = getattr(agents, "defaults", None)
+    if defaults is None and isinstance(agents, dict):
+        defaults = agents.get("defaults")
+    if defaults is None:
+        return
+    if isinstance(defaults, dict):
+        alias = _camel_case(field_name)
+        if field_name in defaults:
+            key = field_name
+        elif alias in defaults:
+            key = alias
+        else:
+            key = alias
+        defaults[key] = value
+        return
+    if hasattr(defaults, field_name):
+        setattr(defaults, field_name, value)
+
+
 def get_channel_field(config: Any, channel_name: str, field_name: str, default: Any = None) -> Any:
     """Read a channel field from either an upstream dict config or a legacy object config."""
     channel_cfg = getattr(getattr(config, "channels", None), channel_name, None)

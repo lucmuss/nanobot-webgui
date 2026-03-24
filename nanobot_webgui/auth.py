@@ -251,13 +251,12 @@ def _verify_password(password: str, encoded: str) -> bool:
     """Validate a password against the stored PBKDF2 string."""
     try:
         _, iterations, salt_hex, hash_hex = encoded.split("$", 3)
-    except ValueError:
+        derived = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            bytes.fromhex(salt_hex),
+            int(iterations),
+        )
+        return hmac.compare_digest(derived.hex(), hash_hex)
+    except (ValueError, Exception):
         return False
-
-    derived = hashlib.pbkdf2_hmac(
-        "sha256",
-        password.encode("utf-8"),
-        bytes.fromhex(salt_hex),
-        int(iterations),
-    )
-    return hmac.compare_digest(derived.hex(), hash_hex)

@@ -26,3 +26,4 @@ playwright-report/
 test-results/
 tmp/e2e/
 live-canary-runtime/
+.cline/
