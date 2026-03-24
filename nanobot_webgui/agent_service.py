@@ -513,8 +513,7 @@ class GUIAgentService:
 def _make_provider(config):
     """Create the provider matching the active config."""
     from nanobot.providers.azure_openai_provider import AzureOpenAIProvider
-    from nanobot.providers.custom_provider import CustomProvider
-    from nanobot.providers.litellm_provider import LiteLLMProvider
+    from nanobot.providers.openai_compat_provider import OpenAICompatProvider
     from nanobot.providers.openai_codex_provider import OpenAICodexProvider
     from nanobot.providers.registry import find_by_name
 
@@ -525,13 +524,6 @@ def _make_provider(config):
     if provider_name == "openai_codex" or model.startswith("openai-codex/"):
         return OpenAICodexProvider(default_model=model)
 
-    if provider_name == "custom":
-        return CustomProvider(
-            api_key=provider_config.api_key if provider_config else "no-key",
-            api_base=config.get_api_base(model) or "http://localhost:8000/v1",
-            default_model=model,
-        )
-
     if provider_name == "azure_openai":
         if not provider_config or not provider_config.api_key or not provider_config.api_base:
             raise ValueError("Azure OpenAI requires both api_key and api_base.")
@@ -541,6 +533,7 @@ def _make_provider(config):
             default_model=model,
         )
 
+    # For all other providers (including custom), use OpenAICompatProvider
     provider_spec = find_by_name(provider_name) if provider_name else None
     if (
         not model.startswith("bedrock/")
@@ -549,12 +542,12 @@ def _make_provider(config):
     ):
         raise ValueError("No API key is configured for the selected provider.")
 
-    return LiteLLMProvider(
+    return OpenAICompatProvider(
         api_key=provider_config.api_key if provider_config else None,
         api_base=config.get_api_base(model),
         default_model=model,
         extra_headers=provider_config.extra_headers if provider_config else None,
-        provider_name=provider_name,
+        spec=provider_spec,
     )
 
 
