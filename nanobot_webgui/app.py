@@ -1236,6 +1236,23 @@ def create_gui_app(settings: GUISettings) -> FastAPI:
             }
         )
 
+    # Case-insensitive redirects for setup routes
+    @app.get("/setup/Admin")
+    async def redirect_setup_admin():
+        return RedirectResponse("/setup/admin", status_code=301)
+
+    @app.get("/setup/Provider")
+    async def redirect_setup_provider():
+        return RedirectResponse("/setup/provider", status_code=301)
+
+    @app.get("/setup/Channel")
+    async def redirect_setup_channel():
+        return RedirectResponse("/setup/channel", status_code=301)
+
+    @app.get("/setup/Agent")
+    async def redirect_setup_agent():
+        return RedirectResponse("/setup/agent", status_code=301)
+
     @app.get("/setup/admin", response_class=HTMLResponse)
     async def setup_admin_page(request: Request):
         user = _current_admin(request, auth_service)
