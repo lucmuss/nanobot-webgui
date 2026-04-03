@@ -528,9 +528,9 @@ def _make_provider(config):
         return OpenAICodexProvider(default_model=model)
 
     if provider_name == "custom":
-        from nanobot.providers.custom_provider import CustomProvider
+        from nanobot.providers.openai_compat_provider import OpenAICompatProvider
 
-        return CustomProvider(
+        return OpenAICompatProvider(
             api_key=provider_config.api_key if provider_config else "no-key",
             api_base=config.get_api_base(model) or "http://localhost:8000/v1",
             default_model=model,
