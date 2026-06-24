@@ -150,6 +150,12 @@ def _install_gateway_usage_tracking(config_path: Path) -> None:
     if getattr(upstream_commands, "_nanobot_gui_usage_tracking_installed", False):
         return
 
+    # Upstream nanobot changed its internals and no longer exposes this hook.
+    # In that case we skip usage monkeypatching instead of crashing the gateway.
+    if not hasattr(upstream_commands, "_make_provider"):
+        upstream_commands._nanobot_gui_usage_tracking_installed = True
+        return
+
     state_path = _resolve_gui_state_path(config_path)
     original_make_provider = upstream_commands._make_provider
     original_process_message = AgentLoop._process_message
